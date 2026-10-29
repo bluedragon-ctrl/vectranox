@@ -86,13 +86,9 @@ export class GameFx {
         if (slot) Object.assign(slot, { x: px, y: py, strength: 1 });
         this.particles.sparks(px, py, { count: 6, color: COLORS.cyan, speed: [50, 150], angle: WALL_SPARK_ANGLE[side], spread: 1.0 });
       }),
-      ev.on('paddleHit', ({ id, offset }) => {
+      ev.on('paddleHit', ({ offset }) => {
         this.paddlePulse = 1;
         this.paddleHitOffset = offset;
-        const ball = this.ball(id);
-        if (!ball) return;
-        this.particles.sparks(ball.x, ball.y - ball.r, { count: 9, color: COLORS.cyan, speed: [60, 180], angle: Math.PI / 2, spread: 0.9 });
-        this.particles.glow(ball.x, ball.y - ball.r, 6, 14, 0.12, COLORS.white, 0.25);
       }),
       ev.on('brickHit', ({ id, kind, x, y }) => {
         const brick = game.bricks.find((br) => br.id === id);
