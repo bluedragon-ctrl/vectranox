@@ -2,11 +2,13 @@ import './styles/main.css';
 import { SIM } from './config/game';
 import { Input, type ControlMode } from './core/input';
 import { startLoop } from './core/loop';
+import { loadVisualSettings, saveVisualSettings } from './core/settings';
 import { Game } from './game/Game';
 import { STAGES } from './levels/stages';
 import { Renderer } from './render/Renderer';
 import { EventConsole } from './ui/EventConsole';
 import { Overlay, type OverlayContent } from './ui/Overlay';
+import { SettingsPanel } from './ui/SettingsPanel';
 
 /** Top-level screen state. The simulation has its own finer state (serve, play, clear, ...). */
 type UiState = 'title' | 'playing' | 'paused' | 'ended';
@@ -47,6 +49,13 @@ function renderScores(list: HTMLElement): void {
 
 const canvas = el<HTMLCanvasElement>('stage');
 const renderer = new Renderer(canvas, el('field-area'));
+const videoSettings = loadVisualSettings();
+renderer.applySettings(videoSettings);
+new SettingsPanel(el('video-toggles'), videoSettings, (settings) => {
+  renderer.applySettings(settings);
+  saveVisualSettings(settings);
+  logUi('settings', { ...settings });
+});
 const eventConsole = new EventConsole(el('console'));
 const overlay = new Overlay(el('overlay'), el('overlay-title'), el('overlay-sub'));
 const input = new Input(canvas, renderer);
@@ -59,6 +68,7 @@ let game = newGame();
 function newGame(): Game {
   const g = new Game(Date.now() >>> 0, STAGES);
   g.events.onAny((type, payload) => eventConsole.log(g.tick / SIM.tickRate, String(type), payload));
+  renderer.attach(g);
   g.start();
   return g;
 }
@@ -215,6 +225,6 @@ startLoop({
 });
 
 if (import.meta.env.DEV) {
-  // Console access for debugging: `vnx.game`.
-  Object.assign(window, { vnx: { get game() { return game; } } });
+  // Console access for debugging: `vnx.game`, `vnx.renderer`.
+  Object.assign(window, { vnx: { get game() { return game; }, renderer } });
 }

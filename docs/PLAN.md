@@ -9,7 +9,7 @@ Breakout-style roguelike with 80s synthwave vector graphics, running in desktop 
 | Name | **VectraNox** |
 | Platform | Desktop browsers: Chrome, Edge, Firefox. No mobile, no gamepad. |
 | Language / build | TypeScript (strict) + Vite. No test framework — `tsc --noEmit` and the in-game event console are the safety net. |
-| Rendering | three.js (WebGL2). SDF shaders on instanced quads, fat lines for outlines, post-processing (bloom, chromatic aberration, CRT) toggleable. |
+| Rendering | three.js (WebGL2). SDF shaders on instanced quads, fat lines for outlines, post-processing (bloom, chromatic aberration); bloom toggleable. No CRT filter (dropped in phase 2). |
 | Look | Synthwave palette (magenta / cyan / purple over dark grid). 2.5D: gameplay is flat, bricks have light depth, camera near-flat. Glass is **stylized** (fresnel rim, inner highlight, slight background distortion), not physical transmission. |
 | Physics | Custom arcade collision: swept circle vs. AABB, fixed 120 Hz step, paddle hit position sets bounce angle. |
 | Controls | Mouse (pointer lock) and keyboard, selectable. |
@@ -70,7 +70,7 @@ worker/              (later) Cloudflare Worker + D1 schema
 |---|---|---|
 | 0 | Skeleton | Vite + TS, layout (left panel + right playfield), three.js renderer with letterboxing, fixed-step loop, event bus, event console, Pages deploy. |
 | 1 | Playable core | Paddle (mouse + keyboard), ball, swept collision, bricks, lives, a few fixed stages, title/play/pause/game-over states. Flat placeholder visuals; goal is feel. |
-| 2 | Visual identity | Synthwave grid background, SDF neon, stylized glass bricks with depth, bloom, particles, trails, shake, CRT pass. Reduce-flashing/shake setting. |
+| 2 | Visual identity | Synthwave grid background, SDF neon, stylized glass bricks with depth, bloom, particles, trails, shake. Reduce-flashing/shake setting. |
 | 3 | Power-ups | Drops, multi-ball, laser + projectiles, the rest of the list. |
 | 4 | Audio | Synth SFX from events, playlist music player, volume settings, click-to-start audio unlock. |
 | 5 | Roguelike layer | Sectors/stages, procedural assembly, mods, shards, shop, moving formations (sweep, invader march, rotate, sine), brick types (multi-hit, indestructible, explosive, regenerating), bosses. |
