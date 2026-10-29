@@ -49,6 +49,8 @@ export interface Ball {
   stuck: number | null;
   /** Seconds the ball has been held by catch. */
   stuckTime: number;
+  /** Bricks this ball has destroyed since it last touched the paddle. */
+  chain: number;
 }
 
 /** Falling power-up. Position is the centre. */

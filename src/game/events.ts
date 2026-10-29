@@ -12,11 +12,16 @@ export type GameEvents = {
   paddleHit: { id: number; offset: number };
   /** x, y: brick centre; ix, iy: impact point on the brick. */
   brickHit: { id: number; kind: BrickKind; hp: number; by: HitSource; x: number; y: number; ix: number; iy: number };
-  /** As `brickHit`; vx, vy: velocity of the ball that broke it, before it bounced (0 for other sources). */
+  /**
+   * As `brickHit`; vx, vy: velocity of the ball that broke it, before it bounced (0 for other sources).
+   * `chain` is that ball's chain count with this brick (0 for other sources); `points` include `bonus`.
+   */
   brickDestroyed: {
     id: number;
     kind: BrickKind;
     points: number;
+    chain: number;
+    bonus: number;
     by: HitSource;
     x: number;
     y: number;
@@ -26,6 +31,8 @@ export type GameEvents = {
     vy: number;
   };
   ballCaught: { id: number; offset: number };
+  /** The paddle ended a ball's chain of `count` bricks, which earned `total` bonus points. */
+  chainEnd: { id: number; count: number; total: number };
   barrierHit: { id: number; x: number };
   powerDrop: { id: number; kind: PowerKind; x: number; y: number };
   powerCollect: { id: number; kind: PowerKind };

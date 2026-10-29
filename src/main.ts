@@ -4,7 +4,7 @@ import { GameSounds } from './audio/GameSounds';
 import { Input, type ControlMode } from './core/input';
 import { startLoop } from './core/loop';
 import { loadAudioSettings, loadVisualSettings, saveAudioSettings, saveVisualSettings } from './core/settings';
-import { Game } from './game/Game';
+import { chainBonus, Game } from './game/Game';
 import { STAGES } from './levels/stages';
 import { Renderer } from './render/Renderer';
 import { AudioPanel } from './ui/AudioPanel';
@@ -230,11 +230,19 @@ function formatScore(score: number): string {
   return String(score).padStart(6, '0');
 }
 
+/** The longest live chain and the bonus its last brick earned; a dash until a chain pays. */
+function formatChain(balls: readonly { chain: number }[]): string {
+  let chain = 0;
+  for (const b of balls) chain = Math.max(chain, b.chain);
+  return chain >= 2 ? `×${chain} +${chainBonus(chain)}` : '—';
+}
+
 renderScores(el('score-list'));
 
 const hudScore = el('hud-score');
 const hudLives = el('hud-lives');
 const hudSector = el('hud-sector');
+const hudChain = el('hud-chain');
 const powerHud = new PowerHud(el('power-list'));
 const sysFps = el('sys-fps');
 const sysTick = el('sys-tick');
@@ -268,6 +276,7 @@ startLoop({
     setText(hudScore, formatScore(game.score));
     setText(hudLives, String(game.lives));
     setText(hudSector, `1-${game.stageIndex + 1}`);
+    setText(hudChain, formatChain(game.balls));
     powerHud.update(game.timers, game.charges);
     setText(sysFps, fps.toFixed(0));
     setText(sysTick, String(game.tick));
