@@ -100,6 +100,25 @@ export class GameSounds {
           s.tone({ type: 'triangle', freq: 1320, dur: 0.1, gain: 0.05, pan: pan(x) });
         });
       }),
+      ev.on('targetHit', ({ lit, x }) => {
+        const p = pan(x);
+        // A bell: brighter when the hit lights the target.
+        this.play('target', (s) => {
+          const freq = lit ? note(12, C5) : note(7, C5);
+          s.tone({ freq, dur: 0.22, gain: 0.1, pan: p });
+          s.tone({ freq: freq * 2.76, dur: 0.12, gain: 0.03, pan: p });
+        });
+      }),
+      ev.on('targetBank', () => {
+        this.play('bank', (s) => s.notes([0, 4, 7, 12, 16].map((n) => note(n, C5)), 0.05, { type: 'square', cutoff: 3200, dur: 0.12, gain: 0.07 }));
+      }),
+      ev.on('portalWarp', ({ x }) => {
+        // Swallowed and spat out: a sweep down, then up.
+        this.play('warp', (s) => {
+          s.tone({ type: 'sine', freq: 900, to: 120, dur: 0.12, gain: 0.16 });
+          s.tone({ type: 'triangle', freq: 160, to: 1100, at: 0.1, dur: 0.14, gain: 0.1, pan: pan(x) });
+        });
+      }),
       ev.on('powerDrop', ({ x }) => {
         this.play('drop', (s) => s.tone({ freq: 1180, to: 900, dur: 0.06, gain: 0.05, pan: pan(x) }));
       }),

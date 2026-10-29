@@ -126,3 +126,20 @@ export const STAGE_EVENT_LOOK = {
   safetyNet: { label: 'SAFETY NET', sub: 'BARRIER UP', color: PALETTE.yellow },
   demolition: { label: 'DEMOLITION', sub: 'CHARGES ARMED', color: PALETTE.orange },
 } as const satisfies Record<keyof typeof STAGE_EVENTS.kinds, { label: string; sub: string; color: number }>;
+
+/**
+ * Pinball pieces a stage layout can place (see `StageDef`). Both are circles centred in their cell.
+ *
+ * Targets: the ball bounces off them and lights them. Lighting every target in the stage completes
+ * the bank: it pays `bankBonus`, unlights them all, and moves the score multiplier one step along
+ * `multipliers`. The multiplier scales all brick points and lasts until a life is lost.
+ *
+ * Portals come in pairs: a ball whose centre gets within `capture` of one comes out of the other
+ * with the same velocity, and ignores that exit until it has left its radius.
+ */
+export const PINBALL = {
+  target: { radius: 5, points: 25 },
+  bankBonus: 500,
+  multipliers: [1, 2, 3, 5],
+  portal: { radius: 10, capture: 5 },
+} as const;

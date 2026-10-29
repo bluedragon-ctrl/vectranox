@@ -106,6 +106,9 @@ export class GameFx {
         this.barrierHit.x = x;
         this.barrierHit.strength = 1;
       }),
+      ev.on('portalWarp', ({ id }) => {
+        this.trails.restart(id);
+      }),
       ev.on('laserFire', () => {
         this.laserFlash = 1;
       }),

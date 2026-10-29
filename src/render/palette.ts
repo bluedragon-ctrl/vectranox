@@ -53,3 +53,9 @@ export const POWER_COLORS = Object.fromEntries(
 export const CAPSULE_COLORS = Object.fromEntries(
   (Object.keys(POWER_COLORS) as PowerKind[]).map((k) => [k, capBrightness(POWER_COLORS[k].clone())]),
 ) as Record<PowerKind, THREE.Color>;
+
+/** Pinball target lamp, linear and capped like glass so a lit bank doesn't flood the bloom. */
+export const TARGET_COLOR = capBrightness(new THREE.Color(0x2dffb4));
+
+/** Accretion-disk colour of each portal pair, in layout order (repeats past the end). */
+export const PORTAL_COLORS = [PALETTE.purple, PALETTE.cyan, PALETTE.orange].map((hex) => new THREE.Color(hex));
