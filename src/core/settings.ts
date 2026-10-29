@@ -1,3 +1,5 @@
+import { AUDIO } from '../config/audio';
+
 /** Player-facing video options. Persisted in localStorage. */
 export interface VisualSettings {
   bloom: boolean;
@@ -5,29 +7,65 @@ export interface VisualSettings {
   reduceFx: boolean;
 }
 
+/** Player-facing audio options. Levels are slider steps, 0..`AUDIO.steps`. Persisted in localStorage. */
+export interface AudioSettings {
+  master: number;
+  music: number;
+  sfx: number;
+  mute: boolean;
+}
+
 const KEY = 'vectranox.video';
+const AUDIO_KEY = 'vectranox.audio';
 
 export function loadVisualSettings(): VisualSettings {
   const defaults: VisualSettings = {
     bloom: true,
     reduceFx: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
   };
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return defaults;
-    const saved = JSON.parse(raw) as Partial<Record<keyof VisualSettings, unknown>>;
-    return {
-      bloom: typeof saved.bloom === 'boolean' ? saved.bloom : defaults.bloom,
-      reduceFx: typeof saved.reduceFx === 'boolean' ? saved.reduceFx : defaults.reduceFx,
-    };
-  } catch {
-    return defaults;
-  }
+  const saved = load<VisualSettings>(KEY);
+  if (!saved) return defaults;
+  return {
+    bloom: typeof saved.bloom === 'boolean' ? saved.bloom : defaults.bloom,
+    reduceFx: typeof saved.reduceFx === 'boolean' ? saved.reduceFx : defaults.reduceFx,
+  };
 }
 
 export function saveVisualSettings(settings: VisualSettings): void {
+  save(KEY, settings);
+}
+
+export function loadAudioSettings(): AudioSettings {
+  const defaults: AudioSettings = { ...AUDIO.defaults };
+  const saved = load<AudioSettings>(AUDIO_KEY);
+  if (!saved) return defaults;
+  const level = (v: unknown, fallback: number) =>
+    typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= AUDIO.steps ? v : fallback;
+  return {
+    master: level(saved.master, defaults.master),
+    music: level(saved.music, defaults.music),
+    sfx: level(saved.sfx, defaults.sfx),
+    mute: typeof saved.mute === 'boolean' ? saved.mute : defaults.mute,
+  };
+}
+
+export function saveAudioSettings(settings: AudioSettings): void {
+  save(AUDIO_KEY, settings);
+}
+
+function load<T>(key: string): Partial<Record<keyof T, unknown>> | null {
   try {
-    localStorage.setItem(KEY, JSON.stringify(settings));
+    const raw = localStorage.getItem(key);
+    const parsed: unknown = raw ? JSON.parse(raw) : null;
+    return typeof parsed === 'object' && parsed !== null ? (parsed as Partial<Record<keyof T, unknown>>) : null;
+  } catch {
+    return null;
+  }
+}
+
+function save(key: string, value: unknown): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
   } catch {
     // Storage blocked (private mode, file://): settings just don't persist.
   }

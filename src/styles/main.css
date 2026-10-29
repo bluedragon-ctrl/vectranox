@@ -211,7 +211,8 @@ body {
   color: var(--yellow);
 }
 
-#video-toggles {
+#video-toggles,
+#audio-controls {
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -245,6 +246,65 @@ body {
 .toggle:focus-visible {
   color: var(--text);
   outline: none;
+}
+
+.toggle:disabled {
+  cursor: default;
+  color: var(--text-dim);
+}
+
+.toggle.track .val {
+  max-width: 70%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.level {
+  display: grid;
+  grid-template-columns: 9ch 1fr 3ch;
+  align-items: center;
+  gap: 10px;
+  padding: 1px 0;
+  font-size: 16px;
+  color: var(--text-dim);
+}
+
+.level .segs {
+  display: flex;
+  gap: 3px;
+  height: 18px;
+  padding: 5px 0;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.level .segs i {
+  flex: 1;
+  background: rgba(157, 77, 255, 0.18);
+}
+
+.level .segs i.on {
+  background: var(--cyan);
+  box-shadow: 0 0 6px rgba(45, 226, 255, 0.6);
+}
+
+.level.muted .segs i.on {
+  background: #5c4d85;
+  box-shadow: none;
+}
+
+.level .val {
+  text-align: right;
+  white-space: pre;
+  color: var(--cyan);
+}
+
+.level.muted .val {
+  color: #5c4d85;
+}
+
+.level:hover {
+  color: var(--text);
 }
 
 .grow {

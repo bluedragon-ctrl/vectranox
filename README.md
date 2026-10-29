@@ -23,11 +23,18 @@ npm run dev
 | Fire laser | hold button | hold Space |
 | Alt action (detonate a charge) | right click | X |
 | Pause | Esc | P or Esc |
+| Mute audio | | M |
 
 In dev builds the running game is available in the browser console as `vnx.game`;
 `vnx.game.applyPower('laser')` grants a power-up (any kind from `POWER.kinds`, e.g. `'detonator'` for charges) and
 `vnx.game.fireStageEvent('overload')` runs a stage event (any kind from `STAGE_EVENTS.kinds`).
 Both live in `src/config/tuning.ts`, together with drop chances, weights, durations and the event triggers.
+
+## Music
+
+Drop `.ogg` (or `.mp3`) files into `src/assets/music/`; they are picked up at build time and play as a
+shuffled playlist with crossfades. Click the track name in the AUDIO panel to skip. Sound effects are
+synthesized and need no files.
 
 ## Deploy
 
