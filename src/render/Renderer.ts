@@ -10,7 +10,7 @@ import { BALL_FRAGMENT } from './materials/ball';
 import { BRICK_FRAGMENT } from './materials/brick';
 import { FULLSCREEN_VERTEX } from './materials/common';
 import { PADDLE_FRAGMENT } from './materials/paddle';
-import { brickTint, COLORS } from './palette';
+import { BRICK_GAP, brickTint, COLORS } from './palette';
 import { QuadBatch } from './QuadBatch';
 
 /** Screen-space padding (px) between the playfield frame and its area. */
@@ -19,8 +19,6 @@ const MAX_BRICKS = 256;
 const MAX_BALLS = 32;
 /** Ticks a brick stays lit after a hit. */
 const FLASH_TICKS = 12;
-/** Visual gap between neighbouring bricks. */
-const BRICK_GAP = 1.5;
 /** Horizon height as a fraction of the window, from the bottom. */
 const HORIZON = 0.42;
 /** Sun radius in screen heights: fills this fraction of the gap right of the field, within limits. */
@@ -129,7 +127,7 @@ export class Renderer {
         depthWrite: false,
       }),
     );
-    this.scene.add(blit, this.bricks.mesh, this.trails.batch.mesh, this.paddle.mesh, this.balls.mesh, this.fx.particles.batch.mesh);
+    this.scene.add(blit, this.bricks.mesh, this.trails.batch.mesh, this.paddle.mesh, this.balls.mesh, this.fx.particles.pieces.mesh, this.fx.particles.batch.mesh);
 
     this.post = new PostFx(this.renderer, this.scene, this.camera);
     new ResizeObserver(() => this.resize()).observe(document.body);

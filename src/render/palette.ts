@@ -2,6 +2,9 @@ import * as THREE from 'three';
 import { PALETTE } from '../config/game';
 import type { BrickKind } from '../game/types';
 
+/** Visual gap between neighbouring bricks (world units); bricks draw this much smaller than their cell. */
+export const BRICK_GAP = 1.5;
+
 /** Normal bricks are tinted by row, magenta at the top towards cyan. */
 const ROW_COLORS = [PALETTE.magenta, 0xe03cff, PALETTE.purple, 0x6c5cff, 0x3d8bff, PALETTE.cyan];
 const STEEL_COLOR = 0x9a92c4;

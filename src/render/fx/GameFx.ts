@@ -1,12 +1,15 @@
 import * as THREE from 'three';
 import { FIELD } from '../../config/game';
 import type { Game } from '../../game/Game';
-import { brickTint, COLORS } from '../palette';
+import { BRICK_GAP, brickTint, COLORS } from '../palette';
+import { chip, fractureRect } from './fracture';
 import { Particles } from './Particles';
 import { Shake } from './Shake';
 import type { Trails } from './Trails';
 
 const WALL_HIT_SLOTS = 8;
+/** Share of the ball's velocity that shattered glass inherits. */
+const PIECE_PUSH = 0.12;
 
 export interface WallHit {
   x: number;
@@ -45,6 +48,7 @@ export class GameFx {
     this.reduce = reduce;
     this.shake.scale = reduce ? 0 : 1;
     this.brickFlash = reduce ? 0.3 : 1;
+    this.particles.glintScale = reduce ? 0.3 : 1;
     if (reduce) this.flash = this.aberration = 0;
   }
 
@@ -79,27 +83,42 @@ export class GameFx {
       }),
       ev.on('brickHit', ({ id, kind, x, y }) => {
         const brick = game.bricks.find((br) => br.id === id);
-        const ball = this.nearestBall(x, y);
-        const ix = ball?.x ?? x;
-        const iy = ball?.y ?? y;
-        const color = brick ? brickTint(brick, this.tint) : this.tint.copy(COLORS.white);
-        const steel = kind === 'steel';
-        this.particles.sparks(ix, iy, {
-          count: steel ? 10 : 7,
-          color: steel ? COLORS.white : color,
-          speed: [70, steel ? 220 : 170],
-          angle: Math.atan2(iy - y, ix - x),
-          spread: 1.1,
-        });
-        this.shake.add(steel ? 0.06 : 0.04);
+        const [ix, iy] = this.impact(x, y, brick);
+        const away = Math.atan2(iy - y, ix - x);
+        if (kind === 'steel') {
+          // Metal on metal: hot sparks, nothing breaks.
+          this.particles.sparks(ix, iy, { count: 10, color: COLORS.white, speed: [70, 220], angle: away, spread: 1.1 });
+          this.shake.add(0.06);
+          return;
+        }
+        // Glass that holds: a few chips and glints fly off where the ball struck.
+        const color = brick ? brickTint(brick, this.tint) : this.tint.copy(COLORS.yellow);
+        for (let i = 0; i < 3; i++) {
+          const a = away + (Math.random() * 2 - 1) * 1.1;
+          const s = 40 + Math.random() * 80;
+          this.particles.piece(chip(ix, iy, 0.9 + Math.random() * 0.8), Math.cos(a) * s, Math.sin(a) * s, color, 0.35 + Math.random() * 0.25);
+        }
+        this.particles.glints(ix, iy, { count: 4, color, speed: [100, 220], angle: away, spread: 1.0 });
+        this.shake.add(0.04);
       }),
       ev.on('brickDestroyed', ({ id, kind, x, y }) => {
         const brick = game.bricks.find((br) => br.id === id);
         const color = brick ? brickTint({ ...brick, hp: brick.maxHp }, this.tint) : this.tint.copy(COLORS.magenta);
-        const w = brick?.w ?? 24;
-        const h = brick?.h ?? 12;
-        this.particles.shards(x, y, w * 0.8, h * 0.6, { count: 10, color, speed: [30, 140], angle: Math.PI / 2, spread: Math.PI * 0.9 });
-        this.particles.sparks(x, y, { count: 12, color, speed: [80, 260] });
+        const w = (brick?.w ?? 24) - BRICK_GAP;
+        const h = (brick?.h ?? 12) - BRICK_GAP;
+        const ball = this.nearestBall(x, y);
+        const [ix, iy] = this.impact(x, y, brick);
+        const pushX = (ball?.vx ?? 0) * PIECE_PUSH;
+        const pushY = (ball?.vy ?? 0) * PIECE_PUSH;
+        // The brick breaks into pieces radiating from the impact; tough glass breaks finer.
+        for (const s of fractureRect(x, y, w, h, ix, iy, kind === 'tough' ? 5 : 2)) {
+          const dx = s.cx - ix;
+          const dy = s.cy - iy;
+          const dist = Math.hypot(dx, dy) || 1;
+          const speed = (35 + Math.random() * 60) * (1.3 - Math.min(dist / (w * 0.5), 1) * 0.6);
+          this.particles.piece(s, (dx / dist) * speed + pushX, (dy / dist) * speed + pushY, color, 0.55 + Math.random() * 0.35);
+        }
+        this.particles.glints(ix, iy, { count: 5, color, speed: [120, 260] });
         this.shake.add(kind === 'tough' ? 0.16 : 0.1);
       }),
       ev.on('ballLost', () => {
@@ -134,6 +153,15 @@ export class GameFx {
     this.flashColor.copy(color);
     this.flash = Math.max(this.flash, flash);
     this.aberration = Math.max(this.aberration, aberration);
+  }
+
+  /** Where the ball struck a brick centred on (x, y): the nearest ball, kept to the brick's edge. */
+  private impact(x: number, y: number, brick: { w: number; h: number } | undefined): [number, number] {
+    const ball = this.nearestBall(x, y);
+    if (!ball) return [x, y];
+    const hw = (brick?.w ?? 24) / 2 + ball.r;
+    const hh = (brick?.h ?? 12) / 2 + ball.r;
+    return [Math.min(x + hw, Math.max(x - hw, ball.x)), Math.min(y + hh, Math.max(y - hh, ball.y))];
   }
 
   private nearestBall(x: number, y: number) {
