@@ -56,11 +56,20 @@ export const POWER = {
   boltInset: 5,
   barrierY: 7,
   /**
-   * Alt press: the highest ball explodes and every breakable brick within `radius` (measured to
-   * the nearest point of the brick) takes `damage` hits; steel is unaffected and the ball flies on.
-   * A capsule adds `charges`, up to `maxCharges`.
+   * Alt press spends one charge: every ball explodes (`target: 'highest'` blows only the ball
+   * nearest the bricks) and each breakable brick within `radius` of any of them (measured to the
+   * nearest point of the brick) takes `damage` hits, once per press however many balls reach it.
+   * Steel is unaffected and the balls fly on. A capsule gives `charges` when none are held, else
+   * `recharge` more, up to `maxCharges`.
    */
-  detonator: { charges: 3, maxCharges: 5, radius: 32, damage: 1 },
+  detonator: {
+    charges: 3,
+    recharge: 1,
+    maxCharges: 5,
+    radius: 32,
+    damage: 1,
+    target: 'all' as 'all' | 'highest',
+  },
 } as const;
 
 /** How each power shows up: capsule letter, colour, and whether it is a negative one. */

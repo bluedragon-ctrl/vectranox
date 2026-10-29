@@ -113,7 +113,7 @@ export class Renderer {
   private barrier = new QuadBatch({ max: 1, pad: 6, fragmentShader: BARRIER_FRAGMENT, renderOrder: 15 });
   private capsules = new QuadBatch({ max: MAX_CAPSULES, pad: 4, fragmentShader: CAPSULE_FRAGMENT, renderOrder: 22 });
   private bolts = new QuadBatch({ max: MAX_BOLTS, pad: 4, fragmentShader: BOLT_FRAGMENT, renderOrder: 24 });
-  private blast = new QuadBatch({ max: 1, pad: 4, fragmentShader: BLAST_FRAGMENT, renderOrder: 26 });
+  private blast = new QuadBatch({ max: MAX_BALLS, pad: 4, fragmentShader: BLAST_FRAGMENT, renderOrder: 26 });
 
   private ballPositions: { x: number; y: number }[] = [];
   private color = new THREE.Color();
@@ -362,23 +362,27 @@ export class Renderer {
   }
 
   private drawBlast(): void {
-    const { x, y, radius, strength } = this.fx.blast;
+    const { centres, radius, strength } = this.fx.blast;
     this.blast.begin();
-    if (strength > 0) this.blast.push(x, y, radius * 2, radius * 2, CAPSULE_LOOK.detonator.color, 1, strength);
+    if (strength > 0) {
+      for (const c of centres.slice(0, MAX_BALLS)) {
+        this.blast.push(c.x, c.y, radius * 2, radius * 2, CAPSULE_LOOK.detonator.color, 1, strength);
+      }
+    }
     this.blast.commit();
   }
 
-  /** Piercing balls burn hotter; with detonator charges held, the ball that would blow is tinted. */
+  /** Piercing balls burn hotter; with detonator charges held, the balls that would blow are tinted. */
   private drawBalls(game: Game): void {
     const pierce = powerLevel(game, 'pierce');
-    const armed = game.charges.detonator > 0 ? game.blastBall() : null;
+    const armed = game.charges.detonator > 0 ? game.blastBalls() : [];
     this.color.copy(COLORS.cyan).lerp(CAPSULE_LOOK.pierce.color, pierce * 0.7);
     this.armedColor.copy(this.color).lerp(CAPSULE_LOOK.detonator.color, 0.75);
     this.balls.begin();
     this.ballPositions.forEach((pos, i) => {
       const ball = game.balls[i];
       const r = ball?.r ?? 4;
-      this.balls.push(pos.x, pos.y, r * 2, r * 2, ball && ball === armed ? this.armedColor : this.color, 1, pierce);
+      this.balls.push(pos.x, pos.y, r * 2, r * 2, ball && armed.includes(ball) ? this.armedColor : this.color, 1, pierce);
     });
     this.balls.commit();
   }

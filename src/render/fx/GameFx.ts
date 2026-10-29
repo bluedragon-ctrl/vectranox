@@ -41,8 +41,8 @@ export class GameFx {
   /** Laser emitters light up on every shot. */
   laserFlash = 0;
   readonly barrierHit = { x: 0, strength: 0 };
-  /** Last detonator blast: a single ring that grows to the blast radius and fades. */
-  readonly blast = { x: 0, y: 0, radius: 0, strength: 0 };
+  /** Last detonator press: a ring per exploding ball, all growing to the blast radius and fading together. */
+  readonly blast = { centres: [] as { x: number; y: number }[], radius: 0, strength: 0 };
   /** Brick hit-flash strength, lowered by reduce-flashing. */
   brickFlash = 1;
 
@@ -110,8 +110,10 @@ export class GameFx {
       ev.on('laserFire', () => {
         this.laserFlash = 1;
       }),
-      ev.on('detonate', ({ x, y, radius }) => {
-        Object.assign(this.blast, { x, y, radius, strength: 1 });
+      ev.on('detonate', ({ radius }) => {
+        this.blast.centres = game.blastBalls().map((b) => ({ x: b.x, y: b.y }));
+        this.blast.radius = radius;
+        this.blast.strength = 1;
         this.shake.add(0.3);
         this.pulse(BLAST_COLOR, 0.08, 0.3);
       }),
@@ -142,10 +144,11 @@ export class GameFx {
         const ball = by === 'ball' ? this.nearestBall(x, y) : null;
         let pushX = (ball?.vx ?? 0) * PIECE_PUSH;
         let pushY = by === 'laser' ? LASER_PUSH : (ball?.vy ?? 0) * PIECE_PUSH;
-        if (by === 'blast') {
-          const d = Math.hypot(x - this.blast.x, y - this.blast.y) || 1;
-          pushX = ((x - this.blast.x) / d) * BLAST_PUSH;
-          pushY = ((y - this.blast.y) / d) * BLAST_PUSH;
+        const centre = by === 'blast' ? this.nearestBlast(x, y) : null;
+        if (centre) {
+          const d = Math.hypot(x - centre.x, y - centre.y) || 1;
+          pushX = ((x - centre.x) / d) * BLAST_PUSH;
+          pushY = ((y - centre.y) / d) * BLAST_PUSH;
         }
         // The brick breaks into pieces radiating from the impact; tough glass breaks finer.
         for (const s of fractureRect(x, y, w, h, ix, iy, kind === 'tough' ? 5 : 2)) {
@@ -196,6 +199,19 @@ export class GameFx {
     this.flashColor.copy(color);
     this.flash = Math.max(this.flash, flash);
     this.aberration = Math.max(this.aberration, aberration);
+  }
+
+  private nearestBlast(x: number, y: number) {
+    let best = null;
+    let bestD = Infinity;
+    for (const c of this.blast.centres) {
+      const d = (c.x - x) ** 2 + (c.y - y) ** 2;
+      if (d < bestD) {
+        bestD = d;
+        best = c;
+      }
+    }
+    return best;
   }
 
   private nearestBall(x: number, y: number) {

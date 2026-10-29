@@ -162,7 +162,7 @@ export class Game {
         this.lives = Math.min(POWER.maxLives, this.lives + 1);
         return;
       case 'detonator':
-        this.addCharges('detonator', POWER.detonator.charges);
+        this.addCharges('detonator', this.charges.detonator > 0 ? POWER.detonator.recharge : POWER.detonator.charges);
         return;
     }
     const opposite = OPPOSITE[kind];
@@ -203,11 +203,12 @@ export class Game {
     }
   }
 
-  /** The ball an alt press would detonate: the highest one, nearest the bricks. */
-  blastBall(): Ball | null {
+  /** The balls an alt press would detonate: all of them, or only the highest (see `POWER.detonator`). */
+  blastBalls(): Ball[] {
+    if (POWER.detonator.target === 'all') return this.balls;
     let best: Ball | null = null;
     for (const b of this.balls) if (!best || b.y > best.y) best = b;
-    return best;
+    return best ? [best] : [];
   }
 
   private setState(state: GameState): void {
@@ -544,20 +545,32 @@ export class Game {
     this.charges[kind] = Math.min(POWER[kind].maxCharges, this.charges[kind] + n);
   }
 
-  /** The highest ball explodes; breakable bricks in reach take damage, the ball flies on. */
+  /**
+   * The blast balls explode; breakable bricks in reach of any of them take damage once, struck
+   * from the nearest blast. The balls fly on.
+   */
   private detonate(): void {
-    const b = this.blastBall();
-    if (!b) return;
+    const balls = this.blastBalls();
+    if (balls.length === 0) return;
     this.charges.detonator--;
     const { radius, damage } = POWER.detonator;
     const targets: { br: Brick; ix: number; iy: number }[] = [];
     for (const br of this.bricks) {
       if (!br.alive || br.kind === 'steel') continue;
-      const ix = clamp(b.x, br.x, br.x + br.w);
-      const iy = clamp(b.y, br.y, br.y + br.h);
-      if ((ix - b.x) ** 2 + (iy - b.y) ** 2 <= radius * radius) targets.push({ br, ix, iy });
+      let best: { br: Brick; ix: number; iy: number } | null = null;
+      let bestD = radius * radius;
+      for (const b of balls) {
+        const ix = clamp(b.x, br.x, br.x + br.w);
+        const iy = clamp(b.y, br.y, br.y + br.h);
+        const d = (ix - b.x) ** 2 + (iy - b.y) ** 2;
+        if (d <= bestD) {
+          best = { br, ix, iy };
+          bestD = d;
+        }
+      }
+      if (best) targets.push(best);
     }
-    this.events.emit('detonate', { id: b.id, x: b.x, y: b.y, radius, bricks: targets.length, charges: this.charges.detonator });
+    this.events.emit('detonate', { balls: balls.length, radius, bricks: targets.length, charges: this.charges.detonator });
     for (const { br, ix, iy } of targets) {
       for (let i = 0; i < damage && br.alive; i++) this.hitBrick(br, 'blast', ix, iy, false);
     }
