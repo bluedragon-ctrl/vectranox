@@ -49,16 +49,20 @@ void main() {
       col += vec3(0.75, 0.7, 1.0) * exp(-d * d) * (h - 0.93) * 14.0 * tw * smoothstep(0.02, 0.25, q.y);
     }
 
-    // Sun with horizontal cut-outs drifting downwards.
+    // Sun: one gradient over the whole disc, with cut-outs that widen gradually towards the
+    // horizon. Kept under the bloom threshold (bloom would only catch the yellow top), so its
+    // glow is drawn here, even all round.
     vec2 sc = q - vec2(0.0, uSunR * 0.55);
     float sd = length(sc) - uSunR;
     float sy = sc.y / uSunR;
+    vec3 sunColor = mix(uSunBottom, uSunTop, smoothstep(-1.0, 1.0, clamp(sy, -1.0, 1.0)));
     float band = fract(sy * 8.0 + uTime * 0.12);
-    float gap = smoothstep(0.35, -1.0, sy) * 0.6;
-    float sunMask = fill(sd * H) * step(gap, band);
-    vec3 sun = mix(uSunBottom, uSunTop, smoothstep(-0.9, 0.8, sy)) * 1.15;
-    col = mix(col, sun, sunMask);
-    col += mix(uSunBottom, uSunTop, 0.4) * exp(-max(sd, 0.0) * 9.0) * 0.28 * (1.0 - sunMask);
+    float gap = smoothstep(0.7, -1.0, sy) * 0.55;
+    float aa = fwidth(sy * 8.0);
+    float cut = gap < 0.005 ? 1.0 : smoothstep(gap - aa, gap + aa, band);
+    float sunMask = fill(sd * H) * cut;
+    col = mix(col, sunColor * 0.88, sunMask);
+    col += sunColor * exp(-max(sd, 0.0) * 7.0) * 0.22 * (1.0 - fill(sd * H));
 
     // Mountain ridge with a neon edge and faint contour lines.
     float rh = ridge(q.x);
