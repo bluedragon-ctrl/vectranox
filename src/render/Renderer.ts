@@ -25,6 +25,8 @@ const BRICK_GAP = 1.5;
 const BUILD = { duration: 0.35, row: 0.06, col: 0.012 } as const;
 /** Horizon height as a fraction of the window, from the bottom. */
 const HORIZON = 0.42;
+/** Sun radius in screen heights: fills this fraction of the gap right of the field, within limits. */
+const SUN = { gapFill: 0.8, minRadius: 0.06, maxRadius: 0.27 } as const;
 const BRICK_KIND = { normal: 0, tough: 1, steel: 2 } as const;
 
 /**
@@ -54,6 +56,7 @@ export class Renderer {
     uTime: this.time.sky,
     uResolution: this.resolution,
     uVanish: { value: new THREE.Vector2() },
+    uSunR: { value: 0.2 },
     uTwinkle: { value: 1 },
     uSkyTop: { value: new THREE.Color(0x0a0326) },
     uSkyHorizon: { value: new THREE.Color(0x3c0d5e) },
@@ -183,7 +186,11 @@ export class Renderer {
     this.bricks.uniforms.uPxPerUnit!.value = scale * pr;
     const areaCx = area.left + area.width / 2;
     const areaCy = area.top + area.height / 2;
-    this.skyUniforms.uVanish.value.set(areaCx * pr, h * HORIZON * pr);
+    // The playfield is opaque, so the sun and the grid's vanishing point go in the gap to its right.
+    const fieldRight = areaCx + (FIELD.width / 2) * scale;
+    const gap = w - fieldRight;
+    this.skyUniforms.uVanish.value.set((fieldRight + gap / 2) * pr, h * HORIZON * pr);
+    this.skyUniforms.uSunR.value = Math.min(SUN.maxRadius, Math.max(SUN.minRadius, (gap * SUN.gapFill) / 2 / h));
 
     const halfW = w / (2 * scale);
     const halfH = h / (2 * scale);

@@ -2,12 +2,14 @@ import { SDF } from './common';
 
 /**
  * Screen-space synthwave scenery: starry sky, striped sun, mountain ridges and a perspective
- * floor grid scrolling towards the viewer. `uVanish` is the vanishing point in device pixels.
+ * floor grid scrolling towards the viewer. `uVanish` is the vanishing point in device pixels;
+ * the sun sits on it, with radius `uSunR` in screen heights.
  */
 export const SKY_FRAGMENT = /* glsl */ `
 uniform float uTime;
 uniform vec2 uResolution;
 uniform vec2 uVanish;
+uniform float uSunR;
 uniform float uTwinkle;
 uniform vec3 uSkyTop;
 uniform vec3 uSkyHorizon;
@@ -18,14 +20,12 @@ uniform vec3 uRidge;
 
 ${SDF}
 
-const float SUN_R = 0.27;
-
 float ridge(float x) {
   float h = 0.0;
   h += abs(sin(x * 6.3 + 1.7)) * 0.045;
   h += abs(sin(x * 15.1 + 0.3)) * 0.02;
   h += abs(sin(x * 37.0 + 2.1)) * 0.007;
-  return h * smoothstep(0.16, 0.5, abs(x)) + 0.004;
+  return h * smoothstep(uSunR * 0.6, uSunR * 1.9, abs(x)) + 0.004;
 }
 
 void main() {
@@ -50,9 +50,9 @@ void main() {
     }
 
     // Sun with horizontal cut-outs drifting downwards.
-    vec2 sc = q - vec2(0.0, SUN_R * 0.55);
-    float sd = length(sc) - SUN_R;
-    float sy = sc.y / SUN_R;
+    vec2 sc = q - vec2(0.0, uSunR * 0.55);
+    float sd = length(sc) - uSunR;
+    float sy = sc.y / uSunR;
     float band = fract(sy * 8.0 + uTime * 0.12);
     float gap = smoothstep(0.35, -1.0, sy) * 0.6;
     float sunMask = fill(sd * H) * step(gap, band);
@@ -121,8 +121,10 @@ void main() {
     vec4 h = uHits[i];
     hit += h.z * exp(-length(w - h.xy) / 8.0);
   }
-  vec3 frame = uFrame * (1.0 + hit * 0.6) + vec3(hit * 0.25);
-  col.rgb += frame * (stroke(d, 0.5) * 1.1 + exp(-d * 0.6) * 0.15);
+  // Kept below the bloom threshold so the frame glows the same everywhere (bloom would
+  // brighten the top edge, which sits next to the bricks and the screen border).
+  vec3 frame = uFrame * (1.0 + hit * 0.15);
+  col.rgb += frame * (stroke(d, 0.5) * 0.85 + exp(-d * 0.5) * 0.18);
 
   float dash = step(0.5, fract(w.x / 8.0)) * step(0.0, w.x) * step(w.x, uField.x);
   col.rgb += uDeath * stroke(w.y, 0.35) * dash * (0.5 + uDanger);
