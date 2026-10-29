@@ -20,7 +20,7 @@ type UiState = 'title' | 'playing' | 'paused' | 'ended';
 
 /** Seconds the final banner stays up in-game before the end screen accepts input. */
 const END_DELAY = 1.5;
-const START_HINT = 'CLICK · MOUSE CONTROL\nENTER · KEYBOARD CONTROL';
+const START_HINT = 'CLICK / ENTER TO START';
 const CONTROLS_HINT = 'MOVE  ← → / A D / MOUSE\nLAUNCH · FIRE  SPACE / CLICK\nDETONATE  X / RIGHT CLICK\nPAUSE  P / ESC · MUTE  M';
 
 function el<T extends HTMLElement = HTMLElement>(id: string): T {
@@ -276,7 +276,6 @@ const powerHud = new PowerHud(el('power-list'));
 const sysFps = el('sys-fps');
 const sysTick = el('sys-tick');
 const sysBalls = el('sys-balls');
-const sysMode = el('sys-mode');
 const sysState = el('sys-state');
 let fps = 60;
 
@@ -312,7 +311,6 @@ startLoop({
     setText(sysFps, fps.toFixed(0));
     setText(sysTick, String(game.tick));
     setText(sysBalls, String(game.balls.length));
-    setText(sysMode, input.absolute ? 'CURSOR' : input.mode.toUpperCase());
     setText(sysState, `${ui}/${game.state}`.toUpperCase());
   },
 });
