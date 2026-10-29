@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VectraNox</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;800&family=Share+Tech+Mono&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <canvas id="stage"></canvas>
+
+    <div id="app">
+      <aside id="panel">
+        <header class="logo">VECTRA<span>NOX</span></header>
+
+        <section class="block" id="hud">
+          <h2>// RUN</h2>
+          <dl>
+            <dt>SCORE</dt><dd id="hud-score">000000</dd>
+            <dt>LIVES</dt><dd id="hud-lives">3</dd>
+            <dt>SECTOR</dt><dd id="hud-sector">1-1</dd>
+          </dl>
+        </section>
+
+        <section class="block" id="scores">
+          <h2>// HIGH SCORES</h2>
+          <ol id="score-list"></ol>
+        </section>
+
+        <section class="block" id="sys">
+          <h2>// SYS</h2>
+          <dl>
+            <dt>FPS</dt><dd id="sys-fps">--</dd>
+            <dt>TICK</dt><dd id="sys-tick">0</dd>
+            <dt>BALLS</dt><dd id="sys-balls">0</dd>
+          </dl>
+        </section>
+
+        <section class="block grow" id="console-block">
+          <h2>// EVENT LOG</h2>
+          <div id="console"></div>
+        </section>
+      </aside>
+
+      <main id="field-area"></main>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
