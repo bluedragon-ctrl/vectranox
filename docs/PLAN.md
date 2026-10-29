@@ -59,6 +59,7 @@ worker/              (later) Cloudflare Worker + D1 schema
 - **Run** = 3–4 **sectors** × 4–5 **stages**; the last stage of a sector is a guardian/boss.
 - **Stages** are assembled procedurally from hand-made templates + formation patterns, scaled by depth. Runs are seeded (enables a later "daily seed" leaderboard).
 - **In-stage power-ups** (capsules dropped by broken bricks, lettered): **M** multi-ball, **L** laser, **E** expand, **S** slow, **C** catch (sticky), **P** pierce, **B** barrier (shield), **+** extra life; negative (red, striped): **N** narrow, **F** fast. Timed ones show in the left panel; all are lost with a life or at stage end. Drop chance, drop weights, durations and effect sizes live in `src/config/powers.ts`.
+- **Stage events**: rule-based triggers inside a stage that keep the end of a stage from dragging. Example: when 5 or fewer breakable bricks are left, drop a guaranteed capsule or split the balls; when no brick has been hit for a while, help the stuck ball. Each event fires at most once per stage, is announced in-game and logged to the event console, and rolls on the seeded RNG. Thresholds and outcomes are tunable in a config file. (Named "stage events" to keep them apart from the event bus.)
 - **Between stages**: pick 1 of 3 **mods** that last the whole run (e.g. laser cooldown, chain explosions, crit chance, magnet pickups), with rarity tiers.
 - **Currency** ("data shards") dropped by bricks, spent in a shop every few stages (lives, rerolls, mods).
 - Death ends the run; the run score goes to the leaderboard.
@@ -72,8 +73,11 @@ worker/              (later) Cloudflare Worker + D1 schema
 | 1 | Playable core | Paddle (mouse + keyboard), ball, swept collision, bricks, lives, a few fixed stages, title/play/pause/game-over states. Flat placeholder visuals; goal is feel. |
 | 2 | Visual identity | Synthwave grid background, SDF neon, stylized glass bricks with depth, bloom, particles, trails, shake. Reduce-flashing/shake setting. |
 | 3 | Power-ups | Drops, multi-ball, laser + projectiles, the rest of the list. |
+| 3b | Stage events | Small phase. A trigger system for in-stage events: an end-game assist when few bricks are left (guaranteed capsule drop or ball split), stall help when no brick has been hit for N seconds, a short in-game banner and console logging. Tuning in `src/config/events.ts`. |
 | 4 | Audio | Synth SFX from events, playlist music player, volume settings, click-to-start audio unlock. |
-| 5 | Roguelike layer | Sectors/stages, procedural assembly, mods, shards, shop, moving formations (sweep, invader march, rotate, sine), brick types (multi-hit, indestructible, explosive, regenerating), bosses. |
+| 5a | Run progression & shop | Run → sectors → stages, seeded procedural assembly from templates scaled by depth, pick-1-of-3 mods between stages (rarity tiers), data shards, shop every few stages (lives, rerolls, mods). |
+| 5b | Room types | Stage variety: moving formations (sweep, invader march, rotate, sine) and the line where they cost a life, new brick types (explosive, regenerating; multi-hit and indestructible already exist), and distinct room kinds a sector mixes (e.g. standard, formation, elite). |
+| 5c | Boss rooms | A guardian stage at the end of each sector: boss with its own HP bar and attack patterns (projectiles the paddle must avoid), phases as it takes damage, and a reward on kill. |
 | 6 | Scores & settings | Local high-score table, 6-char name entry, settings, quality presets. |
 | 7 | Polish | Parallax background, music-reactive visuals, attract mode. |
 | 8 | Online | Worker + D1 leaderboard, rate limiting, optional Turnstile / replay validation; VPS move. |
