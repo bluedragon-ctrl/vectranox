@@ -3,15 +3,19 @@ import { SDF } from './common';
 /**
  * Screen-space synthwave scenery: starry sky, striped sun, mountain ridges and a perspective
  * floor grid scrolling towards the viewer. `uVanish` is the vanishing point in device pixels;
- * the sun sits on it, with radius `uSunR` in screen heights. `uSkip` (min xy, max xy in device
- * pixels) is covered by the opaque playfield, so nothing is drawn there.
+ * the sun sits on it, with radius `uSunR` in screen heights. `uFieldRect` is the playfield
+ * (min xy, max xy in device pixels); `uSkip` is the part of it the opaque field always covers,
+ * so nothing is drawn there. `uScroll` moves the grid and sun stripes (it holds still under
+ * reduce-FX); `uTime` drives the star twinkle.
  */
 export const SKY_FRAGMENT = /* glsl */ `
 uniform float uTime;
+uniform float uScroll;
 uniform vec2 uResolution;
 uniform vec2 uVanish;
 uniform float uSunR;
 uniform vec4 uSkip;
+uniform vec4 uFieldRect;
 uniform float uTwinkle;
 uniform vec3 uSkyTop;
 uniform vec3 uSkyHorizon;
@@ -62,7 +66,7 @@ void main() {
     float sd = length(sc) - uSunR;
     float sy = sc.y / uSunR;
     vec3 sunColor = mix(uSunBottom, uSunTop, smoothstep(-1.0, 1.0, clamp(sy, -1.0, 1.0)));
-    float band = fract(sy * 8.0 + uTime * 0.12);
+    float band = fract(sy * 8.0 + uScroll * 0.12);
     float gap = smoothstep(0.7, -1.0, sy) * 0.55;
     float aa = fwidth(sy * 8.0);
     float cut = gap < 0.005 ? 1.0 : smoothstep(gap - aa, gap + aa, band);
@@ -81,7 +85,7 @@ void main() {
   } else {
     // Floor: x and z on the ground plane from the perspective divide.
     float z = 1.0 / -q.y;
-    vec2 g = vec2(q.x * z * 1.6, z * 0.55 + uTime * 0.6);
+    vec2 g = vec2(q.x * z * 1.6, z * 0.55 + uScroll * 0.6);
     vec2 fw = fwidth(g);
     vec2 a = abs(fract(g - 0.5) - 0.5) / max(fw, vec2(1e-4));
     float line = 1.0 - clamp(min(a.x, a.y) / 1.3, 0.0, 1.0);
@@ -91,8 +95,10 @@ void main() {
     col += uGrid * line * (0.22 + 0.6 * far);
     col += uGrid * 0.18 * exp(q.y * 18.0);
   }
-  // Horizon line.
-  col += uSunBottom * exp(-abs(q.y) * H * 0.12) * 0.9 + uSunBottom * exp(-abs(q.y) * 22.0) * 0.18;
+  // Horizon line, faded out next to the playfield's side walls so they glow evenly.
+  float wall = min(abs(frag.x - uFieldRect.x), abs(frag.x - uFieldRect.z));
+  float horizon = mix(0.15, 1.0, smoothstep(0.0, H * 0.08, wall));
+  col += uSunBottom * (exp(-abs(q.y) * H * 0.12) * 0.9 + exp(-abs(q.y) * 22.0) * 0.18) * horizon;
   gl_FragColor = vec4(col, 1.0);
 }
 `;

@@ -3,8 +3,9 @@ import type { Ball } from '../../game/types';
 import { QuadBatch } from '../QuadBatch';
 import { TRAIL_FRAGMENT } from '../materials/ball';
 
-/** Seconds of history a trail shows. */
+/** Seconds of history a trail shows, up to `MAX_LENGTH` world units (so fast balls don't read as beams). */
 const TRAIL_TIME = 0.16;
+const MAX_LENGTH = 40;
 const MAX_POINTS = 32;
 /** Minimum travel (world units) before a new trail point is recorded. */
 const MIN_STEP = 1.5;
@@ -34,6 +35,8 @@ export class Trails {
   private head = new THREE.Color();
   private tail = new THREE.Color();
   private mixed = new THREE.Color();
+  /** Reused end point of a trail cut at `MAX_LENGTH`. */
+  private cut: Point = { x: 0, y: 0, t: 0 };
 
   constructor(headColor: THREE.Color, tailColor: THREE.Color) {
     this.head.copy(headColor);
@@ -75,26 +78,48 @@ export class Trails {
     }
   }
 
+  /** Walks each trail back from its head; it tapers out by age or by distance, whichever ends first. */
   draw(now: number): void {
     this.batch.begin();
     for (const { pts, r, head, live } of this.trails.values()) {
-      const radius = r * 0.7;
-      for (let i = 0; i + 1 < pts.length; i++) this.segment(pts[i]!, pts[i + 1]!, radius, now);
-      const last = pts[pts.length - 1];
-      if (live && last) this.segment(last, head, radius, now);
+      let c = live ? head : pts[pts.length - 1];
+      if (!c) continue;
+      let kc = fade(c, 0, now);
+      let dist = 0;
+      for (let i = pts.length - (live ? 1 : 2); i >= 0 && kc > 0; i--) {
+        let a = pts[i]!;
+        let len = Math.hypot(c.x - a.x, c.y - a.y);
+        dist += len;
+        // A long step (low frame rate) can run past the length limit: end the trail right there.
+        const over = dist - MAX_LENGTH;
+        if (over > 0) {
+          const keep = (len - over) / len;
+          this.cut.x = c.x + (a.x - c.x) * keep;
+          this.cut.y = c.y + (a.y - c.y) * keep;
+          this.cut.t = a.t;
+          a = this.cut;
+          len -= over;
+        }
+        const ka = fade(a, Math.min(dist, MAX_LENGTH), now);
+        if (len >= 0.01) this.segment(a, c, len, ka, kc, r * 0.7);
+        c = a;
+        kc = ka;
+      }
     }
     this.batch.commit();
   }
 
-  private segment(a: Point, c: Point, r: number, now: number): void {
-    const ka = Math.max(0, 1 - (now - a.t) / TRAIL_TIME);
-    const kc = Math.max(0, 1 - (now - c.t) / TRAIL_TIME);
-    const len = Math.hypot(c.x - a.x, c.y - a.y);
-    if (len < 0.01 || kc <= 0) return;
+  /** Segment from tail point `a` to head point `c`, with fades `ka` and `kc`. */
+  private segment(a: Point, c: Point, len: number, ka: number, kc: number, r: number): void {
     const rc = r * (0.35 + 0.65 * kc);
     const ra = r * (0.35 + 0.65 * ka);
     const maxR = Math.max(ra, rc);
     this.mixed.copy(this.tail).lerp(this.head, (ka + kc) / 2);
     this.batch.push((a.x + c.x) / 2, (a.y + c.y) / 2, len + maxR * 2, maxR * 2, this.mixed, kc, rc, ra, ka, 0, Math.atan2(c.y - a.y, c.x - a.x));
   }
+}
+
+/** 1 at a point just laid down at the ball, 0 once it is `TRAIL_TIME` old or `MAX_LENGTH` behind. */
+function fade(p: Point, dist: number, now: number): number {
+  return Math.max(0, Math.min(1 - (now - p.t) / TRAIL_TIME, 1 - dist / MAX_LENGTH));
 }

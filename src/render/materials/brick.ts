@@ -1,11 +1,12 @@
 import { SDF } from './common';
 
 /**
- * Stylised glass bricks with a little 2.5D depth: a bevelled top face (fresnel rim, inner
- * highlight, refracted backdrop), a darker side face below it, a soft drop shadow and a neon halo.
+ * Bricks with a little 2.5D depth: a bevelled top face, a darker side face below it, a soft drop
+ * shadow and a halo. Normal bricks are stylised glass (fresnel rim, inner highlight, refracted
+ * backdrop); tough ones are armoured gold plates and steel ones grey riveted plates, both opaque.
  *
- * Instance data: colour rgb = tint (alpha unused).
- * params: x = kind (0 normal, 1 tough, 2 steel), y = damage (0..1), z = hit flash, w = random seed.
+ * Instance data: colour rgb = tint, alpha = hits left (tough bricks show a lit slot per hit).
+ * params: x = kind (0 normal, 1 tough, 2 steel), y = hits a tough brick started with, z = hit flash.
  * The instance rectangle is the brick's visual footprint; `uPad` leaves room for halo and shadow.
  */
 export const BRICK_FRAGMENT = /* glsl */ `
@@ -22,6 +23,8 @@ ${SDF}
 const float DEPTH = 2.6;
 const float RADIUS = 1.6;
 const float BEVEL = 2.4;
+/** Spacing of the hit slots on tough bricks. */
+const float NOTCH_STEP = 3.4;
 
 /** Gradient of sdRoundBox(p, b, r). */
 vec2 gradRoundBox(vec2 p, vec2 b, float r) {
@@ -30,29 +33,12 @@ vec2 gradRoundBox(vec2 p, vec2 b, float r) {
   return g * vec2(p.x < 0.0 ? -1.0 : 1.0, p.y < 0.0 ? -1.0 : 1.0);
 }
 
-float crackField(vec2 p) {
-  vec2 cell = floor(p);
-  vec2 f = fract(p);
-  float d1 = 8.0;
-  float d2 = 8.0;
-  for (int y = -1; y <= 1; y++) {
-    for (int x = -1; x <= 1; x++) {
-      vec2 o = vec2(float(x), float(y));
-      vec2 r = o + hash22(cell + o) - f;
-      float d = dot(r, r);
-      if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) { d2 = d; }
-    }
-  }
-  return sqrt(d2) - sqrt(d1);
-}
-
 void main() {
   vec2 p = vLocal;
   vec3 tint = vColor.rgb;
   float kind = vParams.x;
-  float damage = vParams.y;
+  float maxHp = vParams.y;
   float flash = vParams.z;
-  float seed = vParams.w;
   bool steel = kind > 1.5;
   bool tough = kind > 0.5 && !steel;
 
@@ -84,18 +70,34 @@ void main() {
   vec3 side;
   vec3 edgeColor = tint;
   if (steel) {
-    float brushed = hash12(vec2(floor((pt.y + 20.0) * 2.5), seed * 7.0));
-    float streak = hash12(vec2(floor((pt.x + 40.0) * 0.35), floor((pt.y + 20.0) * 2.5) + seed));
-    top = tint * (0.26 + 0.12 * brushed + 0.05 * streak) + bg * 0.05;
-    top += tint * diff * 0.35 + vec3(spec) * 1.1;
-    top += mix(tint, vec3(1.0), 0.5) * fres * 0.7;
-    vec2 rp = vec2(pt.x - sign(pt.x) * (hb.x - 2.6), pt.y);
-    float rivet = length(rp) - 0.9;
+    // A solid plate, opaque so it never reads as glass: mid-grey body, diagonal hatching on an
+    // inset panel, a bright bevel and a rivet at each end. Kept bold enough to survive at ~40 px.
+    float panel = sdRoundBox(pt, vec2(hb.x - 4.0, hb.y - 1.2), 0.6);
+    float hatch = stroke(fract((pt.x + pt.y) / 2.6) - 0.5, 0.16) * fill(panel);
+    top = tint * (0.42 + 0.2 * diff);
+    top *= (1.0 - 0.3 * hatch) * (1.0 - 0.45 * stroke(panel, 0.3));
+    top += vec3(spec) * 0.5 + mix(tint, vec3(1.0), 0.5) * fres * 0.8;
+    vec2 rp = vec2(pt.x - sign(pt.x) * (hb.x - 2.0), pt.y);
+    float rivet = length(rp) - 1.1;
     float rivetLit = clamp(0.5 + dot(rp, vec2(-0.5, 0.8)) * 0.7, 0.0, 1.0);
-    top = mix(top, tint * (0.2 + 0.6 * rivetLit), fill(rivet));
-    top += vec3(0.9) * stroke(rivet, 0.15) * 0.25;
-    side = tint * 0.16;
+    top = mix(top, tint * (0.3 + 0.7 * rivetLit), fill(rivet));
+    side = tint * 0.2;
     edgeColor = mix(tint, vec3(0.6, 0.95, 1.0), 0.45);
+  } else if (tough) {
+    // Armoured plate, not glass: opaque polished gold. Metal reads by contrast, so the face runs
+    // from dark at the bottom to a sharp bright band near the top, under a strong bevel. The lit
+    // slots carry the damage, so the plate itself stays clean.
+    float band = exp(-pow((yN - 0.45) * 3.2, 2.0));
+    top = tint * (0.28 + 0.3 * smoothstep(-1.0, 0.6, yN) + 0.25 * diff);
+    top += mix(tint, vec3(1.0), 0.35) * band * 0.55 + vec3(spec) * 0.5 + mix(tint, vec3(1.0), 0.4) * fres * 0.9;
+    // A slot per hit sunk into the plate across the middle; the ones still to take are lit.
+    float hp = vColor.a;
+    float slot = floor(pt.x / NOTCH_STEP + maxHp * 0.5);
+    float inRow = step(0.0, slot) * step(slot, maxHp - 1.0);
+    float notch = sdRoundBox(pt - vec2((slot + 0.5 - maxHp * 0.5) * NOTCH_STEP, 0.0), vec2(0.8, 1.5), 0.4);
+    top = mix(top, tint * 0.1, fill(notch - 0.4) * inRow);
+    top = mix(top, mix(tint, vec3(1.0), 0.55), fill(notch) * inRow * step(slot, hp - 1.0));
+    side = tint * 0.3;
   } else {
     top = bg * (0.25 + tint * 0.9);
     // Light pools at the bottom of the glass body.
@@ -107,15 +109,6 @@ void main() {
     top += vec3(1.0) * glint * 0.6;
     top += tint * diff * 0.12 + tint * fres * 0.9 + vec3(spec) * 0.7;
     side = tint * 0.1 + bg * 0.15;
-    if (tough) {
-      top += tint * stroke(dTop + 2.4, 0.3) * 0.9;
-      if (damage > 0.0) {
-        float c = crackField(pt * 0.3 + seed * 17.0);
-        float crack = (1.0 - smoothstep(0.0, 0.05 + 0.05 * damage, c));
-        float reach = smoothstep(10.0 * damage + 2.0, 0.0, length(pt - (hash22(vec2(seed)) - 0.5) * hb * 1.4));
-        top += vec3(1.0, 0.92, 0.75) * crack * reach * (0.6 + damage);
-      }
-    }
   }
   // Side face: darker, with a faint lip where it meets the top face.
   side *= 0.75 + 0.35 * smoothstep(-vHalf.y, -vHalf.y + DEPTH, p.y);
@@ -130,7 +123,7 @@ void main() {
   col = over(vec4(side, 1.0) * fill(dSil), col);
   col = over(vec4(top, 1.0) * fill(dTop), col);
   float outside = 1.0 - fill(dSil);
-  float halo = exp(-max(dSil, 0.0) * 0.6) * (steel ? 0.08 : 0.2) + flash * exp(-max(dSil, 0.0) * 0.25) * 0.6;
+  float halo = exp(-max(dSil, 0.0) * 0.6) * (steel || tough ? 0.08 : 0.2) + flash * exp(-max(dSil, 0.0) * 0.25) * 0.6;
   col.rgb += edgeColor * halo * outside;
   gl_FragColor = col;
 }

@@ -123,6 +123,24 @@ void main() {
 }
 `;
 
+/** Charge dot under the paddle: a small solid dot with a faint glow. The instance rectangle is its diameter. */
+export const CHARGE_FRAGMENT = /* glsl */ `
+varying vec2 vLocal;
+varying vec2 vHalf;
+varying vec4 vColor;
+
+${SDF}
+
+void main() {
+  float d = length(vLocal) - vHalf.x;
+  float body = fill(d);
+  vec3 tint = vColor.rgb;
+  vec4 col = vec4(mix(tint, vec3(1.0), 0.3), 1.0) * body;
+  col.rgb += tint * exp(-max(d, 0.0) * 1.2) * 0.25 * (1.0 - body);
+  gl_FragColor = col;
+}
+`;
+
 /**
  * Detonator blast: one thin ring that grows from half the blast radius to all of it while it
  * fades. The instance rectangle is the full blast diameter. params: x = strength (1 -> 0).

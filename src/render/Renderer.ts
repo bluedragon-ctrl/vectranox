@@ -4,6 +4,7 @@ import { POWER, POWER_LOOK } from '../config/tuning';
 import { lerp } from '../core/math';
 import type { VisualSettings } from '../core/settings';
 import type { Game } from '../game/Game';
+import { CHARGE_POWERS } from '../game/powers';
 import type { PowerKind, TimedPower } from '../game/types';
 import { GameFx } from './fx/GameFx';
 import { PostFx } from './fx/PostFx';
@@ -13,7 +14,7 @@ import { BALL_FRAGMENT } from './materials/ball';
 import { BRICK_FRAGMENT } from './materials/brick';
 import { FULLSCREEN_VERTEX } from './materials/common';
 import { PADDLE_FRAGMENT } from './materials/paddle';
-import { BARRIER_FRAGMENT, BLAST_FRAGMENT, BOLT_FRAGMENT, CAPSULE_FRAGMENT } from './materials/power';
+import { BARRIER_FRAGMENT, BLAST_FRAGMENT, BOLT_FRAGMENT, CAPSULE_FRAGMENT, CHARGE_FRAGMENT } from './materials/power';
 import { glyphMask } from './glyphs';
 import { BRICK_GAP, brickTint, COLORS, POWER_COLORS } from './palette';
 import { QuadBatch } from './QuadBatch';
@@ -28,6 +29,10 @@ const MAX_BOLTS = 64;
 const POWER_FADE = 1;
 /** Ticks a brick stays lit after a hit. */
 const FLASH_TICKS = 12;
+/** Hit flash strength for bricks struck by a pulse or blast, which light up many at once. */
+const AREA_FLASH = 0.35;
+/** Held charges show as dots under the paddle: dot diameter, spacing, and drop below the paddle's bottom edge. */
+const CHARGE_DOT = { size: 2.6, step: 4, drop: 3.5 } as const;
 /** Horizon height as a fraction of the window, from the bottom. */
 const HORIZON = 0.42;
 /** Sun radius in screen heights: fills this fraction of the gap right of the field, within limits. */
@@ -63,13 +68,17 @@ export class Renderer {
   private fx = new GameFx(this.trails);
 
   private skyTime = { value: 0 };
+  /** Drives the scrolling grid and sun stripes; holds still under reduce-FX. */
+  private skyScroll = { value: 0 };
   private resolution = { value: new THREE.Vector2(1, 1) };
   private skyUniforms = {
     uTime: this.skyTime,
+    uScroll: this.skyScroll,
     uResolution: this.resolution,
     uVanish: { value: new THREE.Vector2() },
     uSunR: { value: 0.2 },
     uSkip: { value: new THREE.Vector4() },
+    uFieldRect: { value: new THREE.Vector4() },
     uTwinkle: { value: 1 },
     uSkyTop: { value: new THREE.Color(0x0a0326) },
     uSkyHorizon: { value: new THREE.Color(0x3c0d5e) },
@@ -118,6 +127,7 @@ export class Renderer {
   private capsules = new QuadBatch({ max: MAX_CAPSULES, pad: 4, fragmentShader: CAPSULE_FRAGMENT, renderOrder: 22 });
   private bolts = new QuadBatch({ max: MAX_BOLTS, pad: 4, fragmentShader: BOLT_FRAGMENT, renderOrder: 24 });
   private blast = new QuadBatch({ max: MAX_BALLS, pad: 4, fragmentShader: BLAST_FRAGMENT, renderOrder: 26 });
+  private chargeDots = new QuadBatch({ max: 16, pad: 2, fragmentShader: CHARGE_FRAGMENT, renderOrder: 27 });
 
   private ballPositions: { x: number; y: number }[] = [];
   private color = new THREE.Color();
@@ -160,10 +170,12 @@ export class Renderer {
       this.capsules.mesh,
       this.bolts.mesh,
       this.paddle.mesh,
+      this.chargeDots.mesh,
       this.blast.mesh,
       this.balls.mesh,
       this.fx.particles.pieces.mesh,
-      this.fx.particles.batch.mesh,
+      this.fx.particles.metalPieces.mesh,
+      this.fx.particles.glintBatch.mesh,
     );
 
     this.post = new PostFx(this.renderer, this.scene, this.camera);
@@ -223,11 +235,16 @@ export class Renderer {
     const gap = w - fieldRight;
     this.skyUniforms.uVanish.value.set((fieldRight + gap / 2) * pr, h * HORIZON * pr);
     this.skyUniforms.uSunR.value = Math.min(SUN.maxRadius, Math.max(SUN.minRadius, (gap * SUN.gapFill) / 2 / h));
-    // Device pixels the opaque playfield always covers, even shaken; the sky skips them.
-    const skipW = (FIELD.width / 2 - SHAKE_MARGIN) * scale;
-    const skipH = (FIELD.height / 2 - SHAKE_MARGIN) * scale;
+    // The playfield in device pixels (y up), and the part of it that stays covered even shaken,
+    // which the sky skips.
     const areaCyUp = h - areaCy;
-    this.skyUniforms.uSkip.value.set((areaCx - skipW) * pr, (areaCyUp - skipH) * pr, (areaCx + skipW) * pr, (areaCyUp + skipH) * pr);
+    const rect = (inset: number) => {
+      const hw = (FIELD.width / 2 - inset) * scale;
+      const hh = (FIELD.height / 2 - inset) * scale;
+      return [(areaCx - hw) * pr, (areaCyUp - hh) * pr, (areaCx + hw) * pr, (areaCyUp + hh) * pr] as const;
+    };
+    this.skyUniforms.uFieldRect.value.set(...rect(0));
+    this.skyUniforms.uSkip.value.set(...rect(SHAKE_MARGIN));
 
     const halfW = w / (2 * scale);
     const halfH = h / (2 * scale);
@@ -241,6 +258,7 @@ export class Renderer {
     const dt = Math.min(frameTime, 0.1);
     this.fx.update(dt);
     this.skyTime.value += dt;
+    if (!this.settings.reduceFx) this.skyScroll.value += dt;
 
     const shake = this.fx.shake;
     this.camera.position.set(this.camBase.x + shake.x, this.camBase.y + shake.y, 10);
@@ -301,19 +319,17 @@ export class Renderer {
     b.begin();
     for (const br of game.bricks) {
       if (!br.alive) continue;
-      const flash = Math.max(0, 1 - (game.tick - br.hitTick) / FLASH_TICKS) * this.fx.brickFlash;
-      const damage = br.kind === 'tough' ? 1 - br.hp / br.maxHp : 0;
+      const flash = Math.max(0, 1 - (game.tick - br.hitTick) / FLASH_TICKS) * this.fx.brickFlash * (this.fx.areaHits.has(br.id) ? AREA_FLASH : 1);
       b.push(
         br.x + br.w / 2,
         br.y + br.h / 2,
         br.w - BRICK_GAP,
         br.h - BRICK_GAP,
         brickTint(br, this.color),
-        1,
+        br.kind === 'tough' ? br.hp : 1,
         BRICK_KIND[br.kind],
-        damage,
+        br.maxHp,
         flash * flash,
-        (br.id * 0.6180339) % 1,
       );
     }
     b.commit();
@@ -366,6 +382,24 @@ export class Renderer {
       powerLevel(game, 'catch'),
     );
     this.paddle.commit();
+    this.drawCharges(game, x);
+  }
+
+  /** Held charges as a row of dots under the paddle, one per charge, in the power's colour. */
+  private drawCharges(game: Game, x: number): void {
+    const p = game.paddle;
+    const dots = this.chargeDots;
+    let y = p.y - p.h / 2 - CHARGE_DOT.drop;
+    dots.begin();
+    for (const kind of CHARGE_POWERS) {
+      const n = game.charges[kind];
+      if (n === 0) continue;
+      for (let i = 0; i < n; i++) {
+        dots.push(x + (i - (n - 1) / 2) * CHARGE_DOT.step, y, CHARGE_DOT.size, CHARGE_DOT.size, POWER_COLORS[kind]);
+      }
+      y -= CHARGE_DOT.step;
+    }
+    dots.commit();
   }
 
   private drawBlast(): void {

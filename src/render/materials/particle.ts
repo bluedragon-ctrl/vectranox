@@ -1,41 +1,20 @@
 import { SDF } from './common';
 
-export const PARTICLE_KIND = {
-  spark: 0,
-  glint: 1,
-} as const;
-
 /**
- * Light particles, picked by params.x (see PARTICLE_KIND); colour alpha is the fade. Both are
- * drawn along local x (the quad is rotated to their velocity). Sparks are soft capsules with a
- * hot head (metal on metal); glints are short hard-edged slivers (glass).
+ * Glass glint: a short hard-edged diamond sliver, sharp at both ends and even along its length,
+ * drawn along local x (the quad is rotated to its velocity). Colour alpha is the fade.
  */
-export const PARTICLE_FRAGMENT = /* glsl */ `
+export const GLINT_FRAGMENT = /* glsl */ `
 varying vec2 vLocal;
 varying vec2 vHalf;
 varying vec4 vColor;
-varying vec4 vParams;
 
 ${SDF}
 
 void main() {
-  int kind = int(vParams.x + 0.5);
-  vec3 tint = vColor.rgb;
-  float fade = vColor.a;
   vec2 p = vLocal;
-  vec3 c;
-
-  if (kind == 0) {
-    float r = vHalf.y;
-    float d = sdSegment(p, vec2(-vHalf.x + r, 0.0), vec2(vHalf.x - r, 0.0), r);
-    float head = smoothstep(-vHalf.x, vHalf.x, p.x);
-    c = mix(tint, vec3(1.0), 0.5 * head) * (fill(d) * 1.8 + exp(-max(d, 0.0) * 0.8) * 0.4) * (0.3 + 0.7 * head);
-  } else {
-    // Diamond sliver: sharp at both ends, even brightness along its length.
-    float d = (abs(p.x) / vHalf.x + abs(p.y) / vHalf.y - 1.0) * min(vHalf.x, vHalf.y);
-    c = mix(tint, vec3(1.0), 0.45) * fill(d) * 1.0;
-  }
-  gl_FragColor = vec4(c * fade, 0.0);
+  float d = (abs(p.x) / vHalf.x + abs(p.y) / vHalf.y - 1.0) * min(vHalf.x, vHalf.y);
+  gl_FragColor = vec4(mix(vColor.rgb, vec3(1.0), 0.45) * fill(d) * vColor.a, 0.0);
 }
 `;
 
@@ -62,5 +41,26 @@ void main() {
   vec4 col = vec4(c, 0.7) * body * fade;
   col.rgb += tint * exp(-max(d, 0.0) * 1.2) * 0.12 * fade * (1.0 - body);
   gl_FragColor = col;
+}
+`;
+
+/**
+ * Metal piece of a broken armoured (tough) brick: the same triangle as PIECE_FRAGMENT, but an
+ * opaque plate with a lit cut edge and no glow. The spin glint in colour rgb reads as metal flashing.
+ */
+export const METAL_PIECE_FRAGMENT = /* glsl */ `
+varying vec2 vLocal;
+varying vec4 vColor;
+varying vec4 vParams;
+
+${SDF}
+
+void main() {
+  vec2 a = vParams.xy;
+  vec2 b = vParams.zw;
+  float d = sdTri(vLocal, a, b, -(a + b));
+  vec3 tint = vColor.rgb;
+  vec3 c = tint * 0.7 + mix(tint, vec3(1.0), 0.5) * stroke(d + 0.3, 0.3) * 0.8;
+  gl_FragColor = vec4(c, 1.0) * fill(d) * vColor.a;
 }
 `;
