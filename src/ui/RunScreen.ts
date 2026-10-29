@@ -1,6 +1,7 @@
 import { DRAFT, MODS, RARITY_LOOK } from '../config/mods';
 import { POWER } from '../config/tuning';
 import type { Game } from '../game/Game';
+import { describeMod } from '../game/mods';
 import { cssColor } from './dom';
 
 export type RunAction = { type: 'pick'; index: number } | { type: 'lives' };
@@ -61,7 +62,7 @@ export class RunScreen {
       return {
         name: def.name,
         // What it gives once taken, all stacks together.
-        desc: def.describe(def.perStack * stacks),
+        desc: describeMod(kind, game.mods, stacks),
         color: RARITY_LOOK[def.rarity].color,
         tag: RARITY_LOOK[def.rarity].label,
         note: def.maxStacks > 1 ? `LV ${stacks}/${def.maxStacks}` : 'UNIQUE',

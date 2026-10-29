@@ -909,7 +909,9 @@ export class Game {
    * survives takes the heavy ball's extra hit.
    */
   private ballHitsBrick(br: Brick, b: Ball, smash: boolean): void {
-    if (br.kind !== 'steel') b.speed = Math.min(BALL.maxSpeed, b.speed + BALL.hitSpeedStep);
+    // The dampener mod cuts the top speed too, so hits don't win back what it takes.
+    const max = BALL.maxSpeed * (1 - this.modValue('dampener'));
+    if (br.kind !== 'steel') b.speed = Math.min(max, b.speed + BALL.hitSpeedStep);
     const ix = clamp(b.x, br.x, br.x + br.w);
     const iy = clamp(b.y, br.y, br.y + br.h);
     this.hitBrick(br, 'ball', ix, iy, smash, b);

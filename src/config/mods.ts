@@ -33,12 +33,29 @@ export interface ModDef {
   maxStacks: number;
   /** Effect of one stack; stacks add up. The unit is given per mod. */
   perStack: number;
-  /** Card text for a total effect (`perStack` × stacks), so the text always matches the numbers. */
-  describe: (total: number) => string;
+  /**
+   * Card text for a total effect (`perStack` × stacks), so the text always matches the numbers.
+   * `held` has the totals of the mods already held, for cards whose numbers they change.
+   */
+  describe: (total: number, held: Boosts) => string;
+}
+
+/** Totals of the mods that change other mods' numbers (as applied in game/Game.ts). */
+export interface Boosts {
+  /** Good timed powers last this fraction longer, so do the stage-start ones. */
+  extender: number;
+  /** Seconds added to every laser grant, before the extender. */
+  longbeam: number;
+  /** Extra balls per ball from every split. */
+  extraball: number;
 }
 
 /** 0.15 → "15%". */
 const pct = (v: number) => `${Math.round(v * 100)}%`;
+/** 8.399999 → "8.4". */
+const secs = (v: number) => `${Math.round(v * 10) / 10}`;
+/** Balls each ball becomes on a split. */
+const splitInto = (held: Boosts) => 3 + held.extraball;
 
 /** Every mod. The key is the mod's id (used by the dev console: `vnx.game.applyMod('wide')`). */
 export const MODS = {
@@ -79,7 +96,7 @@ export const MODS = {
     name: 'DAMPENER',
     rarity: 'common',
     maxStacks: 2,
-    /** Ball base speed, fraction cut. */
+    /** Ball speed, fraction cut (base and top speed). */
     perStack: 0.05,
     describe: (v) => `BALL ${pct(v)} SLOWER`,
   },
@@ -90,7 +107,7 @@ export const MODS = {
     maxStacks: 3,
     /** Seconds added to every laser grant (capsule, laser start, hunter event), before the extender. */
     perStack: 3,
-    describe: (v) => `LASER LASTS ${v} S LONGER`,
+    describe: (v, held) => `LASER LASTS ${secs(v * (1 + held.extender))} S LONGER`,
   },
   multistart: {
     name: 'MULTI START',
@@ -98,7 +115,7 @@ export const MODS = {
     maxStacks: 1,
     /** On/off: the first launch of each stage splits the ball, as if a multi-ball capsule was caught. */
     perStack: 1,
-    describe: () => 'EACH STAGE OPENS WITH MULTI-BALL',
+    describe: (_, held) => `EACH STAGE'S FIRST LAUNCH SPLITS THE BALL INTO ${splitInto(held)}`,
   },
   extraball: {
     name: 'EXTRA BALL',
@@ -109,7 +126,7 @@ export const MODS = {
      * ball splits into 3 plus this many.
      */
     perStack: 1,
-    describe: (v) => `MULTI-BALL SPLITS EACH BALL INTO ${3 + v}`,
+    describe: (v, held) => `MULTI-BALL SPLITS EACH BALL INTO ${splitInto({ ...held, extraball: v })}`,
   },
   armory: {
     name: 'ARMORY',
@@ -125,7 +142,7 @@ export const MODS = {
     maxStacks: 3,
     /** Seconds of barrier at the start of each stage. */
     perStack: 7,
-    describe: (v) => `START EACH STAGE WITH ${v} S OF BARRIER`,
+    describe: (v, held) => `START EACH STAGE WITH ${secs(v * (1 + held.extender))} S OF BARRIER`,
   },
 
   // ── Rare ──
@@ -212,7 +229,7 @@ export const MODS = {
     maxStacks: 1,
     /** On/off: every serve launch splits the ball in three. */
     perStack: 1,
-    describe: () => 'EVERY SERVE SPLITS THE BALL IN THREE',
+    describe: (_, held) => `EVERY SERVE SPLITS THE BALL INTO ${splitInto(held)}`,
   },
   laserstart: {
     name: 'LASER START',
@@ -220,7 +237,7 @@ export const MODS = {
     maxStacks: 1,
     /** Seconds of laser at the start of each stage (the capsule gives `POWER.kinds.laser.duration`). */
     perStack: 10,
-    describe: (v) => `START EACH STAGE WITH ${v} S OF LASER`,
+    describe: (v, held) => `START EACH STAGE WITH ${secs((v + held.longbeam) * (1 + held.extender))} S OF LASER`,
   },
   cluster: {
     name: 'CLUSTER CHARGE',

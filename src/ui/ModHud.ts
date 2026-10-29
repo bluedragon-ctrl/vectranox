@@ -1,5 +1,5 @@
 import { MODS, RARITY_LOOK } from '../config/mods';
-import { MOD_KINDS } from '../game/mods';
+import { describeMod, MOD_KINDS } from '../game/mods';
 import type { ModKind } from '../game/types';
 import { cssColor } from './dom';
 
@@ -29,7 +29,7 @@ export class ModHud {
         const row = document.createElement('div');
         row.className = 'mod';
         row.style.setProperty('--c', cssColor(RARITY_LOOK[def.rarity].color));
-        row.title = def.describe(def.perStack * mods[kind]);
+        row.title = describeMod(kind, mods);
         const name = document.createElement('span');
         name.textContent = def.name;
         const stacks = document.createElement('span');

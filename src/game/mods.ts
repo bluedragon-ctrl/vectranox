@@ -1,4 +1,4 @@
-import { MODS, RARITY_WEIGHTS, type Rarity } from '../config/mods';
+import { MODS, RARITY_WEIGHTS, type Boosts, type Rarity } from '../config/mods';
 import type { Rng } from '../core/rng';
 import type { ModKind } from './types';
 
@@ -6,9 +6,19 @@ export const MOD_KINDS = Object.keys(MODS) as ModKind[];
 const RARITIES: readonly Rarity[] = ['common', 'rare', 'epic'];
 
 /**
+ * Card text for `kind` at `stacks` stacks, with the numbers the other mods in `held` give it
+ * (the pick shows the stacks it would have once taken, the panel the stacks held).
+ */
+export function describeMod(kind: ModKind, held: Readonly<Record<ModKind, number>>, stacks = held[kind]): string {
+  const total = (k: ModKind) => MODS[k].perStack * held[k];
+  const boosts: Boosts = { extender: total('extender'), longbeam: total('longbeam'), extraball: total('extraball') };
+  return MODS[kind].describe(MODS[kind].perStack * stacks, boosts);
+}
+
+/**
  * Up to `count` different mods the player could still take (not at their stack limit). Each slot
- * rolls a rarity by the sector's weights, then a mod of that rarity; when none of that rarity is
- * left it takes any.
+ * rolls a rarity by the sector's weights among the rarities that still have a mod left, then a
+ * mod of that rarity; when those rarities have no weight it takes any.
  */
 export function rollMods(rng: Rng, owned: Readonly<Record<ModKind, number>>, sector: number, count: number): ModKind[] {
   const open = MOD_KINDS.filter((k) => owned[k] < MODS[k].maxStacks);
@@ -16,7 +26,7 @@ export function rollMods(rng: Rng, owned: Readonly<Record<ModKind, number>>, sec
   while (picks.length < count) {
     const left = open.filter((k) => !picks.includes(k));
     if (left.length === 0) break;
-    const rarity = rollRarity(rng, sector);
+    const rarity = rollRarity(rng, sector, new Set(left.map((k) => MODS[k].rarity)));
     const ofRarity = left.filter((k) => MODS[k].rarity === rarity);
     const from = ofRarity.length > 0 ? ofRarity : left;
     const pick = from[Math.floor(rng.next() * from.length)];
@@ -25,13 +35,15 @@ export function rollMods(rng: Rng, owned: Readonly<Record<ModKind, number>>, sec
   return picks;
 }
 
-function rollRarity(rng: Rng, sector: number): Rarity {
+/** A rarity out of `available` by the sector's weights; `null` when none of them has any weight. */
+function rollRarity(rng: Rng, sector: number, available: ReadonlySet<Rarity>): Rarity | null {
   const weights = RARITY_WEIGHTS[Math.min(sector, RARITY_WEIGHTS.length) - 1] ?? { common: 1, rare: 0, epic: 0 };
-  const total = RARITIES.reduce((sum, r) => sum + weights[r], 0);
+  const rarities = RARITIES.filter((r) => available.has(r));
+  const total = rarities.reduce((sum, r) => sum + weights[r], 0);
   let roll = rng.next() * total;
-  for (const r of RARITIES) {
+  for (const r of rarities) {
     roll -= weights[r];
     if (roll < 0) return r;
   }
-  return 'common';
+  return null;
 }
