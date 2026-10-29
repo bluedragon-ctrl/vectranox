@@ -22,7 +22,7 @@ export const POWER = {
   maxCapsules: 3,
   kinds: {
     multi: { duration: 0, weight: 14 },
-    laser: { duration: 12, weight: 10 },
+    laser: { duration: 10, weight: 10 },
     expand: { duration: 15, weight: 12 },
     narrow: { duration: 10, weight: 8 },
     slow: { duration: 12, weight: 10 },

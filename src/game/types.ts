@@ -1,6 +1,8 @@
+import type { MODS } from '../config/mods';
 import type { POWER, STAGE_EVENTS } from '../config/tuning';
 
-export type GameState = 'serve' | 'play' | 'clear' | 'over' | 'complete';
+/** `draft` (the pick between stages) waits for the player's choice. */
+export type GameState = 'serve' | 'play' | 'clear' | 'draft' | 'over' | 'complete';
 
 export type BrickKind = 'normal' | 'tough' | 'steel';
 
@@ -11,6 +13,7 @@ export type ChargePower = 'detonator';
 export type TimedPower = { [K in PowerKind]: (typeof POWER.kinds)[K]['duration'] extends 0 ? never : K }[PowerKind];
 export type HitSource = 'ball' | 'laser' | 'pulse' | 'blast';
 export type StageEventKind = keyof typeof STAGE_EVENTS.kinds;
+export type ModKind = keyof typeof MODS;
 
 /** Player input for one tick. Plain data so runs can later be recorded and replayed. */
 export interface TickInput {
@@ -99,6 +102,8 @@ export interface Bolt {
   x: number;
   y: number;
   py: number;
+  /** Bricks it can still break and fly on through (piercing laser mod). */
+  pierce: number;
 }
 
 /** Position is the bottom-left corner. */

@@ -14,6 +14,7 @@ const SYSTEM_EVENTS: ReadonlySet<string> = new Set<LogEvent>([
   'lifeLost',
   'gameOver',
   'runComplete',
+  'draftOpen',
   'play',
   'pause',
   'resume',
@@ -22,7 +23,15 @@ const SYSTEM_EVENTS: ReadonlySet<string> = new Set<LogEvent>([
 ]);
 
 /** Power-up events, highlighted separately. */
-const POWER_EVENTS: ReadonlySet<string> = new Set<LogEvent>(['powerCollect', 'powerEnd', 'detonate', 'targetBank']);
+const POWER_EVENTS: ReadonlySet<string> = new Set<LogEvent>([
+  'powerCollect',
+  'powerEnd',
+  'detonate',
+  'targetBank',
+  'modPick',
+  'livesPick',
+  'secondWind',
+]);
 
 function eventClass(type: string): string {
   if (SYSTEM_EVENTS.has(type)) return 'ev sys';

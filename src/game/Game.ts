@@ -1,12 +1,15 @@
 import { BALL, FIELD, PADDLE, RULES, SCORE, SIM } from '../config/game';
-import { PINBALL, POWER, STAGE_EVENTS } from '../config/tuning';
+import { DRAFT, MODS } from '../config/mods';
+import { PINBALL, POWER, POWER_LOOK, STAGE_EVENTS } from '../config/tuning';
 import { EventBus } from '../core/events';
 import { clamp } from '../core/math';
 import { Rng } from '../core/rng';
+import { assembleRun } from '../levels/assemble';
 import type { StageDef } from '../levels/stages';
 import { sweepBox, sweepCircle, type SweepHit } from './collision';
 import type { GameEvents, WallSide } from './events';
 import { parseLayout } from './layout';
+import { MOD_KINDS, rollMods } from './mods';
 import { aim, closer, normalizeVelocity, sweepWalls } from './physics';
 import { CHARGE_POWERS, GOOD_POWERS, OPPOSITE, POWER_KINDS, rollPower, TIMED_POWERS } from './powers';
 import { StageEventTracker } from './stageEvents';
@@ -18,6 +21,7 @@ import type {
   ChargePower,
   GameState,
   HitSource,
+  ModKind,
   Paddle,
   Portal,
   PowerKind,
@@ -26,6 +30,9 @@ import type {
   TickInput,
   TimedPower,
 } from './types';
+
+/** Keeps the mod offers' random stream apart from the stage's. */
+const OFFER_SALT = 0x9e3779b9;
 
 /** Distance a ball is pushed off a surface after a bounce, so the next sweep starts outside it. */
 const SKIN = 0.01;
@@ -60,6 +67,12 @@ export class Game {
   portals: Portal[] = [];
   capsules: Capsule[] = [];
   bolts: Bolt[] = [];
+  /** The run's stages, assembled from the seed. */
+  readonly stages: readonly StageDef[];
+  /** Stacks held of each mod; mods last the whole run. */
+  readonly mods = Object.fromEntries(MOD_KINDS.map((k) => [k, 0])) as Record<ModKind, number>;
+  /** The pick's mod offers, while drafting. */
+  offers: ModKind[] = [];
   /** Seconds left on each timed power; 0 is off. */
   readonly timers = Object.fromEntries(TIMED_POWERS.map((k) => [k, 0])) as Record<TimedPower, number>;
   /** Charges held for each charge power, spent by the alt button. */
@@ -75,6 +88,8 @@ export class Game {
   multiplierStep = 0;
 
   private rng: Rng;
+  /** Mod offers, so in-stage play doesn't shift them. */
+  private offerRng: Rng;
   private nextId = 1;
   private breakableLeft = 0;
   private laserCooldown = 0;
@@ -82,15 +97,18 @@ export class Game {
   private sinceHit = 0;
   private sinceKill = 0;
   private readonly stageEvents = new StageEventTracker();
+  /** The next launch is the stage's first (for the multi start mod). */
+  private openingServe = false;
+  /** Second wind mod uses spent this stage. */
+  private secondWinds = 0;
   /** Reused by `paddleBox`. */
   private readonly box: Box = { minX: 0, minY: 0, maxX: 0, maxY: 0 };
 
-  constructor(
-    readonly seed: number,
-    readonly stages: readonly StageDef[],
-  ) {
-    if (stages.length === 0) throw new Error('Game needs at least one stage');
+  constructor(readonly seed: number) {
+    this.stages = assembleRun(seed);
+    if (this.stages.length === 0) throw new Error('Game needs at least one stage');
     this.rng = new Rng(seed);
+    this.offerRng = new Rng(seed ^ OFFER_SALT);
   }
 
   get stage(): StageDef {
@@ -102,12 +120,19 @@ export class Game {
   /** Score multiplier for brick points. */
   get multiplier(): number {
     const steps = PINBALL.multipliers;
-    return steps[Math.min(this.multiplierStep, steps.length - 1)] ?? 1;
+    const base = steps[Math.min(this.multiplierStep, steps.length - 1)] ?? 1;
+    // The amplifier mod only adds once a target bank has lit the multiplier.
+    return this.multiplierStep > 0 ? base + this.modValue('amplifier') : base;
   }
 
   /** Seconds of simulated time since the run started. */
   get time(): number {
     return this.tick / SIM.tickRate;
+  }
+
+  /** Bonus for the `chain`-th brick of a chain (before the multiplier), with the chain link mod. */
+  chainBonus(chain: number): number {
+    return Math.round(chainBonus(chain) * (1 + this.modValue('chainlink')));
   }
 
   start(): void {
@@ -143,8 +168,10 @@ export class Game {
         if (this.state === 'play') this.checkStageEvents(dt);
         break;
       case 'clear':
-        if (this.stateTime >= RULES.stageClearDelay) this.nextStage();
+        if (this.stateTime >= RULES.stageClearDelay) this.afterStage();
         break;
+      // Waiting for the player's choice (pickMod / pickLives).
+      case 'draft':
       case 'over':
       case 'complete':
         break;
@@ -173,7 +200,8 @@ export class Game {
     }
     const opposite = OPPOSITE[kind];
     if (opposite && this.isActive(opposite)) this.endPower(opposite);
-    this.timers[kind] = duration;
+    if (kind === 'laser') duration += this.modValue('longbeam');
+    this.timers[kind] = POWER_LOOK[kind].bad ? duration : duration * (1 + this.modValue('extender'));
     if (kind === 'slow' || kind === 'fast') this.rescaleBalls();
   }
 
@@ -217,6 +245,44 @@ export class Game {
     return best ? [best] : [];
   }
 
+  /**
+   * Adds a stack of a mod. Public so the dev console can grant mods (`vnx.game.applyMod('heavy')`);
+   * in play it comes from the pick between stages.
+   */
+  applyMod(kind: ModKind): void {
+    this.mods[kind] = Math.min(MODS[kind].maxStacks, this.mods[kind] + 1);
+  }
+
+  /*
+   * Between stages. The UI calls these with the player's choice; each returns whether it was
+   * allowed. (Recorded with their tick, they replay like the per-tick input.)
+   */
+
+  /** Takes offer `index` of the mod pick. */
+  pickMod(index: number): boolean {
+    const kind = this.offers[index];
+    if (this.state !== 'draft' || !kind) return false;
+    this.applyMod(kind);
+    this.events.emit('modPick', { kind, stacks: this.mods[kind] });
+    this.afterDraft();
+    return true;
+  }
+
+  /** Whether the lives option would add any (lives are capped). */
+  get canPickLives(): boolean {
+    return this.state === 'draft' && this.lives < POWER.maxLives;
+  }
+
+  /** Takes extra lives instead of a mod. */
+  pickLives(): boolean {
+    if (!this.canPickLives) return false;
+    const before = this.lives;
+    this.lives = Math.min(POWER.maxLives, this.lives + DRAFT.lives);
+    this.events.emit('livesPick', { gained: this.lives - before, lives: this.lives });
+    this.afterDraft();
+    return true;
+  }
+
   private setState(state: GameState): void {
     this.state = state;
     this.stateTime = 0;
@@ -228,25 +294,62 @@ export class Game {
     ({ bricks: this.bricks, targets: this.targets, portals: this.portals } = parseLayout(stage.layout, () => this.nextId++));
     this.breakableLeft = this.bricks.filter(isBreakable).length;
     this.paddle.x = this.paddle.px = FIELD.width / 2;
-    this.paddle.w = PADDLE.width;
+    this.paddle.w = this.paddleWidth();
     this.stageEvents.reset();
-    this.events.emit('stageStart', { stage: index + 1, name: stage.name, bricks: this.breakableLeft });
+    this.secondWinds = 0;
+    this.events.emit('stageStart', { stage: index + 1, sector: stage.sector, number: stage.number, name: stage.name, bricks: this.breakableLeft });
     this.serve();
+    this.openingServe = true;
+    // Stage-start mods, after the serve has cleared the powers.
+    if (this.mods.armory > 0) this.addCharges('detonator', this.modValue('armory'));
+    if (this.mods.failsafe > 0) this.applyPower('barrier', this.modValue('failsafe'));
+    if (this.mods.laserstart > 0) this.applyPower('laser', this.modValue('laserstart'));
   }
 
-  private nextStage(): void {
-    if (this.stageIndex + 1 < this.stages.length) {
-      this.loadStage(this.stageIndex + 1);
-    } else {
+  /** Stage cleared: the run ends after the last one; otherwise the pick opens. */
+  private afterStage(): void {
+    if (this.stageIndex + 1 >= this.stages.length) {
       this.setState('complete');
       this.events.emit('runComplete', { score: this.score });
+      return;
     }
+    this.offers = this.rollOffers(DRAFT.offers);
+    // Every mod maxed and lives full: nothing to choose.
+    if (this.offers.length === 0 && this.lives >= POWER.maxLives) {
+      this.afterDraft();
+      return;
+    }
+    this.setState('draft');
+    this.events.emit('draftOpen', { stage: this.stageIndex + 1, offers: this.offers.slice() });
   }
 
-  /** New ball resting on the paddle, waiting for launch. Powers don't survive a lost life. */
-  private serve(): void {
+  private afterDraft(): void {
+    this.offers = [];
+    this.loadStage(this.stageIndex + 1);
+  }
+
+  /** Mods on offer for the next stage's sector. */
+  private rollOffers(count: number): ModKind[] {
+    const next = this.stages[this.stageIndex + 1] ?? this.stage;
+    return rollMods(this.offerRng, this.mods, next.sector, count);
+  }
+
+  /** A mod's total effect at the stacks held: its `perStack` times the stacks. */
+  private modValue(kind: ModKind): number {
+    return MODS[kind].perStack * this.mods[kind];
+  }
+
+  private paddleWidth(): number {
+    return PADDLE.width * (1 + this.modValue('wide'));
+  }
+
+  /**
+   * New ball resting on the paddle, waiting for launch. Powers don't survive a lost life;
+   * `keepPowers` (second wind) leaves them running.
+   */
+  private serve(keepPowers = false): void {
     this.balls = [];
-    this.clearPowers();
+    if (!keepPowers) this.clearPowers();
     const x = this.paddle.x;
     const y = this.restY(BALL.radius);
     const ball: Ball = {
@@ -258,7 +361,7 @@ export class Game {
       vx: 0,
       vy: 0,
       r: BALL.radius,
-      speed: BALL.baseSpeed + this.stageIndex * BALL.stageSpeedStep,
+      speed: (BALL.baseSpeed + this.stageIndex * BALL.stageSpeedStep) * (1 - this.modValue('dampener')),
       stuck: null,
       stuckTime: 0,
       chain: 0,
@@ -286,6 +389,9 @@ export class Game {
 
   private launch(): void {
     for (const b of this.balls) this.launchBall(b, this.rng.range(-BALL.serveJitter, BALL.serveJitter));
+    if (this.mods.splitter > 0) this.splitBalls();
+    if (this.openingServe && this.mods.multistart > 0) this.splitBalls();
+    this.openingServe = false;
     this.setState('play');
     const net = STAGE_EVENTS.kinds.safetyNet;
     if (this.lives <= net.lives && this.breakableLeft <= net.bricksLeft) this.tryStageEvent('safetyNet');
@@ -317,7 +423,7 @@ export class Game {
   private movePaddle(dt: number, input: TickInput): void {
     const p = this.paddle;
     const scale = this.isActive('expand') ? POWER.expandScale : this.isActive('narrow') ? POWER.narrowScale : 1;
-    const target = PADDLE.width * scale;
+    const target = this.paddleWidth() * scale;
     p.w += (target - p.w) * Math.min(1, POWER.widthRate * dt);
     if (Math.abs(target - p.w) < 0.01) p.w = target;
     p.x = clamp(p.x + input.dx + input.axis * PADDLE.keySpeed * dt, p.w / 2, FIELD.width - p.w / 2);
@@ -347,12 +453,18 @@ export class Game {
       this.events.emit('ballLost', { id: b.id });
       return false;
     });
-    if (this.balls.length === 0) this.loseLife();
+    if (this.balls.length === 0) {
+      if (this.secondWinds < this.modValue('secondwind')) {
+        this.secondWinds++;
+        this.events.emit('secondWind', { left: this.modValue('secondwind') - this.secondWinds });
+        this.serve(true);
+      } else this.loseLife();
+    }
   }
 
   private loseLife(): void {
     this.lives--;
-    this.multiplierStep = 0;
+    this.multiplierStep = this.mods.anchor > 0 ? Math.max(0, this.multiplierStep - 1) : 0;
     this.events.emit('lifeLost', { lives: this.lives });
     if (this.lives > 0) {
       this.serve();
@@ -441,7 +553,15 @@ export class Game {
       b.y += dy * hit.t + hit.ny * SKIN;
       remaining *= 1 - hit.t;
       // Before the bounce, so the brick's events carry the incoming velocity.
-      if (typeof target === 'object') this.ballHitsBrick(target, b, false);
+      if (typeof target === 'object') {
+        this.ballHitsBrick(target, b, false);
+        // Critical: a ball that broke the brick may carry on through where it stood.
+        if (!target.alive && this.mods.crit > 0 && this.rng.next() < this.modValue('crit')) {
+          this.events.emit('breakthrough', { id: b.id, brick: target.id });
+          normalizeVelocity(b, this.ballSpeed(b));
+          continue;
+        }
+      }
       if (hit.nx !== 0) b.vx = Math.abs(b.vx) * hit.nx;
       if (hit.ny !== 0) b.vy = Math.abs(b.vy) * hit.ny;
 
@@ -474,6 +594,10 @@ export class Game {
       b.inPortal = exit.id;
       p.warpTick = exit.warpTick = this.tick;
       this.events.emit('portalWarp', { id: b.id, from: p.id, to: exit.id, x: exit.x, y: exit.y });
+      // Portal split mod: a second ball may come out alongside, angled off to one side.
+      if (this.mods.portalsplit > 0 && this.balls.length < POWER.maxBalls && this.rng.next() < this.modValue('portalsplit')) {
+        this.addTwin(b, b.vx, b.vy, POWER.splitAngle);
+      }
       return;
     }
   }
@@ -629,7 +753,8 @@ export class Game {
     const balls = this.blastBalls();
     if (balls.length === 0) return;
     this.charges.detonator--;
-    const { radius, damage } = POWER.detonator;
+    const radius = POWER.detonator.radius * (1 + this.modValue('blast'));
+    const { damage } = POWER.detonator;
     const targets: { br: Brick; ix: number; iy: number }[] = [];
     for (const br of this.bricks) {
       if (!isBreakable(br)) continue;
@@ -648,6 +773,12 @@ export class Game {
     }
     this.events.emit('detonate', { balls: balls.length, radius, bricks: targets.length, charges: this.charges.detonator });
     for (const { br, ix, iy } of targets) this.damageBrick(br, 'blast', ix, iy, damage);
+    // Cluster charge mod: new balls fly out of the first blast.
+    const src = balls[0];
+    for (let i = 0; src && i < this.modValue('cluster') && this.balls.length < POWER.maxBalls; i++) {
+      const [dirX, dirY] = ballDirection(src);
+      this.addTwin(src, dirX, dirY, (i % 2 === 0 ? 1 : -1) * POWER.splitAngle);
+    }
   }
 
   private fireLaser(): void {
@@ -655,13 +786,16 @@ export class Game {
     const y = p.y + p.h / 2 + POWER.boltLength;
     for (const side of [-1, 1]) {
       const x = p.x + side * (p.w / 2 - POWER.boltInset);
-      this.bolts.push({ id: this.nextId++, x, y, py: y });
+      this.bolts.push({ id: this.nextId++, x, y, py: y, pierce: this.modValue('laserpierce') });
     }
     this.laserCooldown = POWER.laserCooldown;
     this.events.emit('laserFire', { x: p.x, y });
   }
 
-  /** Bolts fly straight up; each one damages the first brick it reaches. */
+  /**
+   * Bolts fly straight up; each one damages the first brick it reaches. A piercing bolt that
+   * breaks it flies on (from where it is, next tick).
+   */
   private updateBolts(dt: number): void {
     const dy = POWER.boltSpeed * dt;
     this.bolts = this.bolts.filter((bolt) => {
@@ -677,7 +811,9 @@ export class Game {
       }
       if (target) {
         this.hitBrick(target, 'laser', bolt.x, target.y);
-        return false;
+        if (target.alive || bolt.pierce === 0) return false;
+        bolt.pierce--;
+        return true;
       }
       bolt.y += dy;
       return bolt.y - POWER.boltLength < FIELD.height;
@@ -690,6 +826,7 @@ export class Game {
     const hh = POWER.capsuleHeight / 2;
     this.capsules = this.capsules.filter((c) => {
       c.y -= POWER.fallSpeed * dt;
+      this.pull(c, dt);
       if (Math.abs(c.x - p.x) < p.w / 2 + hw && Math.abs(c.y - p.y) < p.h / 2 + hh) {
         this.score += SCORE.capsule;
         this.events.emit('powerCollect', { id: c.id, kind: c.kind });
@@ -702,43 +839,52 @@ export class Game {
     });
   }
 
-  /** Each source ball gets a twin on either side, up to the ball limit. */
+  /** The magnet mod draws falling capsules above the paddle sideways towards it. */
+  private pull(pickup: { x: number; y: number }, dt: number): void {
+    const speed = this.modValue('magnet');
+    if (speed === 0 || pickup.y < this.paddle.y) return;
+    const step = speed * dt;
+    pickup.x += clamp(this.paddle.x - pickup.x, -step, step);
+  }
+
+  /**
+   * Each source ball gets twins fanned out around its direction, `POWER.splitAngle` apart: two,
+   * plus one per extra ball mod stack. Up to the ball limit.
+   */
   private splitBalls(): void {
+    const twins = 2 + this.modValue('extraball');
     for (const src of this.balls.slice()) {
-      let dirX = src.vx;
-      let dirY = src.vy;
-      if (src.stuck !== null) {
-        const a = src.stuck * BALL.maxBounceAngle;
-        dirX = Math.sin(a);
-        dirY = Math.cos(a);
-      } else if (dirX === 0 && dirY === 0) {
-        dirY = 1;
-      }
-      for (const side of [-1, 1]) {
+      const [dirX, dirY] = ballDirection(src);
+      for (let i = 0; i < twins; i++) {
         if (this.balls.length >= POWER.maxBalls) return;
-        const a = side * POWER.splitAngle;
-        const ball: Ball = {
-          ...src,
-          id: this.nextId++,
-          vx: dirX * Math.cos(a) - dirY * Math.sin(a),
-          vy: dirX * Math.sin(a) + dirY * Math.cos(a),
-          stuck: null,
-          stuckTime: 0,
-          // Twins start their own chain, so a split can't multiply a long one.
-          chain: 0,
-          chainPoints: 0,
-          inPortal: src.inPortal,
-        };
-        normalizeVelocity(ball, this.ballSpeed(ball));
-        this.balls.push(ball);
-        this.events.emit('ballSpawn', { id: ball.id, x: ball.x, y: ball.y });
+        // +1, -1, +2, -2 steps out from the source's direction.
+        this.addTwin(src, dirX, dirY, (i % 2 === 0 ? 1 : -1) * (Math.floor(i / 2) + 1) * POWER.splitAngle);
       }
     }
   }
 
+  /** A copy of `src` at its position, moving along (dirX, dirY) turned by `angle`. */
+  private addTwin(src: Ball, dirX: number, dirY: number, angle: number): void {
+    const ball: Ball = {
+      ...src,
+      id: this.nextId++,
+      vx: dirX * Math.cos(angle) - dirY * Math.sin(angle),
+      vy: dirX * Math.sin(angle) + dirY * Math.cos(angle),
+      stuck: null,
+      stuckTime: 0,
+      // Twins start their own chain, so a split can't multiply a long one.
+      chain: 0,
+      chainPoints: 0,
+      inPortal: src.inPortal,
+    };
+    normalizeVelocity(ball, this.ballSpeed(ball));
+    this.balls.push(ball);
+    this.events.emit('ballSpawn', { id: ball.id, x: ball.x, y: ball.y });
+  }
+
   private maybeDrop(x: number, y: number): void {
     if (this.breakableLeft === 0 || this.capsules.length >= POWER.maxCapsules) return;
-    if (this.rng.next() >= POWER.dropChance) return;
+    if (this.rng.next() >= POWER.dropChance + this.modValue('lucky')) return;
     this.dropCapsule(rollPower(this.rng, POWER_KINDS), x, y);
   }
 
@@ -758,10 +904,18 @@ export class Game {
     for (const br of targets) this.damageBrick(br, 'pulse', br.x + br.w / 2, br.y, damage);
   }
 
-  /** Ball struck a brick; it speeds up a little. `smash` breaks it outright (pierce). */
+  /**
+   * Ball struck a brick; it speeds up a little. `smash` breaks it outright (pierce). A brick that
+   * survives takes the heavy ball's extra hit.
+   */
   private ballHitsBrick(br: Brick, b: Ball, smash: boolean): void {
     if (br.kind !== 'steel') b.speed = Math.min(BALL.maxSpeed, b.speed + BALL.hitSpeedStep);
-    this.hitBrick(br, 'ball', clamp(b.x, br.x, br.x + br.w), clamp(b.y, br.y, br.y + br.h), smash, b);
+    const ix = clamp(b.x, br.x, br.x + br.w);
+    const iy = clamp(b.y, br.y, br.y + br.h);
+    this.hitBrick(br, 'ball', ix, iy, smash, b);
+    if (!br.alive || br.kind === 'steel') return;
+    const extra = this.modValue('heavy');
+    for (let i = 0; i < extra && br.alive; i++) this.hitBrick(br, 'ball', ix, iy, false, b);
   }
 
   /** Up to `hits` hits, stopping once the brick breaks. */
@@ -774,6 +928,8 @@ export class Game {
    * ball destroys extend its chain and earn the chain bonus.
    */
   private hitBrick(br: Brick, by: HitSource, ix: number, iy: number, smash = false, ball: Ball | null = null): void {
+    // Callers may queue hits on a brick that an earlier hit already broke.
+    if (!br.alive) return;
     br.hitTick = this.tick;
     const x = br.x + br.w / 2;
     const y = br.y + br.h / 2;
@@ -797,7 +953,7 @@ export class Game {
     this.stageEvents.arm('supplyDrop', 'overload', 'hunter', 'demolition');
     const chain = ball ? ++ball.chain : 0;
     const multiplier = this.multiplier;
-    const bonus = chainBonus(chain) * multiplier;
+    const bonus = this.chainBonus(chain) * multiplier;
     if (ball) ball.chainPoints += bonus;
     const points = (br.kind === 'tough' ? br.maxHp * SCORE.toughPerHp : SCORE.normal) * multiplier + bonus;
     this.score += points;
@@ -806,6 +962,15 @@ export class Game {
     this.events.emit('brickDestroyed', { id: br.id, kind: br.kind, points, chain, bonus, multiplier, by, x, y, ix, iy, vx, vy });
     this.maybeDrop(x, y);
   }
+}
+
+/** Where a ball is headed; a caught ball by the angle it would launch at, a resting one straight up. */
+function ballDirection(b: Ball): [number, number] {
+  if (b.stuck !== null) {
+    const a = b.stuck * BALL.maxBounceAngle;
+    return [Math.sin(a), Math.cos(a)];
+  }
+  return b.vx === 0 && b.vy === 0 ? [0, 1] : [b.vx, b.vy];
 }
 
 function isBreakable(br: Brick): boolean {

@@ -24,11 +24,14 @@ npm run dev
 | Alt action (detonate a charge) | right click | X |
 | Pause | Esc | P or Esc |
 | Mute audio | | M |
+| Between stages: pick a mod or +2 lives | click a card | 1–4 |
 
 In dev builds the running game is available in the browser console as `vnx.game`;
 `vnx.game.applyPower('laser')` grants a power-up (any kind from `POWER.kinds`, e.g. `'detonator'` for charges) and
 `vnx.game.fireStageEvent('overload')` runs a stage event (any kind from `STAGE_EVENTS.kinds`).
 Both live in `src/config/tuning.ts`, together with drop chances, weights, durations and the event triggers.
+`vnx.game.applyMod('shrapnel')` adds a mod stack (any kind from `MODS`). Mods, their rarity and the
+lives card live in `src/config/mods.ts`; run length and depth scaling in `src/config/run.ts`.
 
 ## Music
 

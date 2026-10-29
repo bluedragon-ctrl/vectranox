@@ -1,11 +1,12 @@
-import type { BrickKind, HitSource, PowerKind, StageEventKind, TimedPower } from './types';
+import type { BrickKind, HitSource, ModKind, PowerKind, StageEventKind, TimedPower } from './types';
 
 export type WallSide = 'left' | 'right' | 'top';
 
 /** Every event the simulation can emit. Payloads must be plain data. */
 export type GameEvents = {
   runStart: { seed: number };
-  stageStart: { stage: number; name: string; bricks: number };
+  /** `stage` counts through the run (1-based); `sector` and `number` place it in its sector. */
+  stageStart: { stage: number; sector: number; number: number; name: string; bricks: number };
   ballSpawn: { id: number; x: number; y: number };
   ballLaunch: { id: number; angle: number };
   wallHit: { id: number; side: WallSide; x: number; y: number };
@@ -50,13 +51,22 @@ export type GameEvents = {
   powerMissed: { id: number; kind: PowerKind };
   powerEnd: { kind: TimedPower };
   laserFire: { x: number; y: number };
+  /** Ball `id` broke brick `brick` and carried on through it (critical mod). */
+  breakthrough: { id: number; brick: number };
   /** `balls` balls exploded (see `Game.blastBalls`); `bricks` breakable bricks were in reach, `charges` are left. */
   detonate: { balls: number; radius: number; bricks: number; charges: number };
   /** A stage event fired; `bricks` is how many breakable bricks were left. */
   stageEvent: { kind: StageEventKind; bricks: number };
   ballLost: { id: number };
+  /** The last ball was lost but the second wind mod served a new one; `left` uses remain this stage. */
+  secondWind: { left: number };
   lifeLost: { lives: number };
   stageClear: { stage: number; score: number };
+  /** The pick between stages opened with these mod offers. */
+  draftOpen: { stage: number; offers: ModKind[] };
+  modPick: { kind: ModKind; stacks: number };
+  /** The pick went to extra lives: `gained` of them, `lives` now. */
+  livesPick: { gained: number; lives: number };
   gameOver: { stage: number; score: number };
   runComplete: { score: number };
 };

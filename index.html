@@ -25,7 +25,7 @@
           <h2>// RUN</h2>
           <dl>
             <dt>LIVES</dt><dd id="hud-lives">3</dd>
-            <dt>SECTOR</dt><dd id="hud-sector">1-1</dd>
+            <dt>STAGE</dt><dd id="hud-sector">1-1</dd>
             <dt>CHAIN</dt><dd id="hud-chain">—</dd>
             <dt>MULT</dt><dd id="hud-mult">×1</dd>
           </dl>
@@ -34,6 +34,11 @@
         <section class="block" id="powers">
           <h2>// POWER</h2>
           <div id="power-list"></div>
+        </section>
+
+        <section class="block" id="mods">
+          <h2>// MODS</h2>
+          <div id="mod-list"></div>
         </section>
 
         <section class="block" id="scores">
@@ -72,6 +77,7 @@
           <h2 id="event-title"></h2>
           <p id="event-sub"></p>
         </div>
+        <div id="run-screen" class="hidden"></div>
         <div id="overlay" class="hidden">
           <h1 id="overlay-title"></h1>
           <p id="overlay-sub"></p>
