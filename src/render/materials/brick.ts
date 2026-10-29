@@ -4,7 +4,7 @@ import { SDF } from './common';
  * Stylised glass bricks with a little 2.5D depth: a bevelled top face (fresnel rim, inner
  * highlight, refracted backdrop), a darker side face below it, a soft drop shadow and a neon halo.
  *
- * Instance data: colour rgb = tint (alpha unused).
+ * Instance data: colour rgb = tint, alpha = hits left (tough bricks show one notch per hit).
  * params: x = kind (0 normal, 1 tough, 2 steel), y = damage (0..1), z = hit flash, w = random seed.
  * The instance rectangle is the brick's visual footprint; `uPad` leaves room for halo and shadow.
  */
@@ -22,6 +22,8 @@ ${SDF}
 const float DEPTH = 2.6;
 const float RADIUS = 1.6;
 const float BEVEL = 2.4;
+/** Spacing of the hit notches on tough bricks. */
+const float NOTCH_STEP = 3.4;
 
 /** Gradient of sdRoundBox(p, b, r). */
 vec2 gradRoundBox(vec2 p, vec2 b, float r) {
@@ -84,17 +86,18 @@ void main() {
   vec3 side;
   vec3 edgeColor = tint;
   if (steel) {
-    float brushed = hash12(vec2(floor((pt.y + 20.0) * 2.5), seed * 7.0));
-    float streak = hash12(vec2(floor((pt.x + 40.0) * 0.35), floor((pt.y + 20.0) * 2.5) + seed));
-    top = tint * (0.26 + 0.12 * brushed + 0.05 * streak) + bg * 0.05;
-    top += tint * diff * 0.35 + vec3(spec) * 1.1;
-    top += mix(tint, vec3(1.0), 0.5) * fres * 0.7;
-    vec2 rp = vec2(pt.x - sign(pt.x) * (hb.x - 2.6), pt.y);
-    float rivet = length(rp) - 0.9;
+    // A solid plate, opaque so it never reads as glass: mid-grey body, diagonal hatching on an
+    // inset panel, a bright bevel and a rivet at each end. Kept bold enough to survive at ~40 px.
+    float panel = sdRoundBox(pt, vec2(hb.x - 4.0, hb.y - 1.2), 0.6);
+    float hatch = stroke(fract((pt.x + pt.y) / 2.6) - 0.5, 0.16) * fill(panel);
+    top = tint * (0.42 + 0.2 * diff);
+    top *= (1.0 - 0.3 * hatch) * (1.0 - 0.45 * stroke(panel, 0.3));
+    top += vec3(spec) * 0.5 + mix(tint, vec3(1.0), 0.5) * fres * 0.8;
+    vec2 rp = vec2(pt.x - sign(pt.x) * (hb.x - 2.0), pt.y);
+    float rivet = length(rp) - 1.1;
     float rivetLit = clamp(0.5 + dot(rp, vec2(-0.5, 0.8)) * 0.7, 0.0, 1.0);
-    top = mix(top, tint * (0.2 + 0.6 * rivetLit), fill(rivet));
-    top += vec3(0.9) * stroke(rivet, 0.15) * 0.25;
-    side = tint * 0.16;
+    top = mix(top, tint * (0.3 + 0.7 * rivetLit), fill(rivet));
+    side = tint * 0.2;
     edgeColor = mix(tint, vec3(0.6, 0.95, 1.0), 0.45);
   } else {
     top = bg * (0.25 + tint * 0.9);
@@ -108,7 +111,12 @@ void main() {
     top += tint * diff * 0.12 + tint * fres * 0.9 + vec3(spec) * 0.7;
     side = tint * 0.1 + bg * 0.15;
     if (tough) {
-      top += tint * stroke(dTop + 2.4, 0.3) * 0.9;
+      // Hits left: a row of upright notches across the middle of the face.
+      float hp = vColor.a;
+      float slot = floor(pt.x / NOTCH_STEP + hp * 0.5);
+      float notch = sdRoundBox(pt - vec2((slot + 0.5 - hp * 0.5) * NOTCH_STEP, 0.0), vec2(0.8, 1.5), 0.4);
+      float onRow = step(0.0, slot) * step(slot, hp - 1.0);
+      top = mix(top, mix(tint, vec3(1.0), 0.6), fill(notch) * onRow);
       if (damage > 0.0) {
         float c = crackField(pt * 0.3 + seed * 17.0);
         float crack = (1.0 - smoothstep(0.0, 0.05 + 0.05 * damage, c));

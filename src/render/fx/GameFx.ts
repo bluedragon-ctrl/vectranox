@@ -43,6 +43,8 @@ export class GameFx {
   readonly blast = { centres: [] as { x: number; y: number }[], radius: 0, strength: 0 };
   /** Brick hit-flash strength, lowered by reduce-flashing. */
   brickFlash = 1;
+  /** Bricks last hit by a pulse or blast; those strike many at once, so they flash softer. */
+  readonly areaHits = new Set<number>();
 
   private reduce = false;
   private nextWallHit = 0;
@@ -78,6 +80,7 @@ export class GameFx {
     this.unsubscribe.forEach((off) => off());
     this.particles.clear();
     this.trails.clear();
+    this.areaHits.clear();
     const ev = game.events;
     this.unsubscribe = [
       ev.on('wallHit', ({ side, x, y }) => {
@@ -116,6 +119,8 @@ export class GameFx {
       ev.on('brickHit', ({ id, kind, by, x, y, ix, iy }) => {
         const brick = game.bricks.find((br) => br.id === id);
         const away = Math.atan2(iy - y, ix - x);
+        if (by === 'pulse' || by === 'blast') this.areaHits.add(id);
+        else this.areaHits.delete(id);
         if (kind === 'steel') {
           // Metal on metal: hot sparks, nothing breaks.
           this.particles.sparks(ix, iy, { count: 10, color: COLORS.white, speed: [70, 220], angle: away, spread: 1.1 });
@@ -133,6 +138,7 @@ export class GameFx {
         this.shake.add(by === 'pulse' || by === 'blast' ? 0 : 0.04);
       }),
       ev.on('brickDestroyed', ({ id, kind, by, x, y, ix, iy, vx, vy }) => {
+        this.areaHits.delete(id);
         const brick = game.bricks.find((br) => br.id === id);
         const color = brick ? brickTint({ ...brick, hp: brick.maxHp }, this.tint) : this.tint.copy(COLORS.magenta);
         const w = (brick?.w ?? BRICK.width) - BRICK_GAP;
