@@ -1,7 +1,18 @@
 const MAX_LINES = 250;
 
 /** Events tagged as system-level get a different colour in the log. */
-const SYSTEM_EVENTS = new Set(['runStart', 'ballSpawn']);
+const SYSTEM_EVENTS = new Set([
+  'runStart',
+  'stageStart',
+  'stageClear',
+  'lifeLost',
+  'gameOver',
+  'runComplete',
+  'play',
+  'pause',
+  'resume',
+  'pointerLockFallback',
+]);
 
 /**
  * Live "hacker terminal" log of game events in the left panel.

@@ -13,6 +13,17 @@ npm run dev
 
 `npm run build` type-checks and writes a static build to `dist/`.
 
+## Controls
+
+| | Mouse | Keyboard |
+|---|---|---|
+| Start / resume | click the playfield (locks the pointer) | Enter |
+| Move | mouse | ← → or A D |
+| Launch | click | Space |
+| Pause | Esc | P or Esc |
+
+In dev builds the running game is available in the browser console as `vnx.game`.
+
 ## Deploy
 
 Pushing to `main` builds and deploys to GitHub Pages via `.github/workflows/deploy.yml`.

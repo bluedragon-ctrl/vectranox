@@ -37,6 +37,10 @@ body {
   display: block;
 }
 
+#stage.hide-cursor {
+  cursor: none;
+}
+
 #app {
   position: fixed;
   inset: 0;
@@ -61,6 +65,44 @@ body {
 #field-area {
   flex: 1;
   height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#overlay {
+  padding: 18px 32px;
+  text-align: center;
+  background: rgba(7, 2, 26, 0.72);
+  border: 1px solid rgba(255, 42, 157, 0.5);
+  box-shadow: 0 0 18px rgba(255, 42, 157, 0.25);
+}
+
+#overlay.hidden {
+  display: none;
+}
+
+#overlay h1 {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: clamp(22px, 2.4vw, 36px);
+  letter-spacing: 0.12em;
+  color: var(--magenta);
+  text-shadow:
+    0 0 6px var(--magenta),
+    0 0 18px rgba(255, 42, 157, 0.6);
+}
+
+#overlay p {
+  margin-top: 10px;
+  font-size: 15px;
+  line-height: 1.5;
+  white-space: pre-line;
+  color: var(--cyan);
+}
+
+#overlay p:empty {
+  display: none;
 }
 
 .logo {

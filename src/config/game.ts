@@ -10,6 +10,56 @@ export const SIM = {
   maxFrameTime: 0.25,
 } as const;
 
+// Paddle position is its centre.
+export const PADDLE = {
+  width: 52,
+  height: 8,
+  y: 28,
+  keySpeed: 380,
+} as const;
+
+export const BALL = {
+  radius: 4,
+  baseSpeed: 230,
+  // Added to the base speed for every stage cleared.
+  stageSpeedStep: 12,
+  // Added to a ball's speed on every brick hit, up to maxSpeed.
+  hitSpeedStep: 2,
+  maxSpeed: 460,
+  // Bounce angle from vertical when the ball hits the very edge of the paddle.
+  maxBounceAngle: (60 * Math.PI) / 180,
+  // Minimum |vy| as a fraction of speed, so the ball never travels near-horizontally.
+  minVerticalRatio: 0.3,
+  // Random launch angle from vertical, +/-.
+  serveJitter: (12 * Math.PI) / 180,
+} as const;
+
+// Brick grid: row 0 starts `top` units below the top wall.
+export const BRICK = {
+  width: 24,
+  height: 12,
+  cols: 13,
+  top: 36,
+} as const;
+
+export const RULES = {
+  lives: 3,
+  stageClearDelay: 1.6,
+  // A ball below this y is lost.
+  lostBallY: -16,
+} as const;
+
+export const SCORE = {
+  hit: 10,
+  normal: 50,
+  toughPerHp: 50,
+} as const;
+
+export const INPUT = {
+  // Paddle travel per mouse pixel, relative to the on-screen field scale.
+  mouseSensitivity: 1,
+} as const;
+
 export const PALETTE = {
   bg: 0x07021a,
   magenta: 0xff2a9d,

@@ -38,6 +38,8 @@
             <dt>FPS</dt><dd id="sys-fps">--</dd>
             <dt>TICK</dt><dd id="sys-tick">0</dd>
             <dt>BALLS</dt><dd id="sys-balls">0</dd>
+            <dt>INPUT</dt><dd id="sys-mode">--</dd>
+            <dt>STATE</dt><dd id="sys-state">--</dd>
           </dl>
         </section>
 
@@ -47,7 +49,12 @@
         </section>
       </aside>
 
-      <main id="field-area"></main>
+      <main id="field-area">
+        <div id="overlay" class="hidden">
+          <h1 id="overlay-title"></h1>
+          <p id="overlay-sub"></p>
+        </div>
+      </main>
     </div>
 
     <script type="module" src="/src/main.ts"></script>
