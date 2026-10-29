@@ -242,3 +242,49 @@ body {
 #console .ev.sys {
   color: var(--magenta);
 }
+
+#power-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 16px;
+}
+
+.power {
+  display: grid;
+  grid-template-columns: 9ch 1fr 4ch;
+  align-items: center;
+  gap: 10px;
+  color: var(--c);
+  text-shadow: 0 0 6px color-mix(in srgb, var(--c) 50%, transparent);
+}
+
+.power .bar {
+  height: 4px;
+  background: rgba(157, 77, 255, 0.18);
+}
+
+.power .bar i {
+  display: block;
+  height: 100%;
+  background: var(--c);
+  box-shadow: 0 0 6px var(--c);
+}
+
+.power .secs {
+  text-align: right;
+  color: var(--text-dim);
+}
+
+.power-none {
+  color: #5c4d85;
+}
+
+.power.hidden,
+.power-none.hidden {
+  display: none;
+}
+
+#console .ev.pow {
+  color: var(--yellow);
+}

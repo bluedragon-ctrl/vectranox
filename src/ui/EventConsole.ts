@@ -14,6 +14,9 @@ const SYSTEM_EVENTS = new Set([
   'pointerLockFallback',
 ]);
 
+/** Power-up events, highlighted separately. */
+const POWER_EVENTS = new Set(['powerCollect', 'powerEnd']);
+
 /**
  * Live "hacker terminal" log of game events in the left panel.
  * Lines are queued and flushed once per frame so a burst of events costs one DOM update.
@@ -32,7 +35,7 @@ export class EventConsole {
     t.textContent = `[${formatTime(seconds)}] `;
 
     const ev = document.createElement('span');
-    ev.className = SYSTEM_EVENTS.has(type) ? 'ev sys' : 'ev';
+    ev.className = SYSTEM_EVENTS.has(type) ? 'ev sys' : POWER_EVENTS.has(type) ? 'ev pow' : 'ev';
     ev.textContent = toConstCase(type);
 
     line.append(t, ev, ` ${formatPayload(payload)}`);

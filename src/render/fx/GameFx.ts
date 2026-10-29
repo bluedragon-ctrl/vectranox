@@ -10,6 +10,8 @@ import type { Trails } from './Trails';
 const WALL_HIT_SLOTS = 8;
 /** Share of the ball's velocity that shattered glass inherits. */
 const PIECE_PUSH = 0.12;
+/** Upward push on glass shattered by a laser bolt. */
+const LASER_PUSH = 45;
 
 export interface WallHit {
   x: number;
@@ -32,6 +34,9 @@ export class GameFx {
   danger = 0;
   paddlePulse = 0;
   paddleHitOffset = 0;
+  /** Laser emitters light up on every shot. */
+  laserFlash = 0;
+  readonly barrierHit = { x: 0, strength: 0 };
   /** Brick hit-flash strength, lowered by reduce-flashing. */
   brickFlash = 1;
 
@@ -58,6 +63,8 @@ export class GameFx {
     this.aberration = Math.max(0, this.aberration - dt * 1.8);
     this.danger = Math.max(0, this.danger - dt * 1.1);
     this.paddlePulse = Math.max(0, this.paddlePulse - dt * 4);
+    this.laserFlash = Math.max(0, this.laserFlash - dt * 6);
+    this.barrierHit.strength = Math.max(0, this.barrierHit.strength - dt * 2.5);
     for (const h of this.wallHits) h.strength = Math.max(0, h.strength - dt * 3);
     this.particles.update(dt);
     this.shake.update(dt);
@@ -81,9 +88,23 @@ export class GameFx {
         this.paddlePulse = 1;
         this.paddleHitOffset = offset;
       }),
-      ev.on('brickHit', ({ id, kind, x, y }) => {
+      ev.on('ballCaught', ({ offset }) => {
+        this.paddlePulse = 0.6;
+        this.paddleHitOffset = offset;
+      }),
+      ev.on('powerCollect', () => {
+        this.paddlePulse = 1;
+        this.paddleHitOffset = 0;
+      }),
+      ev.on('barrierHit', ({ x }) => {
+        this.barrierHit.x = x;
+        this.barrierHit.strength = 1;
+      }),
+      ev.on('laserFire', () => {
+        this.laserFlash = 1;
+      }),
+      ev.on('brickHit', ({ id, kind, x, y, ix, iy }) => {
         const brick = game.bricks.find((br) => br.id === id);
-        const [ix, iy] = this.impact(x, y, brick);
         const away = Math.atan2(iy - y, ix - x);
         if (kind === 'steel') {
           // Metal on metal: hot sparks, nothing breaks.
@@ -101,15 +122,14 @@ export class GameFx {
         this.particles.glints(ix, iy, { count: 4, color, speed: [100, 220], angle: away, spread: 1.0 });
         this.shake.add(0.04);
       }),
-      ev.on('brickDestroyed', ({ id, kind, x, y }) => {
+      ev.on('brickDestroyed', ({ id, kind, by, x, y, ix, iy }) => {
         const brick = game.bricks.find((br) => br.id === id);
         const color = brick ? brickTint({ ...brick, hp: brick.maxHp }, this.tint) : this.tint.copy(COLORS.magenta);
         const w = (brick?.w ?? 24) - BRICK_GAP;
         const h = (brick?.h ?? 12) - BRICK_GAP;
-        const ball = this.nearestBall(x, y);
-        const [ix, iy] = this.impact(x, y, brick);
+        const ball = by === 'ball' ? this.nearestBall(x, y) : null;
         const pushX = (ball?.vx ?? 0) * PIECE_PUSH;
-        const pushY = (ball?.vy ?? 0) * PIECE_PUSH;
+        const pushY = by === 'laser' ? LASER_PUSH : (ball?.vy ?? 0) * PIECE_PUSH;
         // The brick breaks into pieces radiating from the impact; tough glass breaks finer.
         for (const s of fractureRect(x, y, w, h, ix, iy, kind === 'tough' ? 5 : 2)) {
           const dx = s.cx - ix;
@@ -153,15 +173,6 @@ export class GameFx {
     this.flashColor.copy(color);
     this.flash = Math.max(this.flash, flash);
     this.aberration = Math.max(this.aberration, aberration);
-  }
-
-  /** Where the ball struck a brick centred on (x, y): the nearest ball, kept to the brick's edge. */
-  private impact(x: number, y: number, brick: { w: number; h: number } | undefined): [number, number] {
-    const ball = this.nearestBall(x, y);
-    if (!ball) return [x, y];
-    const hw = (brick?.w ?? 24) / 2 + ball.r;
-    const hh = (brick?.h ?? 12) / 2 + ball.r;
-    return [Math.min(x + hw, Math.max(x - hw, ball.x)), Math.min(y + hh, Math.max(y - hh, ball.y))];
   }
 
   private nearestBall(x: number, y: number) {

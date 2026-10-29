@@ -27,6 +27,7 @@ export class Input {
   private dx = 0;
   private cursorX: number | null = null;
   private launch = false;
+  private mouseHeld = false;
   private held = new Set<string>();
 
   constructor(
@@ -38,7 +39,12 @@ export class Input {
       else this.cursorX = e.clientX;
     });
     document.addEventListener('mousedown', (e) => {
-      if (this.mode === 'mouse' && e.button === 0) this.launch = true;
+      if (this.mode !== 'mouse' || e.button !== 0) return;
+      this.launch = true;
+      this.mouseHeld = true;
+    });
+    document.addEventListener('mouseup', (e) => {
+      if (e.button === 0) this.mouseHeld = false;
     });
     window.addEventListener('keydown', (e) => {
       if (e.code === LAUNCH_KEY || LEFT_KEYS.includes(e.code) || RIGHT_KEYS.includes(e.code)) e.preventDefault();
@@ -46,7 +52,10 @@ export class Input {
       if (e.code === LAUNCH_KEY && !e.repeat) this.launch = true;
     });
     window.addEventListener('keyup', (e) => this.held.delete(e.code));
-    window.addEventListener('blur', () => this.held.clear());
+    window.addEventListener('blur', () => {
+      this.held.clear();
+      this.mouseHeld = false;
+    });
   }
 
   get locked(): boolean {
@@ -58,13 +67,17 @@ export class Input {
     return this.mode === 'mouse' && !this.locked;
   }
 
-  /** Input for the next tick; consumes accumulated mouse motion and the launch press. */
+  /**
+   * Input for the next tick; consumes accumulated mouse motion and the launch press.
+   * The launch button doubles as fire: `launch` is the press, `fire` is held.
+   */
   sample(paddleX: number): TickInput {
     const right = RIGHT_KEYS.some((k) => this.held.has(k)) ? 1 : 0;
     const left = LEFT_KEYS.some((k) => this.held.has(k)) ? 1 : 0;
     let dx = this.dx;
     if (this.absolute && this.cursorX !== null) dx = this.view.screenToWorldX(this.cursorX) - paddleX;
-    const input: TickInput = { dx, axis: right - left, launch: this.launch };
+    const fire = this.held.has(LAUNCH_KEY) || (this.mode === 'mouse' && this.mouseHeld);
+    const input: TickInput = { dx, axis: right - left, launch: this.launch, fire };
     this.dx = 0;
     this.launch = false;
     return input;

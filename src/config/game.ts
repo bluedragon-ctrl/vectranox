@@ -53,6 +53,7 @@ export const SCORE = {
   hit: 10,
   normal: 50,
   toughPerHp: 50,
+  capsule: 100,
 } as const;
 
 export const INPUT = {

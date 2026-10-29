@@ -58,7 +58,7 @@ worker/              (later) Cloudflare Worker + D1 schema
 
 - **Run** = 3–4 **sectors** × 4–5 **stages**; the last stage of a sector is a guardian/boss.
 - **Stages** are assembled procedurally from hand-made templates + formation patterns, scaled by depth. Runs are seeded (enables a later "daily seed" leaderboard).
-- **In-stage power-ups** (temporary drops): multi-ball, laser, expand/shrink, slow/fast, sticky, piercing, shield, extra life, a few negative ones.
+- **In-stage power-ups** (capsules dropped by broken bricks, lettered): **M** multi-ball, **L** laser, **E** expand, **S** slow, **C** catch (sticky), **P** pierce, **B** barrier (shield), **+** extra life; negative (red, striped): **N** narrow, **F** fast. Timed ones show in the left panel; all are lost with a life or at stage end. Drop chance, drop weights, durations and effect sizes live in `src/config/powers.ts`.
 - **Between stages**: pick 1 of 3 **mods** that last the whole run (e.g. laser cooldown, chain explosions, crit chance, magnet pickups), with rarity tiers.
 - **Currency** ("data shards") dropped by bricks, spent in a shop every few stages (lives, rerolls, mods).
 - Death ends the run; the run score goes to the leaderboard.

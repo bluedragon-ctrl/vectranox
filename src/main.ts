@@ -8,6 +8,7 @@ import { STAGES } from './levels/stages';
 import { Renderer } from './render/Renderer';
 import { EventConsole } from './ui/EventConsole';
 import { Overlay, type OverlayContent } from './ui/Overlay';
+import { PowerHud } from './ui/PowerHud';
 import { SettingsPanel } from './ui/SettingsPanel';
 
 /** Top-level screen state. The simulation has its own finer state (serve, play, clear, ...). */
@@ -16,7 +17,7 @@ type UiState = 'title' | 'playing' | 'paused' | 'ended';
 /** Seconds the final banner stays up in-game before the end screen accepts input. */
 const END_DELAY = 1.5;
 const START_HINT = 'CLICK · MOUSE CONTROL\nENTER · KEYBOARD CONTROL';
-const CONTROLS_HINT = 'MOVE  ← → / A D / MOUSE\nLAUNCH  SPACE / CLICK\nPAUSE  P / ESC';
+const CONTROLS_HINT = 'MOVE  ← → / A D / MOUSE\nLAUNCH · FIRE  SPACE / CLICK\nPAUSE  P / ESC';
 
 function el<T extends HTMLElement = HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -189,6 +190,7 @@ renderScores(el('score-list'));
 const hudScore = el('hud-score');
 const hudLives = el('hud-lives');
 const hudSector = el('hud-sector');
+const powerHud = new PowerHud(el('power-list'));
 const sysFps = el('sys-fps');
 const sysTick = el('sys-tick');
 const sysBalls = el('sys-balls');
@@ -216,6 +218,7 @@ startLoop({
     setText(hudScore, formatScore(game.score));
     setText(hudLives, String(game.lives));
     setText(hudSector, `1-${game.stageIndex + 1}`);
+    powerHud.update(game.timers);
     setText(sysFps, fps.toFixed(0));
     setText(sysTick, String(game.tick));
     setText(sysBalls, String(game.balls.length));

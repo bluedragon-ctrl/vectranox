@@ -1,10 +1,23 @@
 import { BALL, BRICK, FIELD, PADDLE, RULES, SCORE } from '../config/game';
+import { POWER } from '../config/powers';
 import { EventBus } from '../core/events';
 import { Rng } from '../core/rng';
 import type { StageDef } from '../levels/stages';
 import { sweepBox, type SweepHit } from './collision';
 import type { GameEvents, WallSide } from './events';
-import type { Ball, Brick, BrickKind, GameState, Paddle, TickInput } from './types';
+import type {
+  Ball,
+  Bolt,
+  Brick,
+  BrickKind,
+  Capsule,
+  GameState,
+  HitSource,
+  Paddle,
+  PowerKind,
+  TickInput,
+  TimedPower,
+} from './types';
 
 /** Distance a ball is pushed off a surface after a bounce, so the next sweep starts outside it. */
 const SKIN = 0.01;
@@ -18,7 +31,12 @@ const BRICK_CODES: Partial<Record<string, { kind: BrickKind; hp: number }>> = {
   '#': { kind: 'steel', hp: 0 },
 };
 
-type HitTarget = Brick | WallSide | 'paddle';
+const POWER_KINDS = Object.keys(POWER.kinds) as PowerKind[];
+const TIMED_POWERS = POWER_KINDS.filter((k): k is TimedPower => POWER.kinds[k].duration > 0);
+/** Picking one of these ends the other. */
+const OPPOSITE: Partial<Record<TimedPower, TimedPower>> = { expand: 'narrow', narrow: 'expand', slow: 'fast', fast: 'slow' };
+
+type HitTarget = Brick | WallSide | 'paddle' | 'barrier';
 
 interface Box {
   minX: number;
@@ -42,6 +60,10 @@ export class Game {
   };
   balls: Ball[] = [];
   bricks: Brick[] = [];
+  capsules: Capsule[] = [];
+  bolts: Bolt[] = [];
+  /** Seconds left on each timed power; 0 is off. */
+  readonly timers = Object.fromEntries(TIMED_POWERS.map((k) => [k, 0])) as Record<TimedPower, number>;
   state: GameState = 'serve';
   /** Seconds since `state` last changed. */
   stateTime = 0;
@@ -53,6 +75,7 @@ export class Game {
   private rng: Rng;
   private nextId = 1;
   private breakableLeft = 0;
+  private laserCooldown = 0;
 
   constructor(
     readonly seed: number,
@@ -81,6 +104,8 @@ export class Game {
       b.px = b.x;
       b.py = b.y;
     }
+    for (const c of this.capsules) c.py = c.y;
+    for (const bolt of this.bolts) bolt.py = bolt.y;
 
     switch (this.state) {
       case 'serve':
@@ -90,7 +115,12 @@ export class Game {
         break;
       case 'play':
         this.movePaddle(dt, input);
+        this.tickPowers(dt);
+        this.handleButtons(dt, input);
         this.updateBalls(dt);
+        this.updateBolts(dt);
+        this.updateCapsules(dt);
+        this.resolveStage();
         break;
       case 'clear':
         if (this.stateTime >= RULES.stageClearDelay) this.nextStage();
@@ -99,6 +129,29 @@ export class Game {
       case 'complete':
         break;
     }
+  }
+
+  isActive(kind: TimedPower): boolean {
+    return this.timers[kind] > 0;
+  }
+
+  /**
+   * Applies a power as if its capsule was caught. Public so the dev console can grant powers
+   * (`vnx.game.applyPower('laser')`).
+   */
+  applyPower(kind: PowerKind): void {
+    switch (kind) {
+      case 'multi':
+        this.splitBalls();
+        return;
+      case 'life':
+        this.lives = Math.min(POWER.maxLives, this.lives + 1);
+        return;
+    }
+    const opposite = OPPOSITE[kind];
+    if (opposite && this.isActive(opposite)) this.endPower(opposite);
+    this.timers[kind] = POWER.kinds[kind].duration;
+    if (kind === 'slow' || kind === 'fast') this.rescaleBalls();
   }
 
   private setState(state: GameState): void {
@@ -112,6 +165,7 @@ export class Game {
     this.bricks = parseLayout(stage.layout, () => this.nextId++);
     this.breakableLeft = this.bricks.filter((br) => br.kind !== 'steel').length;
     this.paddle.x = this.paddle.px = FIELD.width / 2;
+    this.paddle.w = PADDLE.width;
     this.events.emit('stageStart', { stage: index + 1, name: stage.name, bricks: this.breakableLeft });
     this.serve();
   }
@@ -125,9 +179,10 @@ export class Game {
     }
   }
 
-  /** New ball resting on the paddle, waiting for launch. */
+  /** New ball resting on the paddle, waiting for launch. Powers don't survive a lost life. */
   private serve(): void {
     this.balls = [];
+    this.clearPowers();
     const p = this.paddle;
     const x = p.x;
     const y = p.y + p.h / 2 + BALL.radius + SKIN;
@@ -141,6 +196,8 @@ export class Game {
       vy: 0,
       r: BALL.radius,
       speed: BALL.baseSpeed + this.stageIndex * BALL.stageSpeedStep,
+      stuck: null,
+      stuckTime: 0,
     };
     this.balls.push(ball);
     this.events.emit('ballSpawn', { id: ball.id, x, y });
@@ -158,8 +215,7 @@ export class Game {
   private launch(): void {
     for (const b of this.balls) {
       const angle = this.rng.range(-BALL.serveJitter, BALL.serveJitter);
-      b.vx = Math.sin(angle) * b.speed;
-      b.vy = Math.cos(angle) * b.speed;
+      aim(b, angle, this.ballSpeed(b));
       this.events.emit('ballLaunch', { id: b.id, angle: (angle * 180) / Math.PI });
     }
     this.setState('play');
@@ -167,15 +223,27 @@ export class Game {
 
   private movePaddle(dt: number, input: TickInput): void {
     const p = this.paddle;
+    const scale = this.isActive('expand') ? POWER.expandScale : this.isActive('narrow') ? POWER.narrowScale : 1;
+    const target = PADDLE.width * scale;
+    p.w += (target - p.w) * Math.min(1, POWER.widthRate * dt);
+    if (Math.abs(target - p.w) < 0.01) p.w = target;
     p.x = clamp(p.x + input.dx + input.axis * PADDLE.keySpeed * dt, p.w / 2, FIELD.width - p.w / 2);
   }
 
   private updateBalls(dt: number): void {
-    for (const b of this.balls) this.moveBall(b, dt);
+    for (const b of this.balls) {
+      if (b.stuck !== null) this.holdCaught(b, dt);
+      else this.moveBall(b, dt);
+    }
+  }
+
+  /** After everything moved: drop broken bricks, then check for a cleared stage or a lost life. */
+  private resolveStage(): void {
     if (this.bricks.some((br) => !br.alive)) this.bricks = this.bricks.filter((br) => br.alive);
 
     if (this.breakableLeft === 0) {
       this.balls = [];
+      this.clearPowers();
       this.setState('clear');
       this.events.emit('stageClear', { stage: this.stageIndex + 1, score: this.score });
       return;
@@ -203,6 +271,7 @@ export class Game {
   /** Moves a ball for one tick, resolving bounces in time order (swept, so nothing tunnels). */
   private moveBall(b: Ball, dt: number): void {
     this.rescueFromPaddle(b);
+    if (b.stuck !== null) return;
     let remaining = 1;
     for (let i = 0; i < MAX_BOUNCES && remaining > 0; i++) {
       const dx = b.vx * dt * remaining;
@@ -217,6 +286,16 @@ export class Game {
         if (h && (!hit || h.t < hit.t)) {
           hit = h;
           target = br;
+        }
+      }
+      if (dy < 0 && this.isActive('barrier')) {
+        const floor = POWER.barrierY + b.r;
+        if (b.y >= floor) {
+          const t = (floor - b.y) / dy;
+          if (t <= 1 && (!hit || t < hit.t)) {
+            hit = { t, nx: 0, ny: 1 };
+            target = 'barrier';
+          }
         }
       }
       if (b.vy < 0) {
@@ -234,16 +313,28 @@ export class Game {
         break;
       }
 
+      // Piercing balls go straight through anything breakable.
+      if (typeof target === 'object' && target.kind !== 'steel' && this.isActive('pierce')) {
+        b.x += dx * hit.t;
+        b.y += dy * hit.t;
+        remaining *= 1 - hit.t;
+        this.ballHitsBrick(target, b, true);
+        normalizeVelocity(b, this.ballSpeed(b));
+        continue;
+      }
+
       b.x += dx * hit.t + hit.nx * SKIN;
       b.y += dy * hit.t + hit.ny * SKIN;
       remaining *= 1 - hit.t;
       if (hit.nx !== 0) b.vx = Math.abs(b.vx) * hit.nx;
       if (hit.ny !== 0) b.vy = Math.abs(b.vy) * hit.ny;
 
-      if (target === 'paddle') this.paddleBounce(b, hit.ny > 0);
+      if (target === 'paddle') {
+        if (this.paddleContact(b, hit.ny > 0)) return;
+      } else if (target === 'barrier') this.events.emit('barrierHit', { id: b.id, x: b.x });
       else if (typeof target === 'string') this.events.emit('wallHit', { id: b.id, side: target, x: b.x, y: b.y });
-      else this.hitBrick(target, b);
-      normalizeVelocity(b);
+      else this.ballHitsBrick(target, b, false);
+      normalizeVelocity(b, this.ballSpeed(b));
     }
     b.x = clamp(b.x, b.r, FIELD.width - b.r);
     b.y = Math.min(b.y, FIELD.height - b.r);
@@ -264,36 +355,222 @@ export class Game {
     const box = this.paddleBox(b.r);
     if (b.vy < 0 && b.y > this.paddle.y && b.y < box.maxY && b.x > box.minX && b.x < box.maxX) {
       b.y = box.maxY + SKIN;
-      this.paddleBounce(b, true);
+      this.paddleContact(b, true);
     }
   }
 
-  /** Top-face hits aim the ball by where it landed: centre goes straight up, edges go wide. */
-  private paddleBounce(b: Ball, top: boolean): void {
+  /**
+   * Top-face hits aim the ball by where it landed: centre goes straight up, edges go wide.
+   * With catch active the ball sticks instead; returns true when it was caught.
+   */
+  private paddleContact(b: Ball, top: boolean): boolean {
     const p = this.paddle;
     const offset = clamp((b.x - p.x) / (p.w / 2), -1, 1);
-    if (top) {
-      const angle = offset * BALL.maxBounceAngle;
-      b.vx = Math.sin(angle) * b.speed;
-      b.vy = Math.cos(angle) * b.speed;
+    if (top && this.isActive('catch')) {
+      b.stuck = clamp(offset, -0.9, 0.9);
+      b.stuckTime = 0;
+      b.vx = b.vy = 0;
+      this.holdCaught(b, 0);
+      this.events.emit('ballCaught', { id: b.id, offset: b.stuck });
+      return true;
     }
+    if (top) aim(b, offset * BALL.maxBounceAngle, this.ballSpeed(b));
     this.events.emit('paddleHit', { id: b.id, offset });
+    return false;
   }
 
-  private hitBrick(br: Brick, b: Ball): void {
+  /** Keeps a caught ball on the paddle; it lets go by itself after a while. */
+  private holdCaught(b: Ball, dt: number): void {
+    const p = this.paddle;
+    b.stuckTime += dt;
+    b.x = p.x + (b.stuck ?? 0) * (p.w / 2);
+    b.y = p.y + p.h / 2 + b.r + SKIN;
+    if (b.stuckTime >= POWER.catchHold) this.release(b);
+  }
+
+  private release(b: Ball): void {
+    const angle = (b.stuck ?? 0) * BALL.maxBounceAngle;
+    b.stuck = null;
+    aim(b, angle, this.ballSpeed(b));
+    this.events.emit('ballLaunch', { id: b.id, angle: (angle * 180) / Math.PI });
+  }
+
+  /** Releases every caught ball; returns whether there were any. */
+  private releaseCaught(): boolean {
+    let any = false;
+    for (const b of this.balls) {
+      if (b.stuck === null) continue;
+      this.release(b);
+      any = true;
+    }
+    return any;
+  }
+
+  private ballSpeed(b: Ball): number {
+    const scale = this.isActive('slow') ? POWER.slowScale : this.isActive('fast') ? POWER.fastScale : 1;
+    return b.speed * scale;
+  }
+
+  /** Brings moving balls to their current speed after slow/fast changes. */
+  private rescaleBalls(): void {
+    for (const b of this.balls) if (b.vx !== 0 || b.vy !== 0) normalizeVelocity(b, this.ballSpeed(b));
+  }
+
+  private tickPowers(dt: number): void {
+    for (const kind of TIMED_POWERS) {
+      if (this.timers[kind] <= 0) continue;
+      this.timers[kind] -= dt;
+      if (this.timers[kind] <= 0) this.endPower(kind);
+    }
+  }
+
+  private endPower(kind: TimedPower): void {
+    this.timers[kind] = 0;
+    this.events.emit('powerEnd', { kind });
+    if (kind === 'catch') this.releaseCaught();
+    if (kind === 'slow' || kind === 'fast') this.rescaleBalls();
+  }
+
+  /** Lost life or cleared stage: timers, capsules and bolts all go. */
+  private clearPowers(): void {
+    for (const kind of TIMED_POWERS) this.timers[kind] = 0;
+    this.capsules = [];
+    this.bolts = [];
+    this.laserCooldown = 0;
+  }
+
+  /** Launch press releases caught balls; otherwise holding fire shoots the laser. */
+  private handleButtons(dt: number, input: TickInput): void {
+    this.laserCooldown = Math.max(0, this.laserCooldown - dt);
+    if (input.launch && this.releaseCaught()) {
+      this.laserCooldown = POWER.laserCooldown;
+      return;
+    }
+    if (input.fire && this.isActive('laser') && this.laserCooldown === 0) this.fireLaser();
+  }
+
+  private fireLaser(): void {
+    const p = this.paddle;
+    const y = p.y + p.h / 2 + POWER.boltLength;
+    for (const side of [-1, 1]) {
+      const x = p.x + side * (p.w / 2 - POWER.boltInset);
+      this.bolts.push({ id: this.nextId++, x, y, py: y });
+    }
+    this.laserCooldown = POWER.laserCooldown;
+    this.events.emit('laserFire', { x: p.x, y });
+  }
+
+  /** Bolts fly straight up; each one damages the first brick it reaches. */
+  private updateBolts(dt: number): void {
+    const dy = POWER.boltSpeed * dt;
+    this.bolts = this.bolts.filter((bolt) => {
+      let hit: SweepHit | null = null;
+      let target: Brick | null = null;
+      for (const br of this.bricks) {
+        if (!br.alive) continue;
+        const h = sweepBox(bolt.x, bolt.y, 0, dy, br.x, br.y, br.x + br.w, br.y + br.h);
+        if (h && (!hit || h.t < hit.t)) {
+          hit = h;
+          target = br;
+        }
+      }
+      if (target) {
+        this.hitBrick(target, 'laser', bolt.x, target.y, false);
+        return false;
+      }
+      bolt.y += dy;
+      return bolt.y - POWER.boltLength < FIELD.height;
+    });
+  }
+
+  private updateCapsules(dt: number): void {
+    const p = this.paddle;
+    const hw = POWER.capsuleWidth / 2;
+    const hh = POWER.capsuleHeight / 2;
+    this.capsules = this.capsules.filter((c) => {
+      c.y -= POWER.fallSpeed * dt;
+      if (Math.abs(c.x - p.x) < p.w / 2 + hw && Math.abs(c.y - p.y) < p.h / 2 + hh) {
+        this.score += SCORE.capsule;
+        this.events.emit('powerCollect', { id: c.id, kind: c.kind });
+        this.applyPower(c.kind);
+        return false;
+      }
+      if (c.y + hh >= 0) return true;
+      this.events.emit('powerMissed', { id: c.id, kind: c.kind });
+      return false;
+    });
+  }
+
+  /** Each source ball gets a twin on either side, up to the ball limit. */
+  private splitBalls(): void {
+    for (const src of this.balls.slice()) {
+      let dirX = src.vx;
+      let dirY = src.vy;
+      if (src.stuck !== null) {
+        const a = src.stuck * BALL.maxBounceAngle;
+        dirX = Math.sin(a);
+        dirY = Math.cos(a);
+      } else if (dirX === 0 && dirY === 0) {
+        dirY = 1;
+      }
+      for (const side of [-1, 1]) {
+        if (this.balls.length >= POWER.maxBalls) return;
+        const a = side * POWER.splitAngle;
+        const ball: Ball = {
+          ...src,
+          id: this.nextId++,
+          vx: dirX * Math.cos(a) - dirY * Math.sin(a),
+          vy: dirX * Math.sin(a) + dirY * Math.cos(a),
+          stuck: null,
+          stuckTime: 0,
+        };
+        normalizeVelocity(ball, this.ballSpeed(ball));
+        this.balls.push(ball);
+        this.events.emit('ballSpawn', { id: ball.id, x: ball.x, y: ball.y });
+      }
+    }
+  }
+
+  private maybeDrop(x: number, y: number): void {
+    if (this.breakableLeft === 0 || this.capsules.length >= POWER.maxCapsules) return;
+    if (this.rng.next() >= POWER.dropChance) return;
+    const kind = this.rollPower();
+    const hw = POWER.capsuleWidth / 2;
+    const capsule: Capsule = { id: this.nextId++, kind, x: clamp(x, hw, FIELD.width - hw), y, py: y };
+    this.capsules.push(capsule);
+    this.events.emit('powerDrop', { id: capsule.id, kind, x: capsule.x, y });
+  }
+
+  private rollPower(): PowerKind {
+    const total = POWER_KINDS.reduce((sum, k) => sum + POWER.kinds[k].weight, 0);
+    let r = this.rng.next() * total;
+    for (const k of POWER_KINDS) {
+      r -= POWER.kinds[k].weight;
+      if (r < 0) return k;
+    }
+    return 'multi';
+  }
+
+  /** Ball struck a brick; it speeds up a little. `smash` breaks it outright (pierce). */
+  private ballHitsBrick(br: Brick, b: Ball, smash: boolean): void {
+    if (br.kind !== 'steel') b.speed = Math.min(BALL.maxSpeed, b.speed + BALL.hitSpeedStep);
+    this.hitBrick(br, 'ball', clamp(b.x, br.x, br.x + br.w), clamp(b.y, br.y, br.y + br.h), smash);
+  }
+
+  /** (ix, iy) is the impact point on the brick. */
+  private hitBrick(br: Brick, by: HitSource, ix: number, iy: number, smash: boolean): void {
     br.hitTick = this.tick;
     const x = br.x + br.w / 2;
     const y = br.y + br.h / 2;
     if (br.kind === 'steel') {
-      this.events.emit('brickHit', { id: br.id, kind: br.kind, hp: br.hp, x, y });
+      this.events.emit('brickHit', { id: br.id, kind: br.kind, hp: br.hp, by, x, y, ix, iy });
       return;
     }
 
-    b.speed = Math.min(BALL.maxSpeed, b.speed + BALL.hitSpeedStep);
-    br.hp--;
+    br.hp = smash ? 0 : br.hp - 1;
     if (br.hp > 0) {
       this.score += SCORE.hit;
-      this.events.emit('brickHit', { id: br.id, kind: br.kind, hp: br.hp, x, y });
+      this.events.emit('brickHit', { id: br.id, kind: br.kind, hp: br.hp, by, x, y, ix, iy });
       return;
     }
 
@@ -301,7 +578,8 @@ export class Game {
     this.breakableLeft--;
     const points = br.kind === 'tough' ? br.maxHp * SCORE.toughPerHp : SCORE.normal;
     this.score += points;
-    this.events.emit('brickDestroyed', { id: br.id, kind: br.kind, points, x, y });
+    this.events.emit('brickDestroyed', { id: br.id, kind: br.kind, points, by, x, y, ix, iy });
+    this.maybeDrop(x, y);
   }
 }
 
@@ -352,15 +630,21 @@ function sweepWalls(b: Ball, dx: number, dy: number): (SweepHit & { side: WallSi
   return best;
 }
 
-/** Rescales velocity to the ball's speed and keeps it from going near-horizontal. */
-function normalizeVelocity(b: Ball): void {
+/** Sends a ball off at `angle` from vertical (positive is right). */
+function aim(b: Ball, angle: number, speed: number): void {
+  b.vx = Math.sin(angle) * speed;
+  b.vy = Math.cos(angle) * speed;
+}
+
+/** Rescales velocity to `speed` and keeps it from going near-horizontal. */
+function normalizeVelocity(b: Ball, speed: number): void {
   const len = Math.hypot(b.vx, b.vy) || 1;
-  let vx = (b.vx / len) * b.speed;
-  let vy = (b.vy / len) * b.speed;
-  const minVy = b.speed * BALL.minVerticalRatio;
+  let vx = (b.vx / len) * speed;
+  let vy = (b.vy / len) * speed;
+  const minVy = speed * BALL.minVerticalRatio;
   if (Math.abs(vy) < minVy) {
     vy = (vy < 0 ? -1 : 1) * minVy;
-    vx = (vx < 0 ? -1 : 1) * Math.sqrt(b.speed * b.speed - minVy * minVy);
+    vx = (vx < 0 ? -1 : 1) * Math.sqrt(speed * speed - minVy * minVy);
   }
   b.vx = vx;
   b.vy = vy;
