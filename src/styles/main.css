@@ -114,6 +114,105 @@ body {
   }
 }
 
+/* Chain bonus badge: just outside the playfield's bottom-right corner, under the banners. */
+#popups {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+#popups.paused .popup {
+  animation-play-state: paused;
+}
+
+/* Anchored by its bottom-left corner; a new popup replaces the last one. */
+.popup {
+  --c: var(--yellow);
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 128px;
+  padding: 8px 14px;
+  line-height: 1;
+  white-space: nowrap;
+  background: rgba(7, 2, 26, 0.82);
+  border-top: 1px solid color-mix(in srgb, var(--c) 55%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--c) 55%, transparent);
+  color: var(--c);
+  text-shadow: 0 0 6px color-mix(in srgb, var(--c) 60%, transparent);
+  transform: translateY(-100%);
+  transform-origin: left bottom;
+  animation: popup-bonus 1.6s ease-out forwards;
+}
+
+.popup span {
+  font-family: var(--display);
+  font-size: clamp(11px, 0.9vw, 14px);
+  letter-spacing: 0.1em;
+}
+
+.popup b {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: clamp(20px, 1.9vw, 30px);
+  letter-spacing: 0.06em;
+}
+
+.popup.t2 {
+  --c: var(--magenta);
+}
+
+.popup.t3 {
+  --c: var(--cyan);
+}
+
+.popup.summary {
+  animation: popup-summary 2.2s ease-out forwards;
+}
+
+.popup.summary b {
+  font-size: clamp(24px, 2.3vw, 36px);
+}
+
+@keyframes popup-bonus {
+  from {
+    opacity: 0;
+    transform: translateY(-100%) scale(1.12);
+  }
+  10% {
+    opacity: 1;
+    transform: translateY(-100%) scale(1);
+  }
+  70% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-100%);
+  }
+}
+
+@keyframes popup-summary {
+  from {
+    opacity: 0;
+    transform: translateY(-100%) scale(1.18);
+  }
+  8% {
+    opacity: 1;
+    transform: translateY(-100%) scale(1);
+  }
+  80% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-100%);
+  }
+}
+
 #overlay {
   padding: 18px 32px;
   text-align: center;
@@ -165,6 +264,35 @@ body {
   text-shadow:
     0 0 6px var(--magenta),
     0 0 18px rgba(255, 42, 157, 0.6);
+}
+
+/* The run's score, under the logo: the number the player chases. */
+.score-main {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.score-main span {
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: 0.2em;
+  color: var(--purple);
+}
+
+.score-main b {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: clamp(28px, 2.8vw, 44px);
+  letter-spacing: 0.08em;
+  color: var(--yellow);
+  text-shadow:
+    0 0 6px rgba(255, 210, 63, 0.6),
+    0 0 16px rgba(255, 210, 63, 0.3);
 }
 
 .block h2 {

@@ -249,6 +249,7 @@ export class Game {
       speed: BALL.baseSpeed + this.stageIndex * BALL.stageSpeedStep,
       stuck: null,
       stuckTime: 0,
+      chain: 0,
     };
     this.balls.push(ball);
     this.events.emit('ballSpawn', { id: ball.id, x, y });
@@ -442,8 +443,10 @@ export class Game {
   /**
    * Top-face hits aim the ball by where it landed: centre goes straight up, edges go wide.
    * With catch active the ball sticks instead; returns true when it was caught.
+   * Any touch ends the ball's chain.
    */
   private paddleContact(b: Ball, top: boolean): boolean {
+    this.endChain(b);
     const p = this.paddle;
     const offset = clamp((b.x - p.x) / (p.w / 2), -1, 1);
     if (top && this.isActive('catch')) {
@@ -457,6 +460,15 @@ export class Game {
     if (top) aim(b, offset * BALL.maxBounceAngle, this.ballSpeed(b));
     this.events.emit('paddleHit', { id: b.id, offset });
     return false;
+  }
+
+  private endChain(b: Ball): void {
+    if (b.chain >= 2) {
+      let total = 0;
+      for (let n = 2; n <= b.chain; n++) total += chainBonus(n);
+      this.events.emit('chainEnd', { id: b.id, count: b.chain, total });
+    }
+    b.chain = 0;
   }
 
   /** Keeps a caught ball on the paddle; it lets go by itself after a while. */
@@ -640,6 +652,8 @@ export class Game {
           vy: dirX * Math.sin(a) + dirY * Math.cos(a),
           stuck: null,
           stuckTime: 0,
+          // Twins start their own chain, so a split can't multiply a long one.
+          chain: 0,
         };
         normalizeVelocity(ball, this.ballSpeed(ball));
         this.balls.push(ball);
@@ -673,7 +687,7 @@ export class Game {
   /** Ball struck a brick; it speeds up a little. `smash` breaks it outright (pierce). */
   private ballHitsBrick(br: Brick, b: Ball, smash: boolean): void {
     if (br.kind !== 'steel') b.speed = Math.min(BALL.maxSpeed, b.speed + BALL.hitSpeedStep);
-    this.hitBrick(br, 'ball', clamp(b.x, br.x, br.x + br.w), clamp(b.y, br.y, br.y + br.h), smash, b.vx, b.vy);
+    this.hitBrick(br, 'ball', clamp(b.x, br.x, br.x + br.w), clamp(b.y, br.y, br.y + br.h), smash, b);
   }
 
   /** Up to `hits` hits, stopping once the brick breaks. */
@@ -681,8 +695,11 @@ export class Game {
     for (let i = 0; i < hits && br.alive; i++) this.hitBrick(br, by, ix, iy);
   }
 
-  /** (ix, iy) is the impact point on the brick; (vx, vy) the velocity of the ball that struck it. */
-  private hitBrick(br: Brick, by: HitSource, ix: number, iy: number, smash = false, vx = 0, vy = 0): void {
+  /**
+   * (ix, iy) is the impact point on the brick; `ball` the ball that struck it, if any. Bricks a
+   * ball destroys extend its chain and earn the chain bonus.
+   */
+  private hitBrick(br: Brick, by: HitSource, ix: number, iy: number, smash = false, ball: Ball | null = null): void {
     br.hitTick = this.tick;
     const x = br.x + br.w / 2;
     const y = br.y + br.h / 2;
@@ -704,13 +721,22 @@ export class Game {
     this.breakableLeft--;
     this.sinceKill = 0;
     this.stageEvents.arm('supplyDrop', 'overload', 'hunter', 'demolition');
-    const points = br.kind === 'tough' ? br.maxHp * SCORE.toughPerHp : SCORE.normal;
+    const chain = ball ? ++ball.chain : 0;
+    const bonus = chainBonus(chain);
+    const points = (br.kind === 'tough' ? br.maxHp * SCORE.toughPerHp : SCORE.normal) + bonus;
     this.score += points;
-    this.events.emit('brickDestroyed', { id: br.id, kind: br.kind, points, by, x, y, ix, iy, vx, vy });
+    const vx = ball?.vx ?? 0;
+    const vy = ball?.vy ?? 0;
+    this.events.emit('brickDestroyed', { id: br.id, kind: br.kind, points, chain, bonus, by, x, y, ix, iy, vx, vy });
     this.maybeDrop(x, y);
   }
 }
 
 function isBreakable(br: Brick): boolean {
   return br.alive && br.kind !== 'steel';
+}
+
+/** Bonus for the `chain`-th brick of a chain; the first brick earns none. */
+export function chainBonus(chain: number): number {
+  return Math.min(SCORE.chainStep * Math.max(0, chain - 1), SCORE.chainMax);
 }
