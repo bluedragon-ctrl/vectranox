@@ -15,7 +15,7 @@ Breakout-style roguelike with 80s synthwave vector graphics, running in desktop 
 | Controls | Mouse (pointer lock) and keyboard, selectable. |
 | Layout | Canvas fills the window. Portrait (3:4) playfield on the **right**; left is a CSS "terminal" panel: menu, high scores, run info, live event console. Overlays (title, pause, upgrade pick, name entry) are CSS. |
 | Game structure | Roguelike runs (see below). Formations reaching the paddle line cost a life. |
-| Audio | Generated SFX via WebAudio synth. Music: user-provided `.ogg` tracks as a playlist with crossfade. |
+| Audio | Generated SFX via WebAudio synth (oscillators and filtered noise, panned by x; brick hits climb a pentatonic scale until the paddle touches a ball). Music: user-provided `.ogg` / `.mp3` tracks dropped into `src/assets/music/`, picked up at build time, played as a shuffled playlist with crossfade. Master / music / SFX volume and mute (**M**) in the left panel; the music muffles while paused. Audio starts on the first click or key press (browser autoplay rules). |
 | High scores | Name: 6 chars `[A-Z0-9 ]`. Phase 1: localStorage. Later: Cloudflare Worker + **D1** (not KV — KV is eventually consistent and can't sort). |
 | Hosting | GitHub Pages via Actions now; same static build on a VPS later. Vite `base: './'` so paths work on both. |
 
@@ -47,10 +47,10 @@ src/
   game/              pure simulation: entities, systems, powerups, rules
   levels/            stage templates, formation patterns, procedural assembly
   render/            Renderer, materials (GLSL), fx, background
-  audio/             AudioEngine, synth presets, MusicPlayer
+  audio/             AudioEngine, synth voices, GameSounds (event → sound), MusicPlayer
+  assets/music/      .ogg / .mp3 tracks (globbed at build time)
   ui/                left panel, overlays, event console
   scores/            ScoreService interface + implementations
-public/music/        .ogg tracks
 worker/              (later) Cloudflare Worker + D1 schema
 ```
 

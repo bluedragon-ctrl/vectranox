@@ -1,10 +1,13 @@
 import './styles/main.css';
+import { AudioEngine } from './audio/AudioEngine';
+import { GameSounds } from './audio/GameSounds';
 import { Input, type ControlMode } from './core/input';
 import { startLoop } from './core/loop';
-import { loadVisualSettings, saveVisualSettings } from './core/settings';
+import { loadAudioSettings, loadVisualSettings, saveAudioSettings, saveVisualSettings } from './core/settings';
 import { Game } from './game/Game';
 import { STAGES } from './levels/stages';
 import { Renderer } from './render/Renderer';
+import { AudioPanel } from './ui/AudioPanel';
 import { EventBanner } from './ui/EventBanner';
 import { EventConsole, type UiEvent } from './ui/EventConsole';
 import { Overlay, type OverlayContent } from './ui/Overlay';
@@ -17,7 +20,7 @@ type UiState = 'title' | 'playing' | 'paused' | 'ended';
 /** Seconds the final banner stays up in-game before the end screen accepts input. */
 const END_DELAY = 1.5;
 const START_HINT = 'CLICK · MOUSE CONTROL\nENTER · KEYBOARD CONTROL';
-const CONTROLS_HINT = 'MOVE  ← → / A D / MOUSE\nLAUNCH · FIRE  SPACE / CLICK\nDETONATE  X / RIGHT CLICK\nPAUSE  P / ESC';
+const CONTROLS_HINT = 'MOVE  ← → / A D / MOUSE\nLAUNCH · FIRE  SPACE / CLICK\nDETONATE  X / RIGHT CLICK\nPAUSE  P / ESC · MUTE  M';
 
 function el<T extends HTMLElement = HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -65,6 +68,27 @@ new SettingsPanel(el('video-toggles'), videoSettings, (settings) => {
   saveVisualSettings(settings);
   logUi('settings', { ...settings });
 });
+const audioSettings = loadAudioSettings();
+const audio = new AudioEngine(audioSettings);
+const sounds = new GameSounds(audio);
+const audioPanel = new AudioPanel(
+  el('audio-controls'),
+  audioSettings,
+  (settings) => {
+    audio.apply(settings);
+    saveAudioSettings(settings);
+    logUi('audio', { ...settings });
+  },
+  () => audio.music.next(),
+);
+audioPanel.setTrack(audio.music.hasTracks ? '' : null, true);
+audio.music.onTrack = (name) => {
+  audioPanel.setTrack(name);
+  logUi(name === null ? 'musicFailed' : 'track', name === null ? {} : { name });
+};
+// Browsers only start audio from a user gesture; the first click or key press anywhere unlocks it.
+window.addEventListener('pointerdown', () => audio.unlock(), { capture: true });
+window.addEventListener('keydown', () => audio.unlock(), { capture: true });
 const eventConsole = new EventConsole(el('console'));
 const overlay = new Overlay(el('overlay'), el('overlay-title'), el('overlay-sub'));
 const banner = new EventBanner(el('event-banner'), el('event-title'), el('event-sub'));
@@ -80,6 +104,7 @@ function newGame(): Game {
   g.events.onAny((type, payload) => eventConsole.log(g.time, String(type), payload));
   g.events.on('stageEvent', ({ kind }) => banner.show(kind, g.time));
   renderer.attach(g);
+  sounds.attach(g);
   g.start();
   return g;
 }
@@ -111,12 +136,14 @@ function enterPlay(mode: ControlMode): void {
   input.mode = mode;
   input.reset();
   ui = 'playing';
+  audio.setMuffled(false);
   logUi(resumed ? 'resume' : 'play', { mode });
 }
 
 function pause(reason: string): void {
   if (ui !== 'playing') return;
   ui = 'paused';
+  audio.setMuffled(true);
   logUi('pause', { reason });
   releasePointer();
 }
@@ -151,6 +178,10 @@ window.addEventListener(
   'keydown',
   (e) => {
     if (e.repeat) return;
+    if (e.code === 'KeyM') {
+      audioPanel.toggleMute();
+      return;
+    }
     if (ui === 'playing') {
       // Under pointer lock the browser consumes Esc itself and we pause on pointerlockchange.
       if (e.code === 'KeyP' || (e.code === 'Escape' && !input.locked)) pause('key');
@@ -247,6 +278,6 @@ startLoop({
 });
 
 if (import.meta.env.DEV) {
-  // Console access for debugging: `vnx.game`, `vnx.renderer`.
-  Object.assign(window, { vnx: { get game() { return game; }, renderer } });
+  // Console access for debugging: `vnx.game`, `vnx.renderer`, `vnx.audio`.
+  Object.assign(window, { vnx: { get game() { return game; }, renderer, audio } });
 }
