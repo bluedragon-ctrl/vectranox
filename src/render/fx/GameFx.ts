@@ -103,7 +103,7 @@ export class GameFx {
       ev.on('laserFire', () => {
         this.laserFlash = 1;
       }),
-      ev.on('brickHit', ({ id, kind, x, y, ix, iy }) => {
+      ev.on('brickHit', ({ id, kind, by, x, y, ix, iy }) => {
         const brick = game.bricks.find((br) => br.id === id);
         const away = Math.atan2(iy - y, ix - x);
         if (kind === 'steel') {
@@ -120,7 +120,7 @@ export class GameFx {
           this.particles.piece(chip(ix, iy, 0.9 + Math.random() * 0.8), Math.cos(a) * s, Math.sin(a) * s, color, 0.35 + Math.random() * 0.25);
         }
         this.particles.glints(ix, iy, { count: 4, color, speed: [100, 220], angle: away, spread: 1.0 });
-        this.shake.add(0.04);
+        this.shake.add(by === 'pulse' ? 0 : 0.04);
       }),
       ev.on('brickDestroyed', ({ id, kind, by, x, y, ix, iy }) => {
         const brick = game.bricks.find((br) => br.id === id);
@@ -139,7 +139,13 @@ export class GameFx {
           this.particles.piece(s, (dx / dist) * speed + pushX, (dy / dist) * speed + pushY, color, 0.55 + Math.random() * 0.35);
         }
         this.particles.glints(ix, iy, { count: 5, color, speed: [120, 260] });
-        this.shake.add(kind === 'tough' ? 0.16 : 0.1);
+        // A pulse breaks many bricks in one tick; its own kick below stands in for theirs.
+        if (by !== 'pulse') this.shake.add(kind === 'tough' ? 0.16 : 0.1);
+      }),
+      ev.on('stageEvent', ({ kind }) => {
+        if (kind !== 'pulse') return;
+        this.shake.add(0.25);
+        this.pulse(COLORS.purple, 0.12, 0.4);
       }),
       ev.on('ballLost', () => {
         this.shake.add(0.3);

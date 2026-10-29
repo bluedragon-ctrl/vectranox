@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { FIELD, PALETTE } from '../config/game';
-import { POWER, POWER_LOOK } from '../config/powers';
+import { POWER, POWER_LOOK } from '../config/tuning';
 import type { VisualSettings } from '../core/settings';
 import type { Game } from '../game/Game';
 import type { PowerKind, TimedPower } from '../game/types';

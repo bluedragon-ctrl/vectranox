@@ -17,6 +17,12 @@ const SYSTEM_EVENTS = new Set([
 /** Power-up events, highlighted separately. */
 const POWER_EVENTS = new Set(['powerCollect', 'powerEnd']);
 
+function eventClass(type: string): string {
+  if (SYSTEM_EVENTS.has(type)) return 'ev sys';
+  if (POWER_EVENTS.has(type)) return 'ev pow';
+  return type === 'stageEvent' ? 'ev stage' : 'ev';
+}
+
 /**
  * Live "hacker terminal" log of game events in the left panel.
  * Lines are queued and flushed once per frame so a burst of events costs one DOM update.
@@ -35,7 +41,7 @@ export class EventConsole {
     t.textContent = `[${formatTime(seconds)}] `;
 
     const ev = document.createElement('span');
-    ev.className = SYSTEM_EVENTS.has(type) ? 'ev sys' : POWER_EVENTS.has(type) ? 'ev pow' : 'ev';
+    ev.className = eventClass(type);
     ev.textContent = toConstCase(type);
 
     line.append(t, ev, ` ${formatPayload(payload)}`);

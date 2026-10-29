@@ -1,4 +1,4 @@
-import { POWER, POWER_LOOK } from '../config/powers';
+import { POWER, POWER_LOOK } from '../config/tuning';
 import type { TimedPower } from '../game/types';
 
 interface Row {
@@ -6,6 +6,9 @@ interface Row {
   bar: HTMLElement;
   secs: HTMLElement;
   shown: string;
+  /** Timer value when the power was granted; stage events can grant other durations. */
+  full: number;
+  last: number;
 }
 
 /** Active timed powers in the left panel: name, a draining bar and seconds left. */
@@ -36,7 +39,7 @@ export class PowerHud {
       secs.className = 'secs';
       el.append(name, track, secs);
       root.append(el);
-      this.rows.set(kind as TimedPower, { el, bar, secs, shown: '' });
+      this.rows.set(kind as TimedPower, { el, bar, secs, shown: '', full: duration, last: 0 });
     }
   }
 
@@ -45,6 +48,8 @@ export class PowerHud {
     for (const [kind, row] of this.rows) {
       const left = timers[kind];
       const active = left > 0;
+      if (left > row.last) row.full = left;
+      row.last = left;
       any ||= active;
       row.el.classList.toggle('hidden', !active);
       if (!active) continue;
@@ -52,7 +57,7 @@ export class PowerHud {
       if (text === row.shown) continue;
       row.shown = text;
       row.secs.textContent = text;
-      row.bar.style.width = `${(left / POWER.kinds[kind].duration) * 100}%`;
+      row.bar.style.width = `${(left / row.full) * 100}%`;
     }
     this.none.classList.toggle('hidden', any);
   }

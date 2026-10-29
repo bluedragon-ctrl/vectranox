@@ -1,4 +1,4 @@
-import type { POWER } from '../config/powers';
+import type { POWER, STAGE_EVENTS } from '../config/tuning';
 
 export type GameState = 'serve' | 'play' | 'clear' | 'over' | 'complete';
 
@@ -7,7 +7,8 @@ export type BrickKind = 'normal' | 'tough' | 'steel';
 export type PowerKind = keyof typeof POWER.kinds;
 /** Powers that run on a timer (the rest act once on pickup). */
 export type TimedPower = Exclude<PowerKind, 'multi' | 'life'>;
-export type HitSource = 'ball' | 'laser';
+export type HitSource = 'ball' | 'laser' | 'pulse';
+export type StageEventKind = keyof typeof STAGE_EVENTS.kinds;
 
 /** Player input for one tick. Plain data so runs can later be recorded and replayed. */
 export interface TickInput {

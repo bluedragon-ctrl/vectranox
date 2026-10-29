@@ -6,6 +6,7 @@ import { loadVisualSettings, saveVisualSettings } from './core/settings';
 import { Game } from './game/Game';
 import { STAGES } from './levels/stages';
 import { Renderer } from './render/Renderer';
+import { EventBanner } from './ui/EventBanner';
 import { EventConsole } from './ui/EventConsole';
 import { Overlay, type OverlayContent } from './ui/Overlay';
 import { PowerHud } from './ui/PowerHud';
@@ -59,6 +60,7 @@ new SettingsPanel(el('video-toggles'), videoSettings, (settings) => {
 });
 const eventConsole = new EventConsole(el('console'));
 const overlay = new Overlay(el('overlay'), el('overlay-title'), el('overlay-sub'));
+const banner = new EventBanner(el('event-banner'), el('event-title'), el('event-sub'));
 const input = new Input(canvas, renderer);
 
 let ui: UiState = 'title';
@@ -69,6 +71,7 @@ let game = newGame();
 function newGame(): Game {
   const g = new Game(Date.now() >>> 0, STAGES);
   g.events.onAny((type, payload) => eventConsole.log(g.tick / SIM.tickRate, String(type), payload));
+  g.events.on('stageEvent', ({ kind }) => banner.show(kind, g.tick / SIM.tickRate));
   renderer.attach(g);
   g.start();
   return g;
@@ -211,7 +214,11 @@ startLoop({
     // Paused: the accumulator still runs, so freeze interpolation at the last tick.
     renderer.render(game, ui === 'playing' ? alpha : 1);
     canvas.classList.toggle('hide-cursor', ui === 'playing');
-    overlay.show(overlayContent());
+    const content = overlayContent();
+    overlay.show(content);
+    // Menus and stage banners take over the field; a stage event banner never shares it.
+    if (content) banner.hide();
+    else banner.update(game.tick / SIM.tickRate);
     eventConsole.flush();
 
     if (frameTime > 0) fps += (1 / frameTime - fps) * 0.05;

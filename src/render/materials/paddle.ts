@@ -1,4 +1,4 @@
-import { POWER } from '../../config/powers';
+import { POWER } from '../../config/tuning';
 import { SDF } from './common';
 
 /**
