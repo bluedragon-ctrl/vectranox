@@ -22,13 +22,11 @@ export interface BurstOptions {
 }
 
 /**
- * CPU-simulated visual particles (sparks, glass shards, shockwave rings, glow blobs).
+ * CPU-simulated visual particles (sparks and glass shards).
  * Purely cosmetic: driven by wall-clock time, never fed back into the simulation.
  */
 export class Particles {
   readonly batch = new QuadBatch({ max: MAX, fragmentShader: PARTICLE_FRAGMENT, pad: 3, renderOrder: 40 });
-  /** Multiplier for glow blob brightness (lowered by the reduce-flashing setting). */
-  glowScale = 1;
 
   private n = 0;
   private kind = new Uint8Array(MAX);
@@ -39,7 +37,6 @@ export class Particles {
   private age = new Float32Array(MAX);
   private life = new Float32Array(MAX);
   private size = new Float32Array(MAX);
-  private size2 = new Float32Array(MAX);
   private rot = new Float32Array(MAX);
   private vrot = new Float32Array(MAX);
   private gravity = new Float32Array(MAX);
@@ -80,20 +77,6 @@ export class Particles {
       this.drag[k] = o.drag ?? 1.2;
       this.intensity[k] = o.intensity ?? 1;
     }
-  }
-
-  ring(x: number, y: number, from: number, to: number, life: number, color: THREE.Color, intensity = 1): void {
-    const k = this.spawn(PARTICLE_KIND.ring, x, y, 0, 0, life, from, color);
-    if (k < 0) return;
-    this.size2[k] = to;
-    this.intensity[k] = intensity;
-  }
-
-  glow(x: number, y: number, from: number, to: number, life: number, color: THREE.Color, intensity = 1): void {
-    const k = this.spawn(PARTICLE_KIND.glow, x, y, 0, 0, life, from, color);
-    if (k < 0) return;
-    this.size2[k] = to;
-    this.intensity[k] = intensity;
   }
 
   update(dt: number): void {
@@ -137,19 +120,6 @@ export class Particles {
           b.push(x, y, s, s, color, (1 - t * t) * k, PARTICLE_KIND.shard, 0, 0, 0, this.rot[i] ?? 0);
           break;
         }
-        case PARTICLE_KIND.ring: {
-          const e = 1 - (1 - t) ** 3;
-          const radius = size + ((this.size2[i] ?? size) - size) * e;
-          const width = 1.4 * (1 - t) + 0.25;
-          const extent = 2 * (radius + width + 6);
-          b.push(x, y, extent, extent, color, (1 - t) ** 2 * k, PARTICLE_KIND.ring, radius, width);
-          break;
-        }
-        case PARTICLE_KIND.glow: {
-          const s = size + ((this.size2[i] ?? size) - size) * t;
-          b.push(x, y, s, s, color, (1 - t) ** 2 * k * this.glowScale, PARTICLE_KIND.glow);
-          break;
-        }
       }
     }
     b.commit();
@@ -166,7 +136,6 @@ export class Particles {
     this.age[i] = 0;
     this.life[i] = life;
     this.size[i] = size;
-    this.size2[i] = size;
     this.rot[i] = 0;
     this.vrot[i] = 0;
     this.gravity[i] = 0;
@@ -182,7 +151,7 @@ export class Particles {
   private remove(i: number): void {
     const last = --this.n;
     if (i === last) return;
-    for (const arr of [this.kind, this.x, this.y, this.vx, this.vy, this.age, this.life, this.size, this.size2, this.rot, this.vrot, this.gravity, this.drag, this.intensity]) {
+    for (const arr of [this.kind, this.x, this.y, this.vx, this.vy, this.age, this.life, this.size, this.rot, this.vrot, this.gravity, this.drag, this.intensity]) {
       arr[i] = arr[last] ?? 0;
     }
     for (let c = 0; c < 3; c++) this.rgb[i * 3 + c] = this.rgb[last * 3 + c] ?? 0;

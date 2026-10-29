@@ -1,14 +1,12 @@
 import * as THREE from 'three';
 import { FIELD } from '../../config/game';
 import type { Game } from '../../game/Game';
-import type { WallSide } from '../../game/events';
 import { brickTint, COLORS } from '../palette';
 import { Particles } from './Particles';
 import { Shake } from './Shake';
 import type { Trails } from './Trails';
 
 const WALL_HIT_SLOTS = 8;
-const WALL_SPARK_ANGLE: Record<WallSide, number> = { left: 0, right: Math.PI, top: -Math.PI / 2 };
 
 export interface WallHit {
   x: number;
@@ -17,7 +15,8 @@ export interface WallHit {
 }
 
 /**
- * Turns simulation events into cosmetic effects: particles, shake, flashes and pulses.
+ * Turns simulation events into cosmetic effects: shake, flashes and pulses. Particles are
+ * reserved for damage (brick hits and destruction).
  * Reads game state only to place effects (ball and brick positions); never writes to it.
  */
 export class GameFx {
@@ -45,7 +44,6 @@ export class GameFx {
   setReduced(reduce: boolean): void {
     this.reduce = reduce;
     this.shake.scale = reduce ? 0 : 1;
-    this.particles.glowScale = reduce ? 0.35 : 1;
     this.brickFlash = reduce ? 0.3 : 1;
     if (reduce) this.flash = this.aberration = 0;
   }
@@ -68,23 +66,12 @@ export class GameFx {
     this.trails.clear();
     const ev = game.events;
     this.unsubscribe = [
-      ev.on('ballSpawn', ({ x, y }) => {
-        this.particles.glow(x, y, 6, 18, 0.35, COLORS.cyan, 0.4);
-        this.particles.ring(x, y, 2, 12, 0.3, COLORS.cyan, 0.6);
-      }),
-      ev.on('ballLaunch', ({ id }) => {
-        const ball = this.ball(id);
-        if (!ball) return;
-        this.particles.ring(ball.x, ball.y, 3, 14, 0.3, COLORS.cyan, 0.5);
-        this.particles.sparks(ball.x, ball.y - ball.r, { count: 8, color: COLORS.cyan, speed: [60, 140], angle: -Math.PI / 2, spread: 1.1 });
-      }),
       ev.on('wallHit', ({ side, x, y }) => {
         const px = side === 'left' ? 0 : side === 'right' ? FIELD.width : x;
         const py = side === 'top' ? FIELD.height : y;
         const slot = this.wallHits[this.nextWallHit];
         this.nextWallHit = (this.nextWallHit + 1) % WALL_HIT_SLOTS;
         if (slot) Object.assign(slot, { x: px, y: py, strength: 1 });
-        this.particles.sparks(px, py, { count: 6, color: COLORS.cyan, speed: [50, 150], angle: WALL_SPARK_ANGLE[side], spread: 1.0 });
       }),
       ev.on('paddleHit', ({ offset }) => {
         this.paddlePulse = 1;
@@ -115,11 +102,7 @@ export class GameFx {
         this.particles.sparks(x, y, { count: 12, color, speed: [80, 260] });
         this.shake.add(kind === 'tough' ? 0.16 : 0.1);
       }),
-      ev.on('ballLost', ({ id }) => {
-        const ball = this.ball(id) ?? this.trails.last(id);
-        const x = Math.min(FIELD.width, Math.max(0, ball?.x ?? FIELD.width / 2));
-        this.particles.sparks(x, 0, { count: 22, color: COLORS.magenta, speed: [80, 260], angle: Math.PI / 2, spread: 0.7, gravity: -260 });
-        this.particles.ring(x, 0, 4, 40, 0.5, COLORS.magenta);
+      ev.on('ballLost', () => {
         this.shake.add(0.3);
       }),
       ev.on('lifeLost', () => {
@@ -128,7 +111,6 @@ export class GameFx {
         this.danger = 1;
       }),
       ev.on('stageClear', () => {
-        this.particles.ring(FIELD.width / 2, FIELD.height / 2, 10, 280, 0.9, COLORS.cyan);
         this.shake.add(0.2);
         this.pulse(COLORS.cyan, 0.15, 0.5);
       }),
@@ -137,7 +119,6 @@ export class GameFx {
         this.danger = 1;
       }),
       ev.on('runComplete', () => {
-        this.particles.ring(FIELD.width / 2, FIELD.height / 2, 10, 320, 1.2, COLORS.yellow);
         this.pulse(COLORS.yellow, 0.2, 0.6);
       }),
     ];
@@ -153,10 +134,6 @@ export class GameFx {
     this.flashColor.copy(color);
     this.flash = Math.max(this.flash, flash);
     this.aberration = Math.max(this.aberration, aberration);
-  }
-
-  private ball(id: number) {
-    return this.game?.balls.find((b) => b.id === id);
   }
 
   private nearestBall(x: number, y: number) {

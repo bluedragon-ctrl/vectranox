@@ -31,12 +31,6 @@ export class Trails {
     this.tail.copy(tailColor);
   }
 
-  /** Last recorded position of a ball, if it had a trail. */
-  last(id: number): Point | undefined {
-    const pts = this.trails.get(id);
-    return pts?.[pts.length - 1];
-  }
-
   clear(): void {
     this.trails.clear();
   }
