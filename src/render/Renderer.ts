@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import { FIELD, PALETTE } from '../config/game';
+import { POWER, POWER_LOOK } from '../config/powers';
 import type { VisualSettings } from '../core/settings';
 import type { Game } from '../game/Game';
+import type { PowerKind, TimedPower } from '../game/types';
 import { GameFx } from './fx/GameFx';
 import { PostFx } from './fx/PostFx';
 import { Trails } from './fx/Trails';
@@ -10,6 +12,8 @@ import { BALL_FRAGMENT } from './materials/ball';
 import { BRICK_FRAGMENT } from './materials/brick';
 import { FULLSCREEN_VERTEX } from './materials/common';
 import { PADDLE_FRAGMENT } from './materials/paddle';
+import { BARRIER_FRAGMENT, BOLT_FRAGMENT, CAPSULE_FRAGMENT } from './materials/power';
+import { glyphMask } from './glyphs';
 import { BRICK_GAP, brickTint, COLORS } from './palette';
 import { QuadBatch } from './QuadBatch';
 
@@ -17,6 +21,10 @@ import { QuadBatch } from './QuadBatch';
 const FIELD_PADDING = 28;
 const MAX_BRICKS = 256;
 const MAX_BALLS = 32;
+const MAX_CAPSULES = 8;
+const MAX_BOLTS = 64;
+/** Seconds over which a power's visuals fade out before it ends. */
+const POWER_FADE = 1;
 /** Ticks a brick stays lit after a hit. */
 const FLASH_TICKS = 12;
 /** Horizon height as a fraction of the window, from the bottom. */
@@ -24,12 +32,17 @@ const HORIZON = 0.42;
 /** Sun radius in screen heights: fills this fraction of the gap right of the field, within limits. */
 const SUN = { gapFill: 0.8, minRadius: 0.06, maxRadius: 0.27 } as const;
 const BRICK_KIND = { normal: 0, tough: 1, steel: 2 } as const;
+const POWER_KINDS = Object.keys(POWER_LOOK) as PowerKind[];
+const CAPSULE_LOOK = Object.fromEntries(
+  POWER_KINDS.map((k) => [k, { color: new THREE.Color(POWER_LOOK[k].color), mask: glyphMask(POWER_LOOK[k].glyph), bad: POWER_LOOK[k].bad ? 1 : 0 }]),
+) as Record<PowerKind, { color: THREE.Color; mask: number; bad: number }>;
 
 /**
  * Two passes per frame:
  * 1. backdrop (synthwave scenery + playfield glass and frame) into its own target, so glass
  *    bricks can sample and refract it;
- * 2. the main scene (backdrop blit, bricks, trails, paddle, balls, particles) through PostFx.
+ * 2. the main scene (backdrop blit, bricks, barrier, trails, capsules, bolts, paddle, balls,
+ *    particles) through PostFx.
  * Everything is instanced SDF quads; effects come from simulation events via GameFx.
  */
 export class Renderer {
@@ -90,9 +103,16 @@ export class Renderer {
     pad: 4,
     fragmentShader: PADDLE_FRAGMENT,
     renderOrder: 25,
-    uniforms: { uAccent: { value: COLORS.magenta } },
+    uniforms: {
+      uAccent: { value: COLORS.magenta },
+      uCatch: { value: CAPSULE_LOOK.catch.color },
+      uLaserFlash: { value: 0 },
+    },
   });
   private balls = new QuadBatch({ max: MAX_BALLS, pad: 3, fragmentShader: BALL_FRAGMENT, renderOrder: 30 });
+  private barrier = new QuadBatch({ max: 1, pad: 6, fragmentShader: BARRIER_FRAGMENT, renderOrder: 15 });
+  private capsules = new QuadBatch({ max: MAX_CAPSULES, pad: 4, fragmentShader: CAPSULE_FRAGMENT, renderOrder: 22 });
+  private bolts = new QuadBatch({ max: MAX_BOLTS, pad: 4, fragmentShader: BOLT_FRAGMENT, renderOrder: 24 });
 
   private ballPositions: { x: number; y: number }[] = [];
   private color = new THREE.Color();
@@ -127,7 +147,18 @@ export class Renderer {
         depthWrite: false,
       }),
     );
-    this.scene.add(blit, this.bricks.mesh, this.trails.batch.mesh, this.paddle.mesh, this.balls.mesh, this.fx.particles.pieces.mesh, this.fx.particles.batch.mesh);
+    this.scene.add(
+      blit,
+      this.bricks.mesh,
+      this.barrier.mesh,
+      this.trails.batch.mesh,
+      this.capsules.mesh,
+      this.bolts.mesh,
+      this.paddle.mesh,
+      this.balls.mesh,
+      this.fx.particles.pieces.mesh,
+      this.fx.particles.batch.mesh,
+    );
 
     this.post = new PostFx(this.renderer, this.scene, this.camera);
     new ResizeObserver(() => this.resize()).observe(document.body);
@@ -211,6 +242,9 @@ export class Renderer {
 
     this.drawField();
     this.drawBricks(game);
+    this.drawBarrier(game);
+    this.drawCapsules(game, alpha);
+    this.drawBolts(game, alpha);
     this.drawPaddle(game, alpha);
     this.drawBalls(game);
     this.trails.draw(game.balls, this.ballPositions, this.fx.now);
@@ -274,22 +308,71 @@ export class Renderer {
     b.commit();
   }
 
+  private drawBarrier(game: Game): void {
+    this.barrier.begin();
+    const level = powerLevel(game, 'barrier');
+    if (level > 0) {
+      const hit = this.fx.barrierHit;
+      this.barrier.push(FIELD.width / 2, POWER.barrierY, FIELD.width, 1.2, COLORS.yellow, 1, level, hit.x, hit.strength);
+    }
+    this.barrier.commit();
+  }
+
+  private drawCapsules(game: Game, alpha: number): void {
+    this.capsules.begin();
+    for (const c of game.capsules) {
+      const look = CAPSULE_LOOK[c.kind];
+      const y = c.py + (c.y - c.py) * alpha;
+      this.capsules.push(c.x, y, POWER.capsuleWidth, POWER.capsuleHeight, look.color, 1, look.mask, look.bad);
+    }
+    this.capsules.commit();
+  }
+
+  private drawBolts(game: Game, alpha: number): void {
+    this.bolts.begin();
+    for (const bolt of game.bolts) {
+      const tip = bolt.py + (bolt.y - bolt.py) * alpha;
+      this.bolts.push(bolt.x, tip - POWER.boltLength / 2, 1.6, POWER.boltLength, COLORS.magenta);
+    }
+    this.bolts.commit();
+  }
+
   private drawPaddle(game: Game, alpha: number): void {
     const p = game.paddle;
     const x = p.px + (p.x - p.px) * alpha;
+    this.paddle.uniforms.uLaserFlash!.value = this.fx.laserFlash;
     this.paddle.begin();
-    this.paddle.push(x, p.y, p.w, p.h, COLORS.cyan, 1, this.fx.paddlePulse, this.fx.paddleHitOffset);
+    this.paddle.push(
+      x,
+      p.y,
+      p.w,
+      p.h,
+      COLORS.cyan,
+      1,
+      this.fx.paddlePulse,
+      this.fx.paddleHitOffset,
+      powerLevel(game, 'laser'),
+      powerLevel(game, 'catch'),
+    );
     this.paddle.commit();
   }
 
+  /** Piercing balls burn hotter. */
   private drawBalls(game: Game): void {
+    const pierce = powerLevel(game, 'pierce');
+    this.color.copy(COLORS.cyan).lerp(CAPSULE_LOOK.pierce.color, pierce * 0.7);
     this.balls.begin();
     this.ballPositions.forEach((pos, i) => {
       const r = game.balls[i]?.r ?? 4;
-      this.balls.push(pos.x, pos.y, r * 2, r * 2, COLORS.cyan);
+      this.balls.push(pos.x, pos.y, r * 2, r * 2, this.color, 1, pierce);
     });
     this.balls.commit();
   }
+}
+
+/** 1 while a power runs, fading to 0 over its last second. */
+function powerLevel(game: Game, kind: TimedPower): number {
+  return Math.min(1, game.timers[kind] / POWER_FADE);
 }
 
 function fullscreenQuad(material: THREE.ShaderMaterial): THREE.Mesh {

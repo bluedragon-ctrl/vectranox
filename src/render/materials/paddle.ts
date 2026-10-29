@@ -1,13 +1,20 @@
+import { POWER } from '../../config/powers';
 import { SDF } from './common';
 
 /**
  * Paddle: glass capsule with a neon rim, a white-hot energy core and magenta emitters at both
  * ends. Same 2.5D treatment as the bricks (top face, side face, shadow).
  *
- * Instance data: colour = rim tint. params: x = hit pulse (0..1), y = hit offset (-1..1).
+ * Power-ups add to it: laser raises two emitters where the bolts leave, catch coats the top
+ * with a glowing film.
+ *
+ * Instance data: colour = rim tint. params: x = hit pulse (0..1), y = hit offset (-1..1),
+ * z = laser (0..1), w = catch (0..1).
  */
 export const PADDLE_FRAGMENT = /* glsl */ `
 uniform vec3 uAccent;
+uniform vec3 uCatch;
+uniform float uLaserFlash;
 varying vec2 vLocal;
 varying vec2 vHalf;
 varying vec4 vColor;
@@ -16,12 +23,15 @@ varying vec4 vParams;
 ${SDF}
 
 const float DEPTH = 2.0;
+const float BOLT_INSET = ${POWER.boltInset.toFixed(1)};
 
 void main() {
   vec2 p = vLocal;
   vec3 tint = vColor.rgb;
   float pulse = vParams.x;
   float hitX = vParams.y * vHalf.x;
+  float laser = vParams.z;
+  float catchFilm = vParams.w;
 
   vec2 hb = vec2(vHalf.x, vHalf.y - DEPTH * 0.5);
   vec2 pt = p - vec2(0.0, DEPTH * 0.5);
@@ -50,15 +60,27 @@ void main() {
   float spread = exp(-abs(pt.x - hitX) / (4.0 + 26.0 * (1.0 - pulse)));
   top += vec3(1.0) * pulse * spread * 0.7;
 
+  // Catch: a sticky film along the top edge.
+  top = mix(top, top * 0.6 + uCatch * 0.3, catchFilm);
+  top += uCatch * catchFilm * stroke(pt.y - hb.y + 0.9, 0.6) * 1.2;
+
   vec3 rimColor = mix(tint, uAccent, capMask);
+  rimColor = mix(rimColor, uCatch, catchFilm * smoothstep(0.2, 0.8, yN));
   top += rimColor * stroke(dTop + 0.35, 0.3) * 0.9;
   vec3 side = rimColor * 0.28 * (0.75 + 0.35 * smoothstep(-vHalf.y, -vHalf.y + DEPTH, p.y));
 
+  // Laser emitters: short barrels rising from the top at the bolt muzzles.
+  vec2 barrel = vec2(abs(p.x) - (vHalf.x - BOLT_INSET), p.y - vHalf.y - 0.6);
+  float dBarrel = sdRoundBox(barrel, vec2(1.0, 1.9), 0.6);
+  vec3 barrelColor = mix(uAccent, vec3(1.0), 0.25 + 0.5 * uLaserFlash) * (0.8 + 0.6 * smoothstep(-1.9, 1.9, barrel.y));
+
   vec4 col = vec4(0.0, 0.0, 0.0, 0.5 * (1.0 - smoothstep(-1.5, 3.0, dShadow)));
   col = over(vec4(side, 1.0) * fill(dSil), col);
+  col = over(vec4(barrelColor, 1.0) * fill(dBarrel) * laser, col);
   col = over(vec4(top, 1.0) * fill(dTop), col);
   float outside = 1.0 - fill(dSil);
   col.rgb += rimColor * (exp(-max(dSil, 0.0) * 1.1) * (0.075 + pulse * 0.18)) * outside;
+  col.rgb += uAccent * exp(-max(dBarrel, 0.0) * 0.9) * (0.08 + uLaserFlash * 0.4) * laser * (1.0 - fill(dBarrel));
   gl_FragColor = col;
 }
 `;

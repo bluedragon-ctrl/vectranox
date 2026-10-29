@@ -19,10 +19,12 @@ npm run dev
 |---|---|---|
 | Start / resume | click the playfield (locks the pointer) | Enter |
 | Move | mouse | ← → or A D |
-| Launch | click | Space |
+| Launch / release caught ball | click | Space |
+| Fire laser | hold button | hold Space |
 | Pause | Esc | P or Esc |
 
-In dev builds the running game is available in the browser console as `vnx.game`.
+In dev builds the running game is available in the browser console as `vnx.game`;
+`vnx.game.applyPower('laser')` grants a power-up (any kind from `POWER.kinds` in `src/config/powers.ts`, which also holds the drop chance and per-kind drop weights).
 
 ## Deploy
 
