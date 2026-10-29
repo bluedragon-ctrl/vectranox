@@ -45,3 +45,11 @@ export const COLORS = {
 export const POWER_COLORS = Object.fromEntries(
   (Object.keys(POWER_LOOK) as PowerKind[]).map((k) => [k, new THREE.Color(POWER_LOOK[k].color)]),
 ) as Record<PowerKind, THREE.Color>;
+
+/**
+ * Capsule tints: power colours capped like glass bricks, so a light capsule's letter and rim stay
+ * under the bloom threshold just as the dark ones do, instead of smearing into a halo.
+ */
+export const CAPSULE_COLORS = Object.fromEntries(
+  (Object.keys(POWER_COLORS) as PowerKind[]).map((k) => [k, capBrightness(POWER_COLORS[k].clone())]),
+) as Record<PowerKind, THREE.Color>;
