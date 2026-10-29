@@ -1,7 +1,6 @@
 import type { VisualSettings } from '../core/settings';
 
 const OPTIONS: { key: keyof VisualSettings; label: string }[] = [
-  { key: 'crt', label: 'CRT FILTER' },
   { key: 'bloom', label: 'BLOOM' },
   { key: 'reduceFx', label: 'REDUCE FLASH/SHAKE' },
 ];

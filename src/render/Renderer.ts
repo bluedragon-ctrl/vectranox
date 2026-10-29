@@ -37,7 +37,7 @@ const BRICK_KIND = { normal: 0, tough: 1, steel: 2 } as const;
  * Everything is instanced SDF quads; effects come from simulation events via GameFx.
  */
 export class Renderer {
-  settings: VisualSettings = { crt: false, bloom: true, reduceFx: false };
+  settings: VisualSettings = { bloom: true, reduceFx: false };
 
   private renderer: THREE.WebGLRenderer;
   private camera = new THREE.OrthographicCamera();
@@ -97,7 +97,7 @@ export class Renderer {
     renderOrder: 25,
     uniforms: { uTime: this.time.fx, uAccent: { value: COLORS.magenta } },
   });
-  private balls = new QuadBatch({ max: MAX_BALLS, pad: 5, fragmentShader: BALL_FRAGMENT, renderOrder: 30 });
+  private balls = new QuadBatch({ max: MAX_BALLS, pad: 3, fragmentShader: BALL_FRAGMENT, renderOrder: 30 });
 
   private ballPositions: { x: number; y: number }[] = [];
   private color = new THREE.Color();
@@ -226,13 +226,10 @@ export class Renderer {
     this.renderer.render(this.backdropScene, this.camera);
     this.renderer.setRenderTarget(null);
     this.post.render({
-      time: this.time.sky.value,
       bloom: this.settings.bloom,
-      crt: this.settings.crt,
       aberration: this.fx.aberration,
       flash: this.fx.flashColor,
       flashAmount: this.fx.flash,
-      flicker: !this.settings.reduceFx,
     });
   }
 

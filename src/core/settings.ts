@@ -1,8 +1,7 @@
 /** Player-facing video options. Persisted in localStorage. */
 export interface VisualSettings {
-  crt: boolean;
   bloom: boolean;
-  /** Tones down flashes, chromatic pulses and flicker, and disables screen shake. */
+  /** Tones down flashes and chromatic pulses, stops star twinkle, and disables screen shake. */
   reduceFx: boolean;
 }
 
@@ -10,7 +9,6 @@ const KEY = 'vectranox.video';
 
 export function loadVisualSettings(): VisualSettings {
   const defaults: VisualSettings = {
-    crt: false,
     bloom: true,
     reduceFx: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
   };
@@ -19,7 +17,6 @@ export function loadVisualSettings(): VisualSettings {
     if (!raw) return defaults;
     const saved = JSON.parse(raw) as Partial<Record<keyof VisualSettings, unknown>>;
     return {
-      crt: typeof saved.crt === 'boolean' ? saved.crt : defaults.crt,
       bloom: typeof saved.bloom === 'boolean' ? saved.bloom : defaults.bloom,
       reduceFx: typeof saved.reduceFx === 'boolean' ? saved.reduceFx : defaults.reduceFx,
     };

@@ -113,7 +113,6 @@ export class GameFx {
           angle: Math.atan2(iy - y, ix - x),
           spread: 1.1,
         });
-        this.particles.ring(ix, iy, 1, steel ? 9 : 12, 0.22, steel ? COLORS.white : color, 0.7);
         this.shake.add(steel ? 0.06 : 0.04);
       }),
       ev.on('brickDestroyed', ({ id, kind, x, y }) => {
@@ -123,8 +122,6 @@ export class GameFx {
         const h = brick?.h ?? 12;
         this.particles.shards(x, y, w * 0.8, h * 0.6, { count: 10, color, speed: [30, 140], angle: Math.PI / 2, spread: Math.PI * 0.9 });
         this.particles.sparks(x, y, { count: 12, color, speed: [80, 260] });
-        this.particles.ring(x, y, 4, 28, 0.4, color);
-        this.particles.glow(x, y, 14, 46, 0.2, color, 0.9);
         this.shake.add(kind === 'tough' ? 0.16 : 0.1);
       }),
       ev.on('ballLost', ({ id }) => {
