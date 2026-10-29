@@ -16,7 +16,7 @@ import { FULLSCREEN_VERTEX } from './materials/common';
 import { PADDLE_FRAGMENT } from './materials/paddle';
 import { BARRIER_FRAGMENT, BLAST_FRAGMENT, BOLT_FRAGMENT, CAPSULE_FRAGMENT, CHARGE_FRAGMENT } from './materials/power';
 import { glyphMask } from './glyphs';
-import { BRICK_GAP, brickTint, COLORS, POWER_COLORS } from './palette';
+import { BRICK_GAP, brickTint, CAPSULE_COLORS, COLORS, POWER_COLORS } from './palette';
 import { QuadBatch } from './QuadBatch';
 
 /** Screen-space padding (px) between the playfield frame and its area. */
@@ -42,7 +42,7 @@ const SHAKE_MARGIN = 12;
 const BRICK_KIND = { normal: 0, tough: 1, steel: 2 } as const;
 const POWER_KINDS = Object.keys(POWER_LOOK) as PowerKind[];
 const CAPSULE_LOOK = Object.fromEntries(
-  POWER_KINDS.map((k) => [k, { color: POWER_COLORS[k], mask: glyphMask(POWER_LOOK[k].glyph), bad: POWER_LOOK[k].bad ? 1 : 0 }]),
+  POWER_KINDS.map((k) => [k, { color: CAPSULE_COLORS[k], mask: glyphMask(POWER_LOOK[k].glyph), bad: POWER_LOOK[k].bad ? 1 : 0 }]),
 ) as Record<PowerKind, { color: THREE.Color; mask: number; bad: number }>;
 
 /**
