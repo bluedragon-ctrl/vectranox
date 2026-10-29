@@ -1,14 +1,15 @@
 import * as THREE from 'three';
 import { QuadBatch } from '../QuadBatch';
-import { PARTICLE_FRAGMENT, PARTICLE_KIND, PIECE_FRAGMENT } from '../materials/particle';
+import { METAL_PIECE_FRAGMENT, PARTICLE_FRAGMENT, PARTICLE_KIND, PIECE_FRAGMENT } from '../materials/particle';
 import type { Shard } from './fracture';
 
 const MAX = 2048;
-/** Glass pieces share the pool but draw with their own shader. */
+/** Glass and metal pieces share the pool but draw with their own shaders. */
 const PIECE = 2;
+const METAL_PIECE = 3;
 const WHITE = new THREE.Color(1, 1, 1);
 
-type Kind = (typeof PARTICLE_KIND)[keyof typeof PARTICLE_KIND] | typeof PIECE;
+type Kind = (typeof PARTICLE_KIND)[keyof typeof PARTICLE_KIND] | typeof PIECE | typeof METAL_PIECE;
 type Range = readonly [number, number];
 
 export interface BurstOptions {
@@ -37,12 +38,13 @@ const SPARK: BurstDefaults = { life: [0.18, 0.45], size: [1.2, 2], gravity: -120
 const GLINT: BurstDefaults = { life: [0.1, 0.2], size: [2.5, 4.5], gravity: 0, drag: 6 };
 
 /**
- * CPU-simulated visual particles: metal sparks, glass glints and shattered glass pieces.
+ * CPU-simulated visual particles: metal sparks, glass glints and broken glass or metal pieces.
  * Purely cosmetic: driven by wall-clock time, never fed back into the simulation.
  */
 export class Particles {
   readonly batch = new QuadBatch({ max: MAX, fragmentShader: PARTICLE_FRAGMENT, pad: 3, renderOrder: 41 });
   readonly pieces = new QuadBatch({ max: MAX, fragmentShader: PIECE_FRAGMENT, pad: 2, renderOrder: 40 });
+  readonly metalPieces = new QuadBatch({ max: MAX, fragmentShader: METAL_PIECE_FRAGMENT, pad: 1, renderOrder: 40 });
   /** Strength of the facet glint on spinning pieces (lowered by reduce-flashing). */
   glintScale = 1;
 
@@ -81,12 +83,12 @@ export class Particles {
     this.burst(PARTICLE_KIND.glint, GLINT, x, y, o);
   }
 
-  /** One glass piece (see `fractureRect`), tumbling away with the given velocity. */
-  piece(s: Shard, vx: number, vy: number, color: THREE.Color, life: number): void {
+  /** One glass (or `metal`) piece (see `fractureRect`), tumbling away with the given velocity. */
+  piece(s: Shard, vx: number, vy: number, color: THREE.Color, life: number, metal = false): void {
     const radius = Math.sqrt(
       Math.max(s.ax * s.ax + s.ay * s.ay, s.bx * s.bx + s.by * s.by, (s.ax + s.bx) ** 2 + (s.ay + s.by) ** 2),
     );
-    const k = this.spawn(PIECE, s.cx, s.cy, vx, vy, life, radius, color);
+    const k = this.spawn(metal ? METAL_PIECE : PIECE, s.cx, s.cy, vx, vy, life, radius, color);
     if (k < 0) return;
     this.verts[k * 4] = s.ax;
     this.verts[k * 4 + 1] = s.ay;
@@ -121,9 +123,9 @@ export class Particles {
 
   draw(): void {
     const b = this.batch;
-    const p = this.pieces;
     b.begin();
-    p.begin();
+    this.pieces.begin();
+    this.metalPieces.begin();
     for (let i = 0; i < this.n; i++) {
       const t = this.age[i]! / this.life[i]!;
       const x = this.x[i]!;
@@ -143,7 +145,8 @@ export class Particles {
           b.push(x, y, len, size * 0.28, color, 1 - t, PARTICLE_KIND.glint, 0, 0, 0, Math.atan2(vy, vx));
           break;
         }
-        case PIECE: {
+        case PIECE:
+        case METAL_PIECE: {
           // Pieces shrink a little as they fade, and flash when a face turns to the light.
           const s = 1 - 0.35 * t;
           const rot = this.rot[i]!;
@@ -151,13 +154,14 @@ export class Particles {
           color.lerp(WHITE, glint * 0.6).multiplyScalar(1 + glint);
           const extent = 2 * size * s;
           const v = i * 4;
-          p.push(x, y, extent, extent, color, 1 - t * t * t, this.verts[v]! * s, this.verts[v + 1]! * s, this.verts[v + 2]! * s, this.verts[v + 3]! * s, rot);
+          (this.kind[i] === PIECE ? this.pieces : this.metalPieces).push(x, y, extent, extent, color, 1 - t * t * t, this.verts[v]! * s, this.verts[v + 1]! * s, this.verts[v + 2]! * s, this.verts[v + 3]! * s, rot);
           break;
         }
       }
     }
     b.commit();
-    p.commit();
+    this.pieces.commit();
+    this.metalPieces.commit();
   }
 
   private burst(kind: Kind, d: BurstDefaults, x: number, y: number, o: BurstOptions): void {

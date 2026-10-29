@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { BRICK, FIELD } from '../../config/game';
 import type { Game } from '../../game/Game';
 import { BRICK_GAP, brickTint, COLORS, POWER_COLORS } from '../palette';
-import { chip, fractureRect } from './fracture';
+import { fractureRect } from './fracture';
 import { Particles } from './Particles';
 import { Shake } from './Shake';
 import type { Trails } from './Trails';
@@ -116,26 +116,15 @@ export class GameFx {
         this.shake.add(0.3);
         this.pulse(POWER_COLORS.detonator, 0.08, 0.3);
       }),
+      // Only the metal bricks survive a hit (glass breaks at once): hot sparks, nothing breaks off.
       ev.on('brickHit', ({ id, kind, by, x, y, ix, iy }) => {
-        const brick = game.bricks.find((br) => br.id === id);
-        const away = Math.atan2(iy - y, ix - x);
-        if (by === 'pulse' || by === 'blast') this.areaHits.add(id);
+        const area = by === 'pulse' || by === 'blast';
+        if (area) this.areaHits.add(id);
         else this.areaHits.delete(id);
-        if (kind === 'steel') {
-          // Metal on metal: hot sparks, nothing breaks.
-          this.particles.sparks(ix, iy, { count: 10, color: COLORS.white, speed: [70, 220], angle: away, spread: 1.1 });
-          this.shake.add(0.06);
-          return;
-        }
-        // Glass that holds: a few chips and glints fly off where the ball struck.
-        const color = brick ? brickTint(brick, this.tint) : this.tint.copy(COLORS.yellow);
-        for (let i = 0; i < 3; i++) {
-          const a = away + (Math.random() * 2 - 1) * 1.1;
-          const s = 40 + Math.random() * 80;
-          this.particles.piece(chip(ix, iy, 0.9 + Math.random() * 0.8), Math.cos(a) * s, Math.sin(a) * s, color, 0.35 + Math.random() * 0.25);
-        }
-        this.particles.glints(ix, iy, { count: 4, color, speed: [100, 220], angle: away, spread: 1.0 });
-        this.shake.add(by === 'pulse' || by === 'blast' ? 0 : 0.04);
+        const steel = kind === 'steel';
+        const color = steel ? COLORS.white : COLORS.yellow;
+        this.particles.sparks(ix, iy, { count: steel ? 10 : 8, color, speed: [70, 220], angle: Math.atan2(iy - y, ix - x), spread: 1.1 });
+        this.shake.add(steel ? 0.06 : area ? 0 : 0.04);
       }),
       ev.on('brickDestroyed', ({ id, kind, by, x, y, ix, iy, vx, vy }) => {
         this.areaHits.delete(id);
@@ -151,15 +140,18 @@ export class GameFx {
           pushX = ((x - centre.x) / d) * BLAST_PUSH;
           pushY = ((y - centre.y) / d) * BLAST_PUSH;
         }
-        // The brick breaks into pieces radiating from the impact; tough glass breaks finer.
-        for (const s of fractureRect(x, y, w, h, ix, iy, kind === 'tough' ? 5 : 2)) {
+        // The brick breaks into pieces radiating from the impact: glass shards, or for an armoured
+        // (tough) plate a few metal ones with straight hot streaks.
+        const metal = kind === 'tough';
+        for (const s of fractureRect(x, y, w, h, ix, iy, metal ? 3 : 2)) {
           const dx = s.cx - ix;
           const dy = s.cy - iy;
           const dist = Math.hypot(dx, dy) || 1;
           const speed = (35 + Math.random() * 60) * (1.3 - Math.min(dist / (w * 0.5), 1) * 0.6);
-          this.particles.piece(s, (dx / dist) * speed + pushX, (dy / dist) * speed + pushY, color, 0.55 + Math.random() * 0.35);
+          this.particles.piece(s, (dx / dist) * speed + pushX, (dy / dist) * speed + pushY, color, 0.55 + Math.random() * 0.35, metal);
         }
-        this.particles.glints(ix, iy, { count: 5, color, speed: [120, 260] });
+        if (metal) this.particles.sparks(ix, iy, { count: 8, color: COLORS.yellow, speed: [120, 260], gravity: 0 });
+        else this.particles.glints(ix, iy, { count: 5, color, speed: [120, 260] });
         // A pulse or blast breaks many bricks in one tick; its own kick stands in for theirs.
         if (by !== 'pulse' && by !== 'blast') this.shake.add(kind === 'tough' ? 0.16 : 0.1);
       }),

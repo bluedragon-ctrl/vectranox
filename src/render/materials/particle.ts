@@ -64,3 +64,24 @@ void main() {
   gl_FragColor = col;
 }
 `;
+
+/**
+ * Metal piece of a broken armoured (tough) brick: the same triangle as PIECE_FRAGMENT, but an
+ * opaque plate with a lit cut edge and no glow. The spin glint in colour rgb reads as metal flashing.
+ */
+export const METAL_PIECE_FRAGMENT = /* glsl */ `
+varying vec2 vLocal;
+varying vec4 vColor;
+varying vec4 vParams;
+
+${SDF}
+
+void main() {
+  vec2 a = vParams.xy;
+  vec2 b = vParams.zw;
+  float d = sdTri(vLocal, a, b, -(a + b));
+  vec3 tint = vColor.rgb;
+  vec3 c = tint * 0.7 + mix(tint, vec3(1.0), 0.5) * stroke(d + 0.3, 0.3) * 0.8;
+  gl_FragColor = vec4(c, 1.0) * fill(d) * vColor.a;
+}
+`;

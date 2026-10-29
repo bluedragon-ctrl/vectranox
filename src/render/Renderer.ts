@@ -174,6 +174,7 @@ export class Renderer {
       this.blast.mesh,
       this.balls.mesh,
       this.fx.particles.pieces.mesh,
+      this.fx.particles.metalPieces.mesh,
       this.fx.particles.batch.mesh,
     );
 

@@ -54,14 +54,6 @@ export function fractureRect(cx: number, cy: number, w: number, h: number, ix: n
   return out;
 }
 
-/** A small random triangular chip of glass centred on (x, y). Any a, b work: the third vertex -(a + b) keeps the centroid at the centre. */
-export function chip(x: number, y: number, r: number): Shard {
-  const a0 = Math.random() * Math.PI * 2;
-  const a1 = a0 + 1.8 + Math.random() * 1.2;
-  const rb = r * (0.6 + Math.random() * 0.4);
-  return { cx: x, cy: y, ax: Math.cos(a0) * r, ay: Math.sin(a0) * r, bx: Math.cos(a1) * rb, by: Math.sin(a1) * rb };
-}
-
 function push(out: Shard[], cx: number, cy: number, a: Pt, b: Pt, c: Pt): void {
   const mx = (a.x + b.x + c.x) / 3;
   const my = (a.y + b.y + c.y) / 3;
