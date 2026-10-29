@@ -3,8 +3,9 @@ import type { Ball } from '../../game/types';
 import { QuadBatch } from '../QuadBatch';
 import { TRAIL_FRAGMENT } from '../materials/ball';
 
-/** Seconds of history a trail shows. */
+/** Seconds of history a trail shows, up to `MAX_LENGTH` world units (so fast balls don't read as beams). */
 const TRAIL_TIME = 0.16;
+const MAX_LENGTH = 40;
 const MAX_POINTS = 32;
 /** Minimum travel (world units) before a new trail point is recorded. */
 const MIN_STEP = 1.5;
@@ -15,16 +16,27 @@ interface Point {
   t: number;
 }
 
+interface Trail {
+  pts: Point[];
+  /** The ball's radius and rendered position this frame; it leads the newest segment. */
+  r: number;
+  head: Point;
+  /** False once the ball is gone and only the tail is left to fade. */
+  live: boolean;
+}
+
 /**
  * Ball trails from the rendered (interpolated) positions of recent frames. Each segment
  * between consecutive points is a tapered capsule; max blending keeps the joints even.
  */
 export class Trails {
   readonly batch = new QuadBatch({ max: 1024, fragmentShader: TRAIL_FRAGMENT, pad: 5, blending: 'max', renderOrder: 20 });
-  private trails = new Map<number, Point[]>();
+  private trails = new Map<number, Trail>();
   private head = new THREE.Color();
   private tail = new THREE.Color();
   private mixed = new THREE.Color();
+  /** Reused end point of a trail cut at `MAX_LENGTH`. */
+  private cut: Point = { x: 0, y: 0, t: 0 };
 
   constructor(headColor: THREE.Color, tailColor: THREE.Color) {
     this.head.copy(headColor);
@@ -37,13 +49,18 @@ export class Trails {
 
   /** Records this frame's positions and drops stale history. `positions` is parallel to `balls`. */
   update(balls: readonly Ball[], positions: readonly { x: number; y: number }[], now: number): void {
-    const live = new Set<number>();
+    for (const trail of this.trails.values()) trail.live = false;
     balls.forEach((b, i) => {
       const pos = positions[i];
       if (!pos) return;
-      live.add(b.id);
-      let pts = this.trails.get(b.id);
-      if (!pts) this.trails.set(b.id, (pts = []));
+      let trail = this.trails.get(b.id);
+      if (!trail) this.trails.set(b.id, (trail = { pts: [], r: b.r, head: { x: 0, y: 0, t: 0 }, live: true }));
+      trail.live = true;
+      trail.r = b.r;
+      trail.head.x = pos.x;
+      trail.head.y = pos.y;
+      trail.head.t = now;
+      const pts = trail.pts;
       // A ball held on the paddle has no trail.
       if (b.vx === 0 && b.vy === 0) {
         pts.length = 0;
@@ -55,36 +72,54 @@ export class Trails {
         if (pts.length > MAX_POINTS) pts.shift();
       }
     });
-    for (const [id, pts] of this.trails) {
-      while (pts.length > 0 && now - (pts[0]?.t ?? now) > TRAIL_TIME) pts.shift();
-      if (!live.has(id) && pts.length === 0) this.trails.delete(id);
+    for (const [id, { pts, live }] of this.trails) {
+      while (pts.length > 0 && now - pts[0]!.t > TRAIL_TIME) pts.shift();
+      if (!live && pts.length === 0) this.trails.delete(id);
     }
   }
 
-  draw(balls: readonly Ball[], positions: readonly { x: number; y: number }[], now: number): void {
-    const b = this.batch;
-    b.begin();
-    const radius = new Map(balls.map((ball, i) => [ball.id, { r: ball.r, pos: positions[i] }]));
-    for (const [id, pts] of this.trails) {
-      const info = radius.get(id);
-      const r = (info?.r ?? 4) * 0.7;
-      // The newest segment runs from the last point to the ball's current position.
-      const chain = info?.pos ? [...pts, { x: info.pos.x, y: info.pos.y, t: now }] : pts;
-      for (let i = 0; i + 1 < chain.length; i++) {
-        const a = chain[i];
-        const c = chain[i + 1];
-        if (!a || !c) continue;
-        const ka = Math.max(0, 1 - (now - a.t) / TRAIL_TIME);
-        const kc = Math.max(0, 1 - (now - c.t) / TRAIL_TIME);
-        const len = Math.hypot(c.x - a.x, c.y - a.y);
-        if (len < 0.01 || kc <= 0) continue;
-        const rc = r * (0.35 + 0.65 * kc);
-        const ra = r * (0.35 + 0.65 * ka);
-        const maxR = Math.max(ra, rc);
-        this.mixed.copy(this.tail).lerp(this.head, (ka + kc) / 2);
-        b.push((a.x + c.x) / 2, (a.y + c.y) / 2, len + maxR * 2, maxR * 2, this.mixed, kc, rc, ra, ka, 0, Math.atan2(c.y - a.y, c.x - a.x));
+  /** Walks each trail back from its head; it tapers out by age or by distance, whichever ends first. */
+  draw(now: number): void {
+    this.batch.begin();
+    for (const { pts, r, head, live } of this.trails.values()) {
+      let c = live ? head : pts[pts.length - 1];
+      if (!c) continue;
+      let kc = fade(c, 0, now);
+      let dist = 0;
+      for (let i = pts.length - (live ? 1 : 2); i >= 0 && kc > 0; i--) {
+        let a = pts[i]!;
+        let len = Math.hypot(c.x - a.x, c.y - a.y);
+        dist += len;
+        // A long step (low frame rate) can run past the length limit: end the trail right there.
+        const over = dist - MAX_LENGTH;
+        if (over > 0) {
+          const keep = (len - over) / len;
+          this.cut.x = c.x + (a.x - c.x) * keep;
+          this.cut.y = c.y + (a.y - c.y) * keep;
+          this.cut.t = a.t;
+          a = this.cut;
+          len -= over;
+        }
+        const ka = fade(a, Math.min(dist, MAX_LENGTH), now);
+        if (len >= 0.01) this.segment(a, c, len, ka, kc, r * 0.7);
+        c = a;
+        kc = ka;
       }
     }
-    b.commit();
+    this.batch.commit();
   }
+
+  /** Segment from tail point `a` to head point `c`, with fades `ka` and `kc`. */
+  private segment(a: Point, c: Point, len: number, ka: number, kc: number, r: number): void {
+    const rc = r * (0.35 + 0.65 * kc);
+    const ra = r * (0.35 + 0.65 * ka);
+    const maxR = Math.max(ra, rc);
+    this.mixed.copy(this.tail).lerp(this.head, (ka + kc) / 2);
+    this.batch.push((a.x + c.x) / 2, (a.y + c.y) / 2, len + maxR * 2, maxR * 2, this.mixed, kc, rc, ra, ka, 0, Math.atan2(c.y - a.y, c.x - a.x));
+  }
+}
+
+/** 1 at a point just laid down at the ball, 0 once it is `TRAIL_TIME` old or `MAX_LENGTH` behind. */
+function fade(p: Point, dist: number, now: number): number {
+  return Math.max(0, Math.min(1 - (now - p.t) / TRAIL_TIME, 1 - dist / MAX_LENGTH));
 }

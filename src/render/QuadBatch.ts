@@ -57,10 +57,6 @@ export class QuadBatch {
     return this.mesh.material.uniforms;
   }
 
-  get full(): boolean {
-    return this.n >= this.options.max;
-  }
-
   begin(): void {
     this.n = 0;
   }
@@ -119,7 +115,7 @@ export class QuadBatch {
  * Premultiplied: shaders output colour already multiplied by alpha, so alpha 0 with colour
  * adds light (glows) while alpha 1 covers. Max: overlapping glows don't stack (trails).
  */
-export function applyBlending(material: THREE.Material, mode: BatchBlending): void {
+function applyBlending(material: THREE.Material, mode: BatchBlending): void {
   material.blending = THREE.CustomBlending;
   material.blendEquation = mode === 'max' ? THREE.MaxEquation : THREE.AddEquation;
   material.blendSrc = THREE.OneFactor;

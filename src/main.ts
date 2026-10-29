@@ -1,7 +1,6 @@
 import './styles/main.css';
 import { AudioEngine } from './audio/AudioEngine';
 import { GameSounds } from './audio/GameSounds';
-import { SIM } from './config/game';
 import { Input, type ControlMode } from './core/input';
 import { startLoop } from './core/loop';
 import { loadAudioSettings, loadVisualSettings, saveAudioSettings, saveVisualSettings } from './core/settings';
@@ -10,7 +9,7 @@ import { STAGES } from './levels/stages';
 import { Renderer } from './render/Renderer';
 import { AudioPanel } from './ui/AudioPanel';
 import { EventBanner } from './ui/EventBanner';
-import { EventConsole } from './ui/EventConsole';
+import { EventConsole, type UiEvent } from './ui/EventConsole';
 import { Overlay, type OverlayContent } from './ui/Overlay';
 import { PowerHud } from './ui/PowerHud';
 import { SettingsPanel } from './ui/SettingsPanel';
@@ -21,7 +20,7 @@ type UiState = 'title' | 'playing' | 'paused' | 'ended';
 /** Seconds the final banner stays up in-game before the end screen accepts input. */
 const END_DELAY = 1.5;
 const START_HINT = 'CLICK · MOUSE CONTROL\nENTER · KEYBOARD CONTROL';
-const CONTROLS_HINT = 'MOVE  ← → / A D / MOUSE\nLAUNCH · FIRE  SPACE / CLICK\nDETONATE  X / RIGHT CLICK\nPAUSE  P / ESC';
+const CONTROLS_HINT = 'MOVE  ← → / A D / MOUSE\nLAUNCH · FIRE  SPACE / CLICK\nDETONATE  X / RIGHT CLICK\nPAUSE  P / ESC · MUTE  M';
 
 function el<T extends HTMLElement = HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -44,9 +43,17 @@ const PLACEHOLDER_SCORES: [string, number][] = [
 
 function renderScores(list: HTMLElement): void {
   list.replaceChildren(
-    ...PLACEHOLDER_SCORES.map(([name, pts], i) => {
+    ...PLACEHOLDER_SCORES.map(([player, pts], i) => {
+      const name = document.createElement('span');
+      name.className = 'name';
+      name.textContent = player;
+      const rank = document.createElement('span');
+      rank.append(`${i + 1}. `, name);
+      const points = document.createElement('span');
+      points.className = 'pts';
+      points.textContent = formatScore(pts);
       const li = document.createElement('li');
-      li.innerHTML = `<span>${i + 1}. <span class="name">${name}</span></span><span class="pts">${String(pts).padStart(6, '0')}</span>`;
+      li.append(rank, points);
       return li;
     }),
   );
@@ -94,16 +101,20 @@ let game = newGame();
 
 function newGame(): Game {
   const g = new Game(Date.now() >>> 0, STAGES);
-  g.events.onAny((type, payload) => eventConsole.log(g.tick / SIM.tickRate, String(type), payload));
-  g.events.on('stageEvent', ({ kind }) => banner.show(kind, g.tick / SIM.tickRate));
+  g.events.onAny((type, payload) => eventConsole.log(g.time, String(type), payload));
+  g.events.on('stageEvent', ({ kind }) => banner.show(kind, g.time));
   renderer.attach(g);
   sounds.attach(g);
   g.start();
   return g;
 }
 
-function logUi(type: string, payload: Record<string, unknown> = {}): void {
-  eventConsole.log(game.tick / SIM.tickRate, type, payload);
+function logUi(type: UiEvent, payload: Record<string, unknown> = {}): void {
+  eventConsole.log(game.time, type, payload);
+}
+
+function releasePointer(): void {
+  if (document.pointerLockElement) document.exitPointerLock();
 }
 
 /** Start or resume. Mouse mode needs pointer lock first; play begins once the browser grants it. */
@@ -134,7 +145,7 @@ function pause(reason: string): void {
   ui = 'paused';
   audio.setMuffled(true);
   logUi('pause', { reason });
-  if (document.pointerLockElement) document.exitPointerLock();
+  releasePointer();
 }
 
 canvas.addEventListener('mousedown', (e) => {
@@ -238,19 +249,20 @@ startLoop({
     game.update(dt, input.sample(game.paddle.x));
     if ((game.state === 'over' || game.state === 'complete') && game.stateTime >= END_DELAY) {
       ui = 'ended';
-      if (document.pointerLockElement) document.exitPointerLock();
+      releasePointer();
     }
   },
   render: (alpha, frameTime) => {
+    // First, while layout is still clean: it reads the console's scroll position.
+    eventConsole.flush();
     // Paused: the accumulator still runs, so freeze interpolation at the last tick.
-    renderer.render(game, ui === 'playing' ? alpha : 1);
+    renderer.render(game, ui === 'playing' ? alpha : 1, frameTime);
     canvas.classList.toggle('hide-cursor', ui === 'playing');
     const content = overlayContent();
     overlay.show(content);
     // Menus and stage banners take over the field; a stage event banner never shares it.
     if (content) banner.hide();
-    else banner.update(game.tick / SIM.tickRate);
-    eventConsole.flush();
+    else banner.update(game.time);
 
     if (frameTime > 0) fps += (1 / frameTime - fps) * 0.05;
     setText(hudScore, formatScore(game.score));

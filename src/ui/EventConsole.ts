@@ -1,7 +1,13 @@
+import type { GameEvents } from '../game/events';
+
 const MAX_LINES = 250;
 
+/** Events logged by the UI itself (start, pause, settings) next to the simulation's. */
+export type UiEvent = 'play' | 'pause' | 'resume' | 'pointerLockFallback' | 'settings' | 'audio' | 'track' | 'musicFailed';
+type LogEvent = keyof GameEvents | UiEvent;
+
 /** Events tagged as system-level get a different colour in the log. */
-const SYSTEM_EVENTS = new Set([
+const SYSTEM_EVENTS: ReadonlySet<string> = new Set<LogEvent>([
   'runStart',
   'stageStart',
   'stageClear',
@@ -15,7 +21,7 @@ const SYSTEM_EVENTS = new Set([
 ]);
 
 /** Power-up events, highlighted separately. */
-const POWER_EVENTS = new Set(['powerCollect', 'powerEnd', 'detonate']);
+const POWER_EVENTS: ReadonlySet<string> = new Set<LogEvent>(['powerCollect', 'powerEnd', 'detonate']);
 
 function eventClass(type: string): string {
   if (SYSTEM_EVENTS.has(type)) return 'ev sys';
@@ -23,38 +29,50 @@ function eventClass(type: string): string {
   return type === 'stageEvent' ? 'ev stage' : 'ev';
 }
 
+interface Entry {
+  seconds: number;
+  type: string;
+  payload: unknown;
+}
+
 /**
  * Live "hacker terminal" log of game events in the left panel.
- * Lines are queued and flushed once per frame so a burst of events costs one DOM update.
+ * Entries are queued and flushed once per frame so a burst of events costs one DOM update;
+ * only the newest `MAX_LINES` of a burst ever become elements.
  */
 export class EventConsole {
-  private queue: HTMLDivElement[] = [];
+  private queue: Entry[] = [];
 
   constructor(private el: HTMLElement) {}
 
   log(seconds: number, type: string, payload: unknown): void {
-    const line = document.createElement('div');
-    line.className = 'line';
-
-    const t = document.createElement('span');
-    t.className = 't';
-    t.textContent = `[${formatTime(seconds)}] `;
-
-    const ev = document.createElement('span');
-    ev.className = eventClass(type);
-    ev.textContent = toConstCase(type);
-
-    line.append(t, ev, ` ${formatPayload(payload)}`);
-    this.queue.push(line);
+    this.queue.push({ seconds, type, payload });
   }
 
+  /** Call before other DOM writes in the frame: it reads the scroll position. */
   flush(): void {
     if (this.queue.length === 0) return;
     const stick = this.el.scrollTop + this.el.clientHeight >= this.el.scrollHeight - 4;
-    this.el.append(...this.queue.splice(0));
+    this.el.append(...this.queue.splice(0).slice(-MAX_LINES).map(line));
     while (this.el.childElementCount > MAX_LINES) this.el.firstElementChild?.remove();
     if (stick) this.el.scrollTop = this.el.scrollHeight;
   }
+}
+
+function line({ seconds, type, payload }: Entry): HTMLDivElement {
+  const div = document.createElement('div');
+  div.className = 'line';
+
+  const t = document.createElement('span');
+  t.className = 't';
+  t.textContent = `[${formatTime(seconds)}] `;
+
+  const ev = document.createElement('span');
+  ev.className = eventClass(type);
+  ev.textContent = toConstCase(type);
+
+  div.append(t, ev, ` ${formatPayload(payload)}`);
+  return div;
 }
 
 function formatTime(seconds: number): string {

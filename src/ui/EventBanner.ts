@@ -1,5 +1,6 @@
 import { STAGE_EVENT_LOOK, STAGE_EVENTS } from '../config/tuning';
 import type { StageEventKind } from '../game/types';
+import { cssColor } from './dom';
 
 /**
  * Short banner over the playfield when a stage event fires. Timed in game seconds, so it holds
@@ -19,7 +20,7 @@ export class EventBanner {
     const look = STAGE_EVENT_LOOK[kind];
     this.title.textContent = look.label;
     this.sub.textContent = look.sub;
-    this.root.style.setProperty('--c', `#${look.color.toString(16).padStart(6, '0')}`);
+    this.root.style.setProperty('--c', cssColor(look.color));
     this.shownAt = now;
     // Restart the fade-in even if a banner is already up.
     this.root.classList.add('hidden');

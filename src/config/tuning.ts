@@ -76,15 +76,15 @@ export const POWER = {
 export const POWER_LOOK = {
   multi: { label: 'MULTI', glyph: 'M', color: PALETTE.cyan, bad: false },
   laser: { label: 'LASER', glyph: 'L', color: PALETTE.magenta, bad: false },
-  expand: { label: 'EXPAND', glyph: 'E', color: 0x3d8bff, bad: false },
-  narrow: { label: 'NARROW', glyph: 'N', color: 0xff3b30, bad: true },
+  expand: { label: 'EXPAND', glyph: 'E', color: PALETTE.blue, bad: false },
+  narrow: { label: 'NARROW', glyph: 'N', color: PALETTE.red, bad: true },
   slow: { label: 'SLOW', glyph: 'S', color: 0x2dffb4, bad: false },
-  fast: { label: 'FAST', glyph: 'F', color: 0xff3b30, bad: true },
+  fast: { label: 'FAST', glyph: 'F', color: PALETTE.red, bad: true },
   catch: { label: 'CATCH', glyph: 'C', color: PALETTE.purple, bad: false },
   pierce: { label: 'PIERCE', glyph: 'P', color: PALETTE.white, bad: false },
   barrier: { label: 'BARRIER', glyph: 'B', color: PALETTE.yellow, bad: false },
   life: { label: 'LIFE', glyph: '+', color: 0xff7ad9, bad: false },
-  detonator: { label: 'DETONATOR', glyph: 'X', color: 0xff8a2a, bad: false },
+  detonator: { label: 'DETONATOR', glyph: 'X', color: PALETTE.orange, bad: false },
 } as const satisfies Record<keyof typeof POWER.kinds, { label: string; glyph: string; color: number; bad: boolean }>;
 
 /**
@@ -124,5 +124,5 @@ export const STAGE_EVENT_LOOK = {
   pulse: { label: 'PULSE', sub: 'GRID SHOCKED', color: PALETTE.purple },
   hunter: { label: 'HUNTER', sub: 'LASER ONLINE', color: PALETTE.magenta },
   safetyNet: { label: 'SAFETY NET', sub: 'BARRIER UP', color: PALETTE.yellow },
-  demolition: { label: 'DEMOLITION', sub: 'CHARGES ARMED', color: 0xff8a2a },
+  demolition: { label: 'DEMOLITION', sub: 'CHARGES ARMED', color: PALETTE.orange },
 } as const satisfies Record<keyof typeof STAGE_EVENTS.kinds, { label: string; sub: string; color: number }>;

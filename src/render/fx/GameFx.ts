@@ -1,9 +1,8 @@
 import * as THREE from 'three';
-import { FIELD } from '../../config/game';
-import { POWER_LOOK } from '../../config/tuning';
+import { BRICK, FIELD } from '../../config/game';
 import type { Game } from '../../game/Game';
-import { BRICK_GAP, brickTint, COLORS } from '../palette';
-import { chip, fractureRect } from './fracture';
+import { BRICK_GAP, brickTint, COLORS, POWER_COLORS } from '../palette';
+import { fractureRect } from './fracture';
 import { Particles } from './Particles';
 import { Shake } from './Shake';
 import type { Trails } from './Trails';
@@ -15,9 +14,8 @@ const PIECE_PUSH = 0.12;
 const LASER_PUSH = 45;
 /** Outward push on glass shattered by a detonator blast. */
 const BLAST_PUSH = 60;
-const BLAST_COLOR = new THREE.Color(POWER_LOOK.detonator.color);
 
-export interface WallHit {
+interface WallHit {
   x: number;
   y: number;
   strength: number;
@@ -25,8 +23,8 @@ export interface WallHit {
 
 /**
  * Turns simulation events into cosmetic effects: shake, flashes and pulses. Particles are
- * reserved for damage (brick hits and destruction).
- * Reads game state only to place effects (ball and brick positions); never writes to it.
+ * reserved for bricks breaking.
+ * Reads game state only to place effects (blast and brick positions); never writes to it.
  */
 export class GameFx {
   readonly particles = new Particles();
@@ -45,11 +43,12 @@ export class GameFx {
   readonly blast = { centres: [] as { x: number; y: number }[], radius: 0, strength: 0 };
   /** Brick hit-flash strength, lowered by reduce-flashing. */
   brickFlash = 1;
+  /** Bricks last hit by a pulse or blast; those strike many at once, so they flash softer. */
+  readonly areaHits = new Set<number>();
 
   private reduce = false;
   private nextWallHit = 0;
   private time = 0;
-  private game: Game | null = null;
   private unsubscribe: (() => void)[] = [];
   private tint = new THREE.Color();
 
@@ -79,9 +78,9 @@ export class GameFx {
 
   attach(game: Game): void {
     this.unsubscribe.forEach((off) => off());
-    this.game = game;
     this.particles.clear();
     this.trails.clear();
+    this.areaHits.clear();
     const ev = game.events;
     this.unsubscribe = [
       ev.on('wallHit', ({ side, x, y }) => {
@@ -115,50 +114,40 @@ export class GameFx {
         this.blast.radius = radius;
         this.blast.strength = 1;
         this.shake.add(0.3);
-        this.pulse(BLAST_COLOR, 0.08, 0.3);
+        this.pulse(POWER_COLORS.detonator, 0.08, 0.3);
       }),
-      ev.on('brickHit', ({ id, kind, by, x, y, ix, iy }) => {
-        const brick = game.bricks.find((br) => br.id === id);
-        const away = Math.atan2(iy - y, ix - x);
-        if (kind === 'steel') {
-          // Metal on metal: hot sparks, nothing breaks.
-          this.particles.sparks(ix, iy, { count: 10, color: COLORS.white, speed: [70, 220], angle: away, spread: 1.1 });
-          this.shake.add(0.06);
-          return;
-        }
-        // Glass that holds: a few chips and glints fly off where the ball struck.
-        const color = brick ? brickTint(brick, this.tint) : this.tint.copy(COLORS.yellow);
-        for (let i = 0; i < 3; i++) {
-          const a = away + (Math.random() * 2 - 1) * 1.1;
-          const s = 40 + Math.random() * 80;
-          this.particles.piece(chip(ix, iy, 0.9 + Math.random() * 0.8), Math.cos(a) * s, Math.sin(a) * s, color, 0.35 + Math.random() * 0.25);
-        }
-        this.particles.glints(ix, iy, { count: 4, color, speed: [100, 220], angle: away, spread: 1.0 });
-        this.shake.add(by === 'pulse' || by === 'blast' ? 0 : 0.04);
+      // Only metal bricks survive a hit (glass breaks at once). They just flash and kick: no particles.
+      ev.on('brickHit', ({ id, kind, by }) => {
+        const area = by === 'pulse' || by === 'blast';
+        if (area) this.areaHits.add(id);
+        else this.areaHits.delete(id);
+        this.shake.add(kind === 'steel' ? 0.06 : area ? 0 : 0.04);
       }),
-      ev.on('brickDestroyed', ({ id, kind, by, x, y, ix, iy }) => {
+      ev.on('brickDestroyed', ({ id, kind, by, x, y, ix, iy, vx, vy }) => {
+        this.areaHits.delete(id);
         const brick = game.bricks.find((br) => br.id === id);
         const color = brick ? brickTint({ ...brick, hp: brick.maxHp }, this.tint) : this.tint.copy(COLORS.magenta);
-        const w = (brick?.w ?? 24) - BRICK_GAP;
-        const h = (brick?.h ?? 12) - BRICK_GAP;
-        const ball = by === 'ball' ? this.nearestBall(x, y) : null;
-        let pushX = (ball?.vx ?? 0) * PIECE_PUSH;
-        let pushY = by === 'laser' ? LASER_PUSH : (ball?.vy ?? 0) * PIECE_PUSH;
+        const w = (brick?.w ?? BRICK.width) - BRICK_GAP;
+        const h = (brick?.h ?? BRICK.height) - BRICK_GAP;
+        let pushX = vx * PIECE_PUSH;
+        let pushY = by === 'laser' ? LASER_PUSH : vy * PIECE_PUSH;
         const centre = by === 'blast' ? this.nearestBlast(x, y) : null;
         if (centre) {
           const d = Math.hypot(x - centre.x, y - centre.y) || 1;
           pushX = ((x - centre.x) / d) * BLAST_PUSH;
           pushY = ((y - centre.y) / d) * BLAST_PUSH;
         }
-        // The brick breaks into pieces radiating from the impact; tough glass breaks finer.
-        for (const s of fractureRect(x, y, w, h, ix, iy, kind === 'tough' ? 5 : 2)) {
+        // The brick breaks into pieces radiating from the impact: glass shards and glints, or for an
+        // armoured (tough) plate a few metal pieces and nothing else.
+        const metal = kind === 'tough';
+        for (const s of fractureRect(x, y, w, h, ix, iy, metal ? 3 : 2)) {
           const dx = s.cx - ix;
           const dy = s.cy - iy;
           const dist = Math.hypot(dx, dy) || 1;
           const speed = (35 + Math.random() * 60) * (1.3 - Math.min(dist / (w * 0.5), 1) * 0.6);
-          this.particles.piece(s, (dx / dist) * speed + pushX, (dy / dist) * speed + pushY, color, 0.55 + Math.random() * 0.35);
+          this.particles.piece(s, (dx / dist) * speed + pushX, (dy / dist) * speed + pushY, color, 0.55 + Math.random() * 0.35, metal);
         }
-        this.particles.glints(ix, iy, { count: 5, color, speed: [120, 260] });
+        if (!metal) this.particles.glints(ix, iy, { count: 5, color, speed: [120, 260] });
         // A pulse or blast breaks many bricks in one tick; its own kick stands in for theirs.
         if (by !== 'pulse' && by !== 'blast') this.shake.add(kind === 'tough' ? 0.16 : 0.1);
       }),
@@ -209,19 +198,6 @@ export class GameFx {
       if (d < bestD) {
         bestD = d;
         best = c;
-      }
-    }
-    return best;
-  }
-
-  private nearestBall(x: number, y: number) {
-    let best = null;
-    let bestD = Infinity;
-    for (const b of this.game?.balls ?? []) {
-      const d = (b.x - x) ** 2 + (b.y - y) ** 2;
-      if (d < bestD) {
-        bestD = d;
-        best = b;
       }
     }
     return best;
