@@ -1,5 +1,10 @@
 import { PALETTE } from './game';
 
+/*
+ * Gameplay tuning: power-ups and stage events. Everything here is meant to be tweaked by hand;
+ * the simulation reads it but never changes it.
+ */
+
 /**
  * In-stage power-ups: how often they drop, how long they last and what they do.
  *
@@ -63,3 +68,40 @@ export const POWER_LOOK = {
   barrier: { label: 'BARRIER', glyph: 'B', color: PALETTE.yellow, bad: false },
   life: { label: 'LIFE', glyph: '+', color: 0xff7ad9, bad: false },
 } as const satisfies Record<keyof typeof POWER.kinds, { label: string; glyph: string; color: number; bad: boolean }>;
+
+/**
+ * Stage events: rule-based help that keeps the end of a stage from dragging.
+ *
+ * When an event's trigger is met it rolls `chance` (0..1, set it to 0 to switch the event off).
+ * Hit or miss, the trigger is then spent until it re-arms: brick-count triggers re-arm on the
+ * next destroyed brick, `pulse` on the next breakable brick hit, `safetyNet` on the next serve.
+ * No event fires more than `maxPerStage` times in one stage. Times are in seconds of play.
+ */
+export const STAGE_EVENTS = {
+  kinds: {
+    /** A brick spits out a capsule (never a negative one) once few bricks are left. */
+    supplyDrop: { chance: 0.75, maxPerStage: 1, bricksLeft: 8 },
+    /** Every ball splits in three when the stage is almost done. */
+    overload: { chance: 1, maxPerStage: 1, bricksLeft: 4 },
+    /**
+     * No breakable brick hit for `idleTime`: a pulse rises from the paddle and the lowest `maxBricks`
+     * breakable bricks take `damage` hits each (steel shrugs it off).
+     */
+    pulse: { chance: 1, maxPerStage: 2, idleTime: 10, maxBricks: 8, damage: 1 },
+    /** Last few bricks survive `idleTime` without a kill: the paddle gets the laser. */
+    hunter: { chance: 1, maxPerStage: 1, bricksLeft: 3, idleTime: 12, duration: 8 },
+    /** Serving on the last life late in a stage raises the barrier. */
+    safetyNet: { chance: 0.5, maxPerStage: 1, lives: 1, bricksLeft: 15, duration: 15 },
+  },
+  /** How long the in-game banner stays up. */
+  bannerTime: 1.8,
+} as const;
+
+/** In-game banner for each stage event. */
+export const STAGE_EVENT_LOOK = {
+  supplyDrop: { label: 'SUPPLY DROP', sub: 'CAPSULE INBOUND', color: PALETTE.yellow },
+  overload: { label: 'OVERLOAD', sub: 'BALLS SPLIT', color: PALETTE.cyan },
+  pulse: { label: 'PULSE', sub: 'GRID SHOCKED', color: PALETTE.purple },
+  hunter: { label: 'HUNTER', sub: 'LASER ONLINE', color: PALETTE.magenta },
+  safetyNet: { label: 'SAFETY NET', sub: 'BARRIER UP', color: PALETTE.yellow },
+} as const satisfies Record<keyof typeof STAGE_EVENTS.kinds, { label: string; sub: string; color: number }>;

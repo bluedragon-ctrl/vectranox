@@ -1,4 +1,4 @@
-import type { BrickKind, HitSource, PowerKind, TimedPower } from './types';
+import type { BrickKind, HitSource, PowerKind, StageEventKind, TimedPower } from './types';
 
 export type WallSide = 'left' | 'right' | 'top';
 
@@ -20,6 +20,8 @@ export type GameEvents = {
   powerMissed: { id: number; kind: PowerKind };
   powerEnd: { kind: TimedPower };
   laserFire: { x: number; y: number };
+  /** A stage event fired; `bricks` is how many breakable bricks were left. */
+  stageEvent: { kind: StageEventKind; bricks: number };
   ballLost: { id: number };
   lifeLost: { lives: number };
   stageClear: { stage: number; score: number };

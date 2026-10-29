@@ -1,5 +1,5 @@
 import { BALL, BRICK, FIELD, PADDLE, RULES, SCORE } from '../config/game';
-import { POWER } from '../config/powers';
+import { POWER, POWER_LOOK, STAGE_EVENTS } from '../config/tuning';
 import { EventBus } from '../core/events';
 import { Rng } from '../core/rng';
 import type { StageDef } from '../levels/stages';
@@ -15,6 +15,7 @@ import type {
   HitSource,
   Paddle,
   PowerKind,
+  StageEventKind,
   TickInput,
   TimedPower,
 } from './types';
@@ -35,6 +36,8 @@ const POWER_KINDS = Object.keys(POWER.kinds) as PowerKind[];
 const TIMED_POWERS = POWER_KINDS.filter((k): k is TimedPower => POWER.kinds[k].duration > 0);
 /** Picking one of these ends the other. */
 const OPPOSITE: Partial<Record<TimedPower, TimedPower>> = { expand: 'narrow', narrow: 'expand', slow: 'fast', fast: 'slow' };
+const GOOD_POWERS = POWER_KINDS.filter((k) => !POWER_LOOK[k].bad);
+const STAGE_EVENT_KINDS = Object.keys(STAGE_EVENTS.kinds) as StageEventKind[];
 
 type HitTarget = Brick | WallSide | 'paddle' | 'barrier';
 
@@ -76,6 +79,12 @@ export class Game {
   private nextId = 1;
   private breakableLeft = 0;
   private laserCooldown = 0;
+  /** Seconds of play since a breakable brick was last hit / destroyed. */
+  private sinceHit = 0;
+  private sinceKill = 0;
+  /** Per stage: whether each stage event's trigger is armed, and how often it fired. */
+  private readonly eventArmed = {} as Record<StageEventKind, boolean>;
+  private readonly eventCount = {} as Record<StageEventKind, number>;
 
   constructor(
     readonly seed: number,
@@ -121,6 +130,7 @@ export class Game {
         this.updateBolts(dt);
         this.updateCapsules(dt);
         this.resolveStage();
+        if (this.state === 'play') this.checkStageEvents(dt);
         break;
       case 'clear':
         if (this.stateTime >= RULES.stageClearDelay) this.nextStage();
@@ -139,7 +149,7 @@ export class Game {
    * Applies a power as if its capsule was caught. Public so the dev console can grant powers
    * (`vnx.game.applyPower('laser')`).
    */
-  applyPower(kind: PowerKind): void {
+  applyPower(kind: PowerKind, duration: number = POWER.kinds[kind].duration): void {
     switch (kind) {
       case 'multi':
         this.splitBalls();
@@ -150,8 +160,37 @@ export class Game {
     }
     const opposite = OPPOSITE[kind];
     if (opposite && this.isActive(opposite)) this.endPower(opposite);
-    this.timers[kind] = POWER.kinds[kind].duration;
+    this.timers[kind] = duration;
     if (kind === 'slow' || kind === 'fast') this.rescaleBalls();
+  }
+
+  /**
+   * Runs a stage event's effect right away, skipping its trigger and chance. Public so the dev
+   * console can try them (`vnx.game.fireStageEvent('overload')`).
+   */
+  fireStageEvent(kind: StageEventKind): void {
+    this.eventCount[kind]++;
+    this.events.emit('stageEvent', { kind, bricks: this.breakableLeft });
+    switch (kind) {
+      case 'supplyDrop': {
+        const bricks = this.bricks.filter((br) => br.alive && br.kind !== 'steel');
+        const br = bricks[Math.floor(this.rng.next() * bricks.length)];
+        if (br) this.dropCapsule(this.rollPower(GOOD_POWERS), br.x + br.w / 2, br.y + br.h / 2);
+        break;
+      }
+      case 'overload':
+        this.splitBalls();
+        break;
+      case 'pulse':
+        this.pulseBricks(STAGE_EVENTS.kinds.pulse.maxBricks, STAGE_EVENTS.kinds.pulse.damage);
+        break;
+      case 'hunter':
+        this.applyPower('laser', STAGE_EVENTS.kinds.hunter.duration);
+        break;
+      case 'safetyNet':
+        this.applyPower('barrier', STAGE_EVENTS.kinds.safetyNet.duration);
+        break;
+    }
   }
 
   private setState(state: GameState): void {
@@ -166,6 +205,10 @@ export class Game {
     this.breakableLeft = this.bricks.filter((br) => br.kind !== 'steel').length;
     this.paddle.x = this.paddle.px = FIELD.width / 2;
     this.paddle.w = PADDLE.width;
+    for (const kind of STAGE_EVENT_KINDS) {
+      this.eventArmed[kind] = true;
+      this.eventCount[kind] = 0;
+    }
     this.events.emit('stageStart', { stage: index + 1, name: stage.name, bricks: this.breakableLeft });
     this.serve();
   }
@@ -201,6 +244,8 @@ export class Game {
     };
     this.balls.push(ball);
     this.events.emit('ballSpawn', { id: ball.id, x, y });
+    this.sinceHit = this.sinceKill = 0;
+    this.eventArmed.safetyNet = true;
     this.setState('serve');
   }
 
@@ -219,6 +264,28 @@ export class Game {
       this.events.emit('ballLaunch', { id: b.id, angle: (angle * 180) / Math.PI });
     }
     this.setState('play');
+    const net = STAGE_EVENTS.kinds.safetyNet;
+    if (this.lives <= net.lives && this.breakableLeft <= net.bricksLeft) this.tryStageEvent('safetyNet');
+  }
+
+  /** Runs every play tick, after the stage was resolved. Triggers for the ongoing events. */
+  private checkStageEvents(dt: number): void {
+    this.sinceHit += dt;
+    this.sinceKill += dt;
+    const { supplyDrop, overload, pulse, hunter } = STAGE_EVENTS.kinds;
+    const left = this.breakableLeft;
+    if (left <= supplyDrop.bricksLeft) this.tryStageEvent('supplyDrop');
+    if (left <= overload.bricksLeft) this.tryStageEvent('overload');
+    if (this.sinceHit >= pulse.idleTime) this.tryStageEvent('pulse');
+    if (left <= hunter.bricksLeft && this.sinceKill >= hunter.idleTime) this.tryStageEvent('hunter');
+  }
+
+  /** Trigger met: roll the event's chance once, then wait for it to re-arm. */
+  private tryStageEvent(kind: StageEventKind): void {
+    const def = STAGE_EVENTS.kinds[kind];
+    if (!this.eventArmed[kind] || this.eventCount[kind] >= def.maxPerStage) return;
+    this.eventArmed[kind] = false;
+    if (this.rng.next() < def.chance) this.fireStageEvent(kind);
   }
 
   private movePaddle(dt: number, input: TickInput): void {
@@ -379,6 +446,7 @@ export class Game {
     return false;
   }
 
+
   /** Keeps a caught ball on the paddle; it lets go by itself after a while. */
   private holdCaught(b: Ball, dt: number): void {
     const p = this.paddle;
@@ -534,21 +602,36 @@ export class Game {
   private maybeDrop(x: number, y: number): void {
     if (this.breakableLeft === 0 || this.capsules.length >= POWER.maxCapsules) return;
     if (this.rng.next() >= POWER.dropChance) return;
-    const kind = this.rollPower();
+    this.dropCapsule(this.rollPower(POWER_KINDS), x, y);
+  }
+
+  private dropCapsule(kind: PowerKind, x: number, y: number): void {
     const hw = POWER.capsuleWidth / 2;
     const capsule: Capsule = { id: this.nextId++, kind, x: clamp(x, hw, FIELD.width - hw), y, py: y };
     this.capsules.push(capsule);
     this.events.emit('powerDrop', { id: capsule.id, kind, x: capsule.x, y });
   }
 
-  private rollPower(): PowerKind {
-    const total = POWER_KINDS.reduce((sum, k) => sum + POWER.kinds[k].weight, 0);
+  /** Weighted pick among `kinds`. */
+  private rollPower(kinds: readonly PowerKind[]): PowerKind {
+    const total = kinds.reduce((sum, k) => sum + POWER.kinds[k].weight, 0);
     let r = this.rng.next() * total;
-    for (const k of POWER_KINDS) {
+    for (const k of kinds) {
       r -= POWER.kinds[k].weight;
       if (r < 0) return k;
     }
     return 'multi';
+  }
+
+  /** The lowest `count` breakable bricks take `damage` hits each, struck from below. */
+  private pulseBricks(count: number, damage: number): void {
+    const targets = this.bricks
+      .filter((br) => br.alive && br.kind !== 'steel')
+      .sort((a, b) => a.y - b.y || a.x - b.x)
+      .slice(0, count);
+    for (const br of targets) {
+      for (let i = 0; i < damage && br.alive; i++) this.hitBrick(br, 'pulse', br.x + br.w / 2, br.y, false);
+    }
   }
 
   /** Ball struck a brick; it speeds up a little. `smash` breaks it outright (pierce). */
@@ -567,6 +650,8 @@ export class Game {
       return;
     }
 
+    this.sinceHit = 0;
+    this.eventArmed.pulse = true;
     br.hp = smash ? 0 : br.hp - 1;
     if (br.hp > 0) {
       this.score += SCORE.hit;
@@ -576,6 +661,8 @@ export class Game {
 
     br.alive = false;
     this.breakableLeft--;
+    this.sinceKill = 0;
+    this.eventArmed.supplyDrop = this.eventArmed.overload = this.eventArmed.hunter = true;
     const points = br.kind === 'tough' ? br.maxHp * SCORE.toughPerHp : SCORE.normal;
     this.score += points;
     this.events.emit('brickDestroyed', { id: br.id, kind: br.kind, points, by, x, y, ix, iy });
