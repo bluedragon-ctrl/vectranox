@@ -14,9 +14,10 @@ import { BALL_FRAGMENT } from './materials/ball';
 import { BRICK_FRAGMENT } from './materials/brick';
 import { FULLSCREEN_VERTEX } from './materials/common';
 import { PADDLE_FRAGMENT } from './materials/paddle';
+import { PORTAL_FRAGMENT, TARGET_FRAGMENT } from './materials/pinball';
 import { BARRIER_FRAGMENT, BLAST_FRAGMENT, BOLT_FRAGMENT, CAPSULE_FRAGMENT, CHARGE_FRAGMENT } from './materials/power';
 import { glyphMask } from './glyphs';
-import { BRICK_GAP, brickTint, CAPSULE_COLORS, COLORS, POWER_COLORS } from './palette';
+import { BRICK_GAP, brickTint, CAPSULE_COLORS, COLORS, PORTAL_COLORS, POWER_COLORS, TARGET_COLOR } from './palette';
 import { QuadBatch } from './QuadBatch';
 
 /** Screen-space padding (px) between the playfield frame and its area. */
@@ -25,6 +26,12 @@ const MAX_BRICKS = 256;
 const MAX_BALLS = 32;
 const MAX_CAPSULES = 8;
 const MAX_BOLTS = 64;
+const MAX_TARGETS = 64;
+const MAX_PORTALS = 16;
+/** Portal accretion disks turn at this rate (radians/s). A slow spin, so it keeps going under reduce-FX. */
+const PORTAL_SPIN = 2.2;
+/** Ticks a portal stays bright after a ball goes through it. */
+const WARP_FLASH_TICKS = 30;
 /** Seconds over which a power's visuals fade out before it ends. */
 const POWER_FADE = 1;
 /** Ticks a brick stays lit after a hit. */
@@ -127,6 +134,10 @@ export class Renderer {
   private capsules = new QuadBatch({ max: MAX_CAPSULES, pad: 4, fragmentShader: CAPSULE_FRAGMENT, renderOrder: 22 });
   private bolts = new QuadBatch({ max: MAX_BOLTS, pad: 4, fragmentShader: BOLT_FRAGMENT, renderOrder: 24 });
   private blast = new QuadBatch({ max: MAX_BALLS, pad: 4, fragmentShader: BLAST_FRAGMENT, renderOrder: 26 });
+  private targets = new QuadBatch({ max: MAX_TARGETS, pad: 6, fragmentShader: TARGET_FRAGMENT, renderOrder: 11 });
+  private portals = new QuadBatch({ max: MAX_PORTALS, pad: 6, fragmentShader: PORTAL_FRAGMENT, renderOrder: 9 });
+  /** Drives the portals' spin. */
+  private portalTime = 0;
   private chargeDots = new QuadBatch({ max: 16, pad: 2, fragmentShader: CHARGE_FRAGMENT, renderOrder: 27 });
 
   private ballPositions: { x: number; y: number }[] = [];
@@ -164,6 +175,8 @@ export class Renderer {
     );
     this.scene.add(
       blit,
+      this.portals.mesh,
+      this.targets.mesh,
       this.bricks.mesh,
       this.barrier.mesh,
       this.trails.batch.mesh,
@@ -267,6 +280,7 @@ export class Renderer {
     this.fx.update(dt);
     this.skyTime.value += dt;
     if (!this.settings.reduceFx) this.skyScroll.value += dt;
+    this.portalTime += dt;
 
     const shake = this.fx.shake;
     this.camera.position.set(this.camBase.x + shake.x, this.camBase.y + shake.y, 10);
@@ -277,6 +291,8 @@ export class Renderer {
     this.trails.update(game.balls, this.ballPositions, this.fx.now);
 
     this.drawField();
+    this.drawPortals(game);
+    this.drawTargets(game);
     this.drawBricks(game);
     this.drawBarrier(game);
     this.drawCapsules(game, alpha);
@@ -341,6 +357,27 @@ export class Renderer {
       );
     }
     b.commit();
+  }
+
+  private drawTargets(game: Game): void {
+    this.targets.begin();
+    for (const t of game.targets) {
+      const flash = Math.max(0, 1 - (game.tick - t.hitTick) / FLASH_TICKS) * this.fx.brickFlash;
+      this.targets.push(t.x, t.y, t.r * 2, t.r * 2, TARGET_COLOR, 1, t.lit ? 1 : 0, flash * flash);
+    }
+    this.targets.commit();
+  }
+
+  /** Each pair has its own colour; the two ends of a pair spin opposite ways (in and out). */
+  private drawPortals(game: Game): void {
+    this.portals.begin();
+    for (const p of game.portals) {
+      const color = PORTAL_COLORS[p.pair % PORTAL_COLORS.length] ?? COLORS.purple;
+      const spin = (p.id < p.exit ? 1 : -1) * this.portalTime * PORTAL_SPIN;
+      const flash = Math.max(0, 1 - (game.tick - p.warpTick) / WARP_FLASH_TICKS) * this.fx.brickFlash;
+      this.portals.push(p.x, p.y, p.r * 2, p.r * 2, color, 1, spin, flash);
+    }
+    this.portals.commit();
   }
 
   private drawBarrier(game: Game): void {

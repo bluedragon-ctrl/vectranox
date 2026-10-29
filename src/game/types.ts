@@ -51,6 +51,37 @@ export interface Ball {
   stuckTime: number;
   /** Bricks this ball has destroyed since it last touched the paddle. */
   chain: number;
+  /** Chain bonus points (multiplier included) this chain has earned so far. */
+  chainPoints: number;
+  /** Id of the portal the ball just came out of; that portal ignores it until it has left. */
+  inPortal: number | null;
+}
+
+/** Pinball target: a round lamp the ball bounces off and lights. Position is the centre. */
+export interface Target {
+  /** Tells targets apart from bricks where the ball can hit either. */
+  kind: 'target';
+  id: number;
+  x: number;
+  y: number;
+  r: number;
+  lit: boolean;
+  /** Tick of the last hit, for flash effects. */
+  hitTick: number;
+}
+
+/** One end of a portal pair. Position is the centre. */
+export interface Portal {
+  id: number;
+  x: number;
+  y: number;
+  r: number;
+  /** Id of the portal at the other end. */
+  exit: number;
+  /** Which pair it belongs to, in layout order (0, 1, ...); pairs are told apart by colour. */
+  pair: number;
+  /** Tick a ball last went through it, either way, for flash effects. */
+  warpTick: number;
 }
 
 /** Falling power-up. Position is the centre. */

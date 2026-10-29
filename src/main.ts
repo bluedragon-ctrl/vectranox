@@ -233,11 +233,11 @@ function formatScore(score: number): string {
   return String(score).padStart(6, '0');
 }
 
-/** The longest live chain and the bonus its last brick earned; a dash until a chain pays. */
-function formatChain(balls: readonly { chain: number }[]): string {
+/** The longest live chain and the bonus its last brick earned (multiplied); a dash until a chain pays. */
+function formatChain(balls: readonly { chain: number }[], multiplier: number): string {
   let chain = 0;
   for (const b of balls) chain = Math.max(chain, b.chain);
-  return chain >= 2 ? `×${chain} +${chainBonus(chain)}` : '—';
+  return chain >= 2 ? `×${chain} +${chainBonus(chain) * multiplier}` : '—';
 }
 
 renderScores(el('score-list'));
@@ -246,6 +246,7 @@ const hudScore = el('hud-score');
 const hudLives = el('hud-lives');
 const hudSector = el('hud-sector');
 const hudChain = el('hud-chain');
+const hudMult = el('hud-mult');
 const powerHud = new PowerHud(el('power-list'));
 const sysFps = el('sys-fps');
 const sysTick = el('sys-tick');
@@ -280,7 +281,8 @@ startLoop({
     setText(hudScore, formatScore(game.score));
     setText(hudLives, String(game.lives));
     setText(hudSector, `1-${game.stageIndex + 1}`);
-    setText(hudChain, formatChain(game.balls));
+    setText(hudChain, formatChain(game.balls, game.multiplier));
+    setText(hudMult, `×${game.multiplier}`);
     powerHud.update(game.timers, game.charges);
     setText(sysFps, fps.toFixed(0));
     setText(sysTick, String(game.tick));

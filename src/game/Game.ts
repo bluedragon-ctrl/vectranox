@@ -1,10 +1,10 @@
 import { BALL, FIELD, PADDLE, RULES, SCORE, SIM } from '../config/game';
-import { POWER, STAGE_EVENTS } from '../config/tuning';
+import { PINBALL, POWER, STAGE_EVENTS } from '../config/tuning';
 import { EventBus } from '../core/events';
 import { clamp } from '../core/math';
 import { Rng } from '../core/rng';
 import type { StageDef } from '../levels/stages';
-import { sweepBox, type SweepHit } from './collision';
+import { sweepBox, sweepCircle, type SweepHit } from './collision';
 import type { GameEvents, WallSide } from './events';
 import { parseLayout } from './layout';
 import { aim, closer, normalizeVelocity, sweepWalls } from './physics';
@@ -19,8 +19,10 @@ import type {
   GameState,
   HitSource,
   Paddle,
+  Portal,
   PowerKind,
   StageEventKind,
+  Target,
   TickInput,
   TimedPower,
 } from './types';
@@ -30,7 +32,7 @@ const SKIN = 0.01;
 /** Bounces resolved per ball per tick; leftover motion is dropped (only matters in tight corners). */
 const MAX_BOUNCES = 4;
 
-type HitTarget = Brick | WallSide | 'paddle' | 'barrier';
+type HitTarget = Brick | Target | WallSide | 'paddle' | 'barrier';
 
 interface Box {
   minX: number;
@@ -54,6 +56,8 @@ export class Game {
   };
   balls: Ball[] = [];
   bricks: Brick[] = [];
+  targets: Target[] = [];
+  portals: Portal[] = [];
   capsules: Capsule[] = [];
   bolts: Bolt[] = [];
   /** Seconds left on each timed power; 0 is off. */
@@ -67,6 +71,8 @@ export class Game {
   score = 0;
   lives: number = RULES.lives;
   tick = 0;
+  /** Position in `PINBALL.multipliers`; completing the target bank moves it up, losing a life resets it. */
+  multiplierStep = 0;
 
   private rng: Rng;
   private nextId = 1;
@@ -91,6 +97,12 @@ export class Game {
     const stage = this.stages[this.stageIndex];
     if (!stage) throw new Error(`No stage ${this.stageIndex}`);
     return stage;
+  }
+
+  /** Score multiplier for brick points. */
+  get multiplier(): number {
+    const steps = PINBALL.multipliers;
+    return steps[Math.min(this.multiplierStep, steps.length - 1)] ?? 1;
   }
 
   /** Seconds of simulated time since the run started. */
@@ -213,7 +225,7 @@ export class Game {
   private loadStage(index: number): void {
     this.stageIndex = index;
     const stage = this.stage;
-    this.bricks = parseLayout(stage.layout, () => this.nextId++);
+    ({ bricks: this.bricks, targets: this.targets, portals: this.portals } = parseLayout(stage.layout, () => this.nextId++));
     this.breakableLeft = this.bricks.filter(isBreakable).length;
     this.paddle.x = this.paddle.px = FIELD.width / 2;
     this.paddle.w = PADDLE.width;
@@ -250,6 +262,8 @@ export class Game {
       stuck: null,
       stuckTime: 0,
       chain: 0,
+      chainPoints: 0,
+      inPortal: null,
     };
     this.balls.push(ball);
     this.events.emit('ballSpawn', { id: ball.id, x, y });
@@ -338,6 +352,7 @@ export class Game {
 
   private loseLife(): void {
     this.lives--;
+    this.multiplierStep = 0;
     this.events.emit('lifeLost', { lives: this.lives });
     if (this.lives > 0) {
       this.serve();
@@ -367,6 +382,13 @@ export class Game {
           target = br;
         }
       }
+      for (const tg of this.targets) {
+        const h = sweepCircle(b.x, b.y, dx, dy, tg.x, tg.y, tg.r + b.r);
+        if (closer(h, hit)) {
+          hit = h;
+          target = tg;
+        }
+      }
       if (dy < 0 && this.isActive('barrier')) {
         const floor = POWER.barrierY + b.r;
         if (b.y >= floor) {
@@ -390,6 +412,19 @@ export class Game {
         b.x += dx;
         b.y += dy;
         break;
+      }
+
+      // Round targets reflect the ball about the contact normal.
+      if (typeof target === 'object' && target.kind === 'target') {
+        b.x += dx * hit.t + hit.nx * SKIN;
+        b.y += dy * hit.t + hit.ny * SKIN;
+        remaining *= 1 - hit.t;
+        const dot = b.vx * hit.nx + b.vy * hit.ny;
+        b.vx -= 2 * dot * hit.nx;
+        b.vy -= 2 * dot * hit.ny;
+        this.hitTarget(target, b);
+        normalizeVelocity(b, this.ballSpeed(b));
+        continue;
       }
 
       // Piercing balls go straight through anything breakable.
@@ -418,6 +453,46 @@ export class Game {
     }
     b.x = clamp(b.x, b.r, FIELD.width - b.r);
     b.y = Math.min(b.y, FIELD.height - b.r);
+    this.checkPortals(b);
+  }
+
+  /** A ball that reaches a portal's centre comes out of the other end, moving the same way. */
+  private checkPortals(b: Ball): void {
+    if (b.inPortal !== null) {
+      const from = this.portals.find((p) => p.id === b.inPortal);
+      if (!from || (b.x - from.x) ** 2 + (b.y - from.y) ** 2 > from.r ** 2) b.inPortal = null;
+      return;
+    }
+    const capture = PINBALL.portal.capture ** 2;
+    for (const p of this.portals) {
+      if ((b.x - p.x) ** 2 + (b.y - p.y) ** 2 >= capture) continue;
+      const exit = this.portals.find((q) => q.id === p.exit);
+      if (!exit) return;
+      // Jump, not travel: no interpolation across the field.
+      b.x = b.px = exit.x;
+      b.y = b.py = exit.y;
+      b.inPortal = exit.id;
+      p.warpTick = exit.warpTick = this.tick;
+      this.events.emit('portalWarp', { id: b.id, from: p.id, to: exit.id, x: exit.x, y: exit.y });
+      return;
+    }
+  }
+
+  /** Lights the target; lighting the last one completes the bank. */
+  private hitTarget(tg: Target, b: Ball): void {
+    tg.hitTick = this.tick;
+    const lit = !tg.lit;
+    tg.lit = true;
+    this.score += PINBALL.target.points;
+    this.events.emit('targetHit', { id: tg.id, ball: b.id, lit, points: PINBALL.target.points, x: tg.x, y: tg.y });
+    if (!lit || !this.targets.every((t) => t.lit)) return;
+    for (const t of this.targets) {
+      t.lit = false;
+      t.hitTick = this.tick;
+    }
+    this.multiplierStep = Math.min(this.multiplierStep + 1, PINBALL.multipliers.length - 1);
+    this.score += PINBALL.bankBonus;
+    this.events.emit('targetBank', { multiplier: this.multiplier, bonus: PINBALL.bankBonus });
   }
 
   /** The paddle grown by `r` on every side. Returns a shared object, valid until the next call. */
@@ -463,12 +538,9 @@ export class Game {
   }
 
   private endChain(b: Ball): void {
-    if (b.chain >= 2) {
-      let total = 0;
-      for (let n = 2; n <= b.chain; n++) total += chainBonus(n);
-      this.events.emit('chainEnd', { id: b.id, count: b.chain, total });
-    }
+    if (b.chain >= 2) this.events.emit('chainEnd', { id: b.id, count: b.chain, total: b.chainPoints, multiplier: this.multiplier });
     b.chain = 0;
+    b.chainPoints = 0;
   }
 
   /** Keeps a caught ball on the paddle; it lets go by itself after a while. */
@@ -654,6 +726,8 @@ export class Game {
           stuckTime: 0,
           // Twins start their own chain, so a split can't multiply a long one.
           chain: 0,
+          chainPoints: 0,
+          inPortal: src.inPortal,
         };
         normalizeVelocity(ball, this.ballSpeed(ball));
         this.balls.push(ball);
@@ -712,7 +786,7 @@ export class Game {
     this.stageEvents.arm('pulse');
     br.hp = smash ? 0 : br.hp - 1;
     if (br.hp > 0) {
-      this.score += SCORE.hit;
+      this.score += SCORE.hit * this.multiplier;
       this.events.emit('brickHit', { id: br.id, kind: br.kind, hp: br.hp, by, x, y, ix, iy });
       return;
     }
@@ -722,12 +796,14 @@ export class Game {
     this.sinceKill = 0;
     this.stageEvents.arm('supplyDrop', 'overload', 'hunter', 'demolition');
     const chain = ball ? ++ball.chain : 0;
-    const bonus = chainBonus(chain);
-    const points = (br.kind === 'tough' ? br.maxHp * SCORE.toughPerHp : SCORE.normal) + bonus;
+    const multiplier = this.multiplier;
+    const bonus = chainBonus(chain) * multiplier;
+    if (ball) ball.chainPoints += bonus;
+    const points = (br.kind === 'tough' ? br.maxHp * SCORE.toughPerHp : SCORE.normal) * multiplier + bonus;
     this.score += points;
     const vx = ball?.vx ?? 0;
     const vy = ball?.vy ?? 0;
-    this.events.emit('brickDestroyed', { id: br.id, kind: br.kind, points, chain, bonus, by, x, y, ix, iy, vx, vy });
+    this.events.emit('brickDestroyed', { id: br.id, kind: br.kind, points, chain, bonus, multiplier, by, x, y, ix, iy, vx, vy });
     this.maybeDrop(x, y);
   }
 }

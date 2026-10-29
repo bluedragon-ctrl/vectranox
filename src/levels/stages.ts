@@ -1,6 +1,7 @@
 /**
  * Fixed stage layouts (phase 1). One string per brick row, top row first, 13 columns.
  * `1` normal · `2` / `3` tough (hits to break) · `#` steel (indestructible) · `.` empty
+ * Pinball pieces (see `PINBALL`): `o` target · `A`–`Z` portal, each letter used exactly twice (its two ends).
  */
 export interface StageDef {
   name: string;
@@ -42,6 +43,22 @@ export const STAGES: readonly StageDef[] = [
       '.1.1111111.1.',
       '.1.1.....1.1.',
       '....11.11....',
+    ],
+  },
+  {
+    name: 'WORMHOLE',
+    layout: [
+      '1111111111111',
+      '2#.........#2',
+      '2#.1..A..1.#2',
+      '2#.11...11.#2',
+      '2#####.#####2',
+      '.............',
+      '..o.o.o.o.o..',
+      '.............',
+      '11.........11',
+      '.............',
+      '.A...........',
     ],
   },
   {

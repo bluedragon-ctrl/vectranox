@@ -54,3 +54,23 @@ export function sweepBox(
   if (tEnter > tExit || tEnter < 0 || tEnter > 1) return null;
   return { t: tEnter, nx, ny };
 }
+
+/**
+ * Sweeps point (ox, oy) along (dx, dy) against a circle of radius r at (cx, cy). For a ball, pass
+ * the circle grown by its radius. The normal points from the centre to the contact.
+ * Returns null on a miss, or when the point starts inside the circle.
+ */
+export function sweepCircle(ox: number, oy: number, dx: number, dy: number, cx: number, cy: number, r: number): SweepHit | null {
+  const fx = ox - cx;
+  const fy = oy - cy;
+  const c = fx * fx + fy * fy - r * r;
+  if (c <= 0) return null;
+  const a = dx * dx + dy * dy;
+  const b = fx * dx + fy * dy;
+  if (a === 0 || b >= 0) return null;
+  const disc = b * b - a * c;
+  if (disc < 0) return null;
+  const t = (-b - Math.sqrt(disc)) / a;
+  if (t < 0 || t > 1) return null;
+  return { t, nx: (fx + dx * t) / r, ny: (fy + dy * t) / r };
+}

@@ -47,6 +47,11 @@ export class Trails {
     this.trails.clear();
   }
 
+  /** Drops a ball's history, e.g. after it jumped through a portal, so no trail spans the jump. */
+  restart(id: number): void {
+    this.trails.get(id)?.pts.splice(0);
+  }
+
   /** Records this frame's positions and drops stale history. `positions` is parallel to `balls`. */
   update(balls: readonly Ball[], positions: readonly { x: number; y: number }[], now: number): void {
     for (const trail of this.trails.values()) trail.live = false;

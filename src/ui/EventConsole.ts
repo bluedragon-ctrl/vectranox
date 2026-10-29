@@ -21,7 +21,7 @@ const SYSTEM_EVENTS: ReadonlySet<string> = new Set<LogEvent>([
 ]);
 
 /** Power-up events, highlighted separately. */
-const POWER_EVENTS: ReadonlySet<string> = new Set<LogEvent>(['powerCollect', 'powerEnd', 'detonate']);
+const POWER_EVENTS: ReadonlySet<string> = new Set<LogEvent>(['powerCollect', 'powerEnd', 'detonate', 'targetBank']);
 
 function eventClass(type: string): string {
   if (SYSTEM_EVENTS.has(type)) return 'ev sys';

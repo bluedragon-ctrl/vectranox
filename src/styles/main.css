@@ -4,6 +4,7 @@
   --cyan: #2de2ff;
   --purple: #9d4dff;
   --yellow: #ffd23f;
+  --mint: #2dffb4;
   --text: #e8dcff;
   --text-dim: #8a76b8;
   --panel-bg: rgba(14, 4, 36, 0.62);
@@ -175,6 +176,21 @@ body {
 
 .popup.summary b {
   font-size: clamp(24px, 2.3vw, 36px);
+}
+
+/* Points scaled by the target multiplier: a tag in the target lamps' colour. */
+.popup i {
+  font-family: var(--display);
+  font-style: normal;
+  font-size: clamp(11px, 0.9vw, 14px);
+  letter-spacing: 0.1em;
+  color: var(--mint);
+  text-shadow: 0 0 6px color-mix(in srgb, var(--mint) 60%, transparent);
+}
+
+/* Target bank completed: the whole badge in the lamps' colour. */
+.popup.bank {
+  --c: var(--mint);
 }
 
 @keyframes popup-bonus {

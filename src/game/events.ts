@@ -14,7 +14,8 @@ export type GameEvents = {
   brickHit: { id: number; kind: BrickKind; hp: number; by: HitSource; x: number; y: number; ix: number; iy: number };
   /**
    * As `brickHit`; vx, vy: velocity of the ball that broke it, before it bounced (0 for other sources).
-   * `chain` is that ball's chain count with this brick (0 for other sources); `points` include `bonus`.
+   * `chain` is that ball's chain count with this brick (0 for other sources). `points` include `bonus`;
+   * both include the score `multiplier` that was in effect.
    */
   brickDestroyed: {
     id: number;
@@ -22,6 +23,7 @@ export type GameEvents = {
     points: number;
     chain: number;
     bonus: number;
+    multiplier: number;
     by: HitSource;
     x: number;
     y: number;
@@ -31,9 +33,18 @@ export type GameEvents = {
     vy: number;
   };
   ballCaught: { id: number; offset: number };
-  /** The paddle ended a ball's chain of `count` bricks, which earned `total` bonus points. */
-  chainEnd: { id: number; count: number; total: number };
+  /**
+   * The paddle ended a ball's chain of `count` bricks, which earned `total` bonus points (multiplier
+   * included); `multiplier` is the score multiplier now.
+   */
+  chainEnd: { id: number; count: number; total: number; multiplier: number };
   barrierHit: { id: number; x: number };
+  /** Ball bounced off a target; `lit` is whether this hit lit it (false if it already was). */
+  targetHit: { id: number; ball: number; lit: boolean; points: number; x: number; y: number };
+  /** Every target lit: the bank paid `bonus` and the score multiplier is now `multiplier`. */
+  targetBank: { multiplier: number; bonus: number };
+  /** Ball `id` went into portal `from` and came out of portal `to` at (x, y). */
+  portalWarp: { id: number; from: number; to: number; x: number; y: number };
   powerDrop: { id: number; kind: PowerKind; x: number; y: number };
   powerCollect: { id: number; kind: PowerKind };
   powerMissed: { id: number; kind: PowerKind };
