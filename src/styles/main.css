@@ -266,6 +266,35 @@ body {
     0 0 18px rgba(255, 42, 157, 0.6);
 }
 
+/* The run's score, under the logo: the number the player chases. */
+.score-main {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.score-main span {
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: 0.2em;
+  color: var(--purple);
+}
+
+.score-main b {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: clamp(28px, 2.8vw, 44px);
+  letter-spacing: 0.08em;
+  color: var(--yellow);
+  text-shadow:
+    0 0 6px rgba(255, 210, 63, 0.6),
+    0 0 16px rgba(255, 210, 63, 0.3);
+}
+
 .block h2 {
   font-family: var(--display);
   font-weight: 500;
