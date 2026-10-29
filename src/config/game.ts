@@ -21,8 +21,8 @@ export const PADDLE = {
 export const BALL = {
   radius: 4,
   baseSpeed: 230,
-  // Added to the base speed for every stage cleared.
-  stageSpeedStep: 12,
+  // Added to the base speed for every stage cleared (12 stages per run).
+  stageSpeedStep: 9,
   // Added to a ball's speed on every brick hit, up to maxSpeed.
   hitSpeedStep: 2,
   maxSpeed: 460,

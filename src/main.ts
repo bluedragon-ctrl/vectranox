@@ -4,19 +4,23 @@ import { GameSounds } from './audio/GameSounds';
 import { Input, type ControlMode } from './core/input';
 import { startLoop } from './core/loop';
 import { loadAudioSettings, loadVisualSettings, saveAudioSettings, saveVisualSettings } from './core/settings';
-import { chainBonus, Game } from './game/Game';
-import { STAGES } from './levels/stages';
+import { Game } from './game/Game';
 import { Renderer } from './render/Renderer';
 import { AudioPanel } from './ui/AudioPanel';
 import { ChainPopups } from './ui/ChainPopups';
 import { EventBanner } from './ui/EventBanner';
 import { EventConsole, type UiEvent } from './ui/EventConsole';
+import { ModHud } from './ui/ModHud';
 import { Overlay, type OverlayContent } from './ui/Overlay';
 import { PowerHud } from './ui/PowerHud';
+import { RunScreen, type RunAction } from './ui/RunScreen';
 import { SettingsPanel } from './ui/SettingsPanel';
 
-/** Top-level screen state. The simulation has its own finer state (serve, play, clear, ...). */
-type UiState = 'title' | 'playing' | 'paused' | 'ended';
+/**
+ * Top-level screen state. The simulation has its own finer state (serve, play, clear, ...).
+ * `between`: the pick between stages is up, with the pointer free to click it.
+ */
+type UiState = 'title' | 'playing' | 'paused' | 'between' | 'ended';
 
 /** Seconds the final banner stays up in-game before the end screen accepts input. */
 const END_DELAY = 1.5;
@@ -95,6 +99,7 @@ const overlay = new Overlay(el('overlay'), el('overlay-title'), el('overlay-sub'
 const banner = new EventBanner(el('event-banner'), el('event-title'), el('event-sub'));
 const input = new Input(canvas, renderer);
 const chainPopups = new ChainPopups(el('popups'), (x, y) => renderer.worldToClient(x, y));
+const runScreen = new RunScreen(el('run-screen'), (action) => runAction(action, 'mouse'));
 
 let ui: UiState = 'title';
 /** Waiting for the browser to grant pointer lock before play starts in mouse mode. */
@@ -104,7 +109,7 @@ let pendingSwitch = false;
 let game = newGame();
 
 function newGame(): Game {
-  const g = new Game(Date.now() >>> 0, STAGES);
+  const g = new Game(Date.now() >>> 0);
   g.events.onAny((type, payload) => eventConsole.log(g.time, String(type), payload));
   g.events.on('stageEvent', ({ kind }) => banner.show(kind, g.time));
   renderer.attach(g);
@@ -136,7 +141,7 @@ function requestStart(mode: ControlMode): void {
 }
 
 function enterPlay(mode: ControlMode): void {
-  const resumed = ui === 'paused';
+  const resumed = ui === 'paused' || ui === 'between';
   if (ui === 'ended') game = newGame();
   input.mode = mode;
   input.reset();
@@ -154,6 +159,33 @@ function switchToMouse(control: 'lock' | 'cursor'): void {
   logUi('controlSwitch', { mode: 'mouse', control });
 }
 
+/**
+ * The pick between stages is up. Once a choice starts the next stage, `between` lasts until the
+ * browser answers the pointer-lock request; meanwhile the serve screen shows and a click or
+ * Enter starts play as usual (in case the browser never answers).
+ */
+function choosing(): boolean {
+  return ui === 'between' && game.state === 'draft';
+}
+
+/** A choice on the pick screen. Once the next stage is up, play resumes with the device that chose. */
+function runAction(action: RunAction, via: ControlMode): void {
+  if (ui !== 'between' || !runScreen.ready) return;
+  if (action.type === 'pick') game.pickMod(action.index);
+  else game.pickLives();
+  if (game.state === 'serve') requestStart(via);
+}
+
+/** Number keys pick a card: the mod offers in order, then the lives card. */
+function runKey(code: string): boolean {
+  const digit = /^(?:Digit|Numpad)([1-9])$/.exec(code)?.[1];
+  if (!digit) return false;
+  const index = Number(digit) - 1;
+  if (index > game.offers.length) return false;
+  runAction(index < game.offers.length ? { type: 'pick', index } : { type: 'lives' }, 'keyboard');
+  return true;
+}
+
 function pause(reason: string): void {
   if (ui !== 'playing') return;
   ui = 'paused';
@@ -163,7 +195,7 @@ function pause(reason: string): void {
 }
 
 canvas.addEventListener('mousedown', (e) => {
-  if (e.button !== 0) return;
+  if (e.button !== 0 || choosing()) return;
   if (ui !== 'playing') {
     requestStart('mouse');
   } else if (input.mode === 'keyboard' && !pendingSwitch) {
@@ -215,6 +247,14 @@ window.addEventListener(
       if (e.code === 'KeyP' || (e.code === 'Escape' && !input.locked)) pause('key');
       return;
     }
+    if (choosing()) {
+      // Space is the launch key, so it never chooses here: a held or mashed launch can't pick.
+      if (runKey(e.code)) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+      }
+      return;
+    }
     if (e.code === 'Enter' || e.code === 'NumpadEnter' || e.code === 'Space' || (ui === 'paused' && e.code === 'KeyP')) {
       e.preventDefault();
       e.stopImmediatePropagation();
@@ -235,15 +275,19 @@ function overlayContent(): OverlayContent | null {
         title: game.state === 'complete' ? 'RUN COMPLETE' : 'GAME OVER',
         sub: `SCORE ${formatScore(game.score)}\n\n${START_HINT}`,
       };
+    case 'between':
     case 'playing':
       switch (game.state) {
         case 'serve':
           return {
-            title: `STAGE 1-${game.stageIndex + 1}`,
+            title: `STAGE ${game.stage.sector}-${game.stage.number}`,
             sub: `${game.stage.name}\nCLICK / SPACE TO LAUNCH`,
           };
         case 'clear':
           return { title: 'STAGE CLEAR' };
+        // The pick screen takes over.
+        case 'draft':
+          return null;
         case 'over':
           return { title: 'GAME OVER' };
         case 'complete':
@@ -259,10 +303,10 @@ function formatScore(score: number): string {
 }
 
 /** The longest live chain and the bonus its last brick earned (multiplied); a dash until a chain pays. */
-function formatChain(balls: readonly { chain: number }[], multiplier: number): string {
+function formatChain(g: Game): string {
   let chain = 0;
-  for (const b of balls) chain = Math.max(chain, b.chain);
-  return chain >= 2 ? `×${chain} +${chainBonus(chain) * multiplier}` : '—';
+  for (const b of g.balls) chain = Math.max(chain, b.chain);
+  return chain >= 2 ? `×${chain} +${g.chainBonus(chain) * g.multiplier}` : '—';
 }
 
 renderScores(el('score-list'));
@@ -273,6 +317,7 @@ const hudSector = el('hud-sector');
 const hudChain = el('hud-chain');
 const hudMult = el('hud-mult');
 const powerHud = new PowerHud(el('power-list'));
+const modHud = new ModHud(el('mod-list'));
 const sysFps = el('sys-fps');
 const sysTick = el('sys-tick');
 const sysBalls = el('sys-balls');
@@ -286,6 +331,11 @@ startLoop({
     if ((game.state === 'over' || game.state === 'complete') && game.stateTime >= END_DELAY) {
       ui = 'ended';
       releasePointer();
+    } else if (game.state === 'draft') {
+      ui = 'between';
+      audio.setMuffled(true);
+      logUi('pause', { reason: game.state });
+      releasePointer();
     }
   },
   render: (alpha, frameTime) => {
@@ -297,17 +347,19 @@ startLoop({
     chainPopups.setPaused(ui !== 'playing');
     const content = overlayContent();
     overlay.show(content);
+    runScreen.update(ui === 'between' ? game : null);
     // Menus and stage banners take over the field; a stage event banner never shares it.
-    if (content) banner.hide();
+    if (content || ui === 'between') banner.hide();
     else banner.update(game.time);
 
     if (frameTime > 0) fps += (1 / frameTime - fps) * 0.05;
     setText(hudScore, formatScore(game.score));
     setText(hudLives, String(game.lives));
-    setText(hudSector, `1-${game.stageIndex + 1}`);
-    setText(hudChain, formatChain(game.balls, game.multiplier));
+    setText(hudSector, `${game.stage.sector}-${game.stage.number}`);
+    setText(hudChain, formatChain(game));
     setText(hudMult, `×${game.multiplier}`);
     powerHud.update(game.timers, game.charges);
+    modHud.update(game.mods);
     setText(sysFps, fps.toFixed(0));
     setText(sysTick, String(game.tick));
     setText(sysBalls, String(game.balls.length));

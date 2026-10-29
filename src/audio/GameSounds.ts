@@ -131,6 +131,12 @@ export class GameSounds {
           this.play('power', (s) => s.notes(steps.map((n) => note(n, C5)), 0.06, { type: 'square', cutoff: 2600, dur: 0.13, gain: 0.07, pan: p }));
         }
       }),
+      ev.on('modPick', () => {
+        this.play('mod', (s) => s.notes([0, 7, 12, 16].map((n) => note(n, C5)), 0.06, { type: 'square', cutoff: 2800, dur: 0.14, gain: 0.07 }));
+      }),
+      ev.on('livesPick', () => {
+        this.play('lives', (s) => s.notes([0, 4, 7, 12, 16].map((n) => note(n, C5)), 0.06, { type: 'triangle', dur: 0.16, gain: 0.1 }));
+      }),
       ev.on('powerEnd', () => {
         this.play('powerEnd', (s) => s.notes([note(7, C5), note(0, C5)], 0.09, { type: 'triangle', dur: 0.14, gain: 0.08 }));
       }),
@@ -151,6 +157,10 @@ export class GameSounds {
       }),
       ev.on('ballLost', () => {
         this.play('lost', (s) => s.tone({ freq: 420, to: 120, dur: 0.35, gain: 0.18 }));
+      }),
+      ev.on('secondWind', () => {
+        // The lost-life sweep turned around: a quick rise back up.
+        this.play('secondWind', (s) => s.tone({ type: 'triangle', freq: 180, to: 720, dur: 0.35, gain: 0.18 }));
       }),
       ev.on('lifeLost', () => {
         this.combo = 0;

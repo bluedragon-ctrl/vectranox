@@ -557,3 +557,161 @@ body {
 #console .ev.stage {
   color: var(--purple);
 }
+
+/* Between stages: the pick, a column of cards over the playfield. */
+#run-screen {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(92%, 520px);
+  padding: 18px 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  text-align: center;
+  background: rgba(7, 2, 26, 0.86);
+  border: 1px solid rgba(255, 42, 157, 0.5);
+  box-shadow: 0 0 18px rgba(255, 42, 157, 0.25);
+  pointer-events: auto;
+  animation: run-in 0.3s ease-out;
+}
+
+#run-screen.hidden {
+  display: none;
+}
+
+#run-screen h1 {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: clamp(18px, 1.9vw, 28px);
+  letter-spacing: 0.12em;
+  color: var(--magenta);
+  text-shadow:
+    0 0 6px var(--magenta),
+    0 0 18px rgba(255, 42, 157, 0.6);
+}
+
+#run-screen > p {
+  font-size: 15px;
+  letter-spacing: 0.08em;
+  white-space: pre;
+  color: var(--cyan);
+}
+
+#run-screen .cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+#run-screen button {
+  font: inherit;
+  color: var(--text);
+  background: none;
+  cursor: pointer;
+}
+
+#run-screen button:disabled {
+  cursor: default;
+}
+
+#run-screen .key {
+  display: inline-block;
+  min-width: 2.2ch;
+  padding: 0 4px;
+  font-size: 13px;
+  color: var(--bg);
+  background: var(--c, var(--purple));
+}
+
+.card {
+  --c: var(--cyan);
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  text-align: left;
+  border: 1px solid color-mix(in srgb, var(--c) 45%, transparent);
+  background: color-mix(in srgb, var(--c) 6%, transparent);
+}
+
+.card:not(:disabled):hover {
+  border-color: var(--c);
+  background: color-mix(in srgb, var(--c) 14%, transparent);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--c) 35%, transparent);
+}
+
+.card .body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.card b {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: clamp(13px, 1.1vw, 16px);
+  letter-spacing: 0.08em;
+  color: var(--c);
+  text-shadow: 0 0 6px color-mix(in srgb, var(--c) 50%, transparent);
+}
+
+.card small {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.card .meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  white-space: nowrap;
+}
+
+.card em {
+  font-style: normal;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: var(--c);
+}
+
+.card i {
+  font-style: normal;
+  font-size: 14px;
+  color: var(--yellow);
+}
+
+.card:disabled {
+  opacity: 0.45;
+}
+
+@keyframes run-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% + 8px));
+  }
+}
+
+#mod-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 16px;
+}
+
+.mod {
+  display: flex;
+  justify-content: space-between;
+  color: var(--c);
+  text-shadow: 0 0 6px color-mix(in srgb, var(--c) 50%, transparent);
+}
+
+.mod .stacks {
+  color: var(--text-dim);
+  text-shadow: none;
+}
