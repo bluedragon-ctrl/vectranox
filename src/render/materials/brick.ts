@@ -9,13 +9,11 @@ import { SDF } from './common';
  * The instance rectangle is the brick's visual footprint; `uPad` leaves room for halo and shadow.
  */
 export const BRICK_FRAGMENT = /* glsl */ `
-uniform float uTime;
 uniform sampler2D uBackdrop;
 uniform vec2 uResolution;
 uniform float uPxPerUnit;
 varying vec2 vLocal;
 varying vec2 vHalf;
-varying vec2 vWorld;
 varying vec4 vColor;
 varying vec4 vParams;
 
@@ -105,10 +103,6 @@ void main() {
     top += vec3(0.85, 0.9, 1.0) * hl * 0.45;
     float glint = exp(-length((pt - vec2(-hb.x + 3.2, hb.y - 2.0)) * vec2(0.6, 1.4)) * 1.2);
     top += vec3(1.0) * glint * 0.6;
-    // Slow diagonal sheen sweeping over the whole wall of bricks.
-    float sweep = fract((vWorld.x + vWorld.y * 0.7) / 300.0 - uTime * 0.07);
-    float sheen = smoothstep(0.0, 0.015, sweep) * smoothstep(0.05, 0.015, sweep);
-    top += (tint * 0.5 + 0.2) * sheen;
     top += tint * diff * 0.12 + tint * fres * 0.9 + vec3(spec) * 0.7;
     side = tint * 0.1 + bg * 0.15;
     if (tough) {

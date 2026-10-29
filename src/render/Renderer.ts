@@ -84,7 +84,6 @@ export class Renderer {
     fragmentShader: BRICK_FRAGMENT,
     renderOrder: 10,
     uniforms: {
-      uTime: this.time.fx,
       uBackdrop: { value: this.backdropTarget.texture },
       uResolution: this.resolution,
       uPxPerUnit: { value: 1 },
