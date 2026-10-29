@@ -1,15 +1,16 @@
 import * as THREE from 'three';
 import { QuadBatch } from '../QuadBatch';
-import { METAL_PIECE_FRAGMENT, PARTICLE_FRAGMENT, PARTICLE_KIND, PIECE_FRAGMENT } from '../materials/particle';
+import { GLINT_FRAGMENT, METAL_PIECE_FRAGMENT, PIECE_FRAGMENT } from '../materials/particle';
 import type { Shard } from './fracture';
 
 const MAX = 2048;
-/** Glass and metal pieces share the pool but draw with their own shaders. */
-const PIECE = 2;
-const METAL_PIECE = 3;
+/** Particle kinds; they share the pool but each draws with its own shader. */
+const GLINT = 0;
+const PIECE = 1;
+const METAL_PIECE = 2;
 const WHITE = new THREE.Color(1, 1, 1);
 
-type Kind = (typeof PARTICLE_KIND)[keyof typeof PARTICLE_KIND] | typeof PIECE | typeof METAL_PIECE;
+type Kind = typeof GLINT | typeof PIECE | typeof METAL_PIECE;
 type Range = readonly [number, number];
 
 export interface BurstOptions {
@@ -22,27 +23,15 @@ export interface BurstOptions {
   spread?: number;
   life?: Range;
   size?: Range;
-  gravity?: number;
   drag?: number;
 }
 
-/** Per-kind values for the burst options left out. */
-interface BurstDefaults {
-  life: Range;
-  size: Range;
-  gravity: number;
-  drag: number;
-}
-
-const SPARK: BurstDefaults = { life: [0.18, 0.45], size: [1.2, 2], gravity: -120, drag: 3.5 };
-const GLINT: BurstDefaults = { life: [0.1, 0.2], size: [2.5, 4.5], gravity: 0, drag: 6 };
-
 /**
- * CPU-simulated visual particles: metal sparks, glass glints and broken glass or metal pieces.
+ * CPU-simulated visual particles: glass glints and broken glass or metal pieces.
  * Purely cosmetic: driven by wall-clock time, never fed back into the simulation.
  */
 export class Particles {
-  readonly batch = new QuadBatch({ max: MAX, fragmentShader: PARTICLE_FRAGMENT, pad: 3, renderOrder: 41 });
+  readonly glintBatch = new QuadBatch({ max: MAX, fragmentShader: GLINT_FRAGMENT, pad: 3, renderOrder: 41 });
   readonly pieces = new QuadBatch({ max: MAX, fragmentShader: PIECE_FRAGMENT, pad: 2, renderOrder: 40 });
   readonly metalPieces = new QuadBatch({ max: MAX, fragmentShader: METAL_PIECE_FRAGMENT, pad: 1, renderOrder: 40 });
   /** Strength of the facet glint on spinning pieces (lowered by reduce-flashing). */
@@ -73,14 +62,15 @@ export class Particles {
     this.n = 0;
   }
 
-  /** Soft sparks with a hot head, for metal hits. */
-  sparks(x: number, y: number, o: BurstOptions): void {
-    this.burst(PARTICLE_KIND.spark, SPARK, x, y, o);
-  }
-
-  /** Short sharp slivers of light, for glass. */
+  /** Short sharp slivers of light, for breaking glass. */
   glints(x: number, y: number, o: BurstOptions): void {
-    this.burst(PARTICLE_KIND.glint, GLINT, x, y, o);
+    for (let i = 0; i < o.count; i++) {
+      const a = o.angle === undefined ? Math.random() * Math.PI * 2 : o.angle + (Math.random() * 2 - 1) * (o.spread ?? Math.PI);
+      const s = rand(o.speed);
+      const k = this.spawn(GLINT, x, y, Math.cos(a) * s, Math.sin(a) * s, rand(o.life ?? [0.1, 0.2]), rand(o.size ?? [2.5, 4.5]), o.color);
+      if (k < 0) return;
+      this.drag[k] = o.drag ?? 6;
+    }
   }
 
   /** One glass (or `metal`) piece (see `fractureRect`), tumbling away with the given velocity. */
@@ -122,8 +112,7 @@ export class Particles {
   }
 
   draw(): void {
-    const b = this.batch;
-    b.begin();
+    this.glintBatch.begin();
     this.pieces.begin();
     this.metalPieces.begin();
     for (let i = 0; i < this.n; i++) {
@@ -135,14 +124,9 @@ export class Particles {
       const vx = this.vx[i]!;
       const vy = this.vy[i]!;
       switch (this.kind[i]) {
-        case PARTICLE_KIND.spark: {
-          const len = size * 2 + Math.hypot(vx, vy) * 0.03;
-          b.push(x, y, len, size, color, (1 - t) ** 1.5, PARTICLE_KIND.spark, 0, 0, 0, Math.atan2(vy, vx));
-          break;
-        }
-        case PARTICLE_KIND.glint: {
+        case GLINT: {
           const len = size + Math.hypot(vx, vy) * 0.012;
-          b.push(x, y, len, size * 0.28, color, 1 - t, PARTICLE_KIND.glint, 0, 0, 0, Math.atan2(vy, vx));
+          this.glintBatch.push(x, y, len, size * 0.28, color, 1 - t, 0, 0, 0, 0, Math.atan2(vy, vx));
           break;
         }
         case PIECE:
@@ -159,20 +143,9 @@ export class Particles {
         }
       }
     }
-    b.commit();
+    this.glintBatch.commit();
     this.pieces.commit();
     this.metalPieces.commit();
-  }
-
-  private burst(kind: Kind, d: BurstDefaults, x: number, y: number, o: BurstOptions): void {
-    for (let i = 0; i < o.count; i++) {
-      const a = o.angle === undefined ? Math.random() * Math.PI * 2 : o.angle + (Math.random() * 2 - 1) * (o.spread ?? Math.PI);
-      const s = rand(o.speed);
-      const k = this.spawn(kind, x, y, Math.cos(a) * s, Math.sin(a) * s, rand(o.life ?? d.life), rand(o.size ?? d.size), o.color);
-      if (k < 0) return;
-      this.gravity[k] = o.gravity ?? d.gravity;
-      this.drag[k] = o.drag ?? d.drag;
-    }
   }
 
   private spawn(kind: Kind, x: number, y: number, vx: number, vy: number, life: number, size: number, color: THREE.Color): number {

@@ -175,7 +175,7 @@ export class Renderer {
       this.balls.mesh,
       this.fx.particles.pieces.mesh,
       this.fx.particles.metalPieces.mesh,
-      this.fx.particles.batch.mesh,
+      this.fx.particles.glintBatch.mesh,
     );
 
     this.post = new PostFx(this.renderer, this.scene, this.camera);

@@ -39,7 +39,6 @@ export const COLORS = {
   cyan: new THREE.Color(PALETTE.cyan),
   purple: new THREE.Color(PALETTE.purple),
   yellow: new THREE.Color(PALETTE.yellow),
-  white: new THREE.Color(PALETTE.white),
 } as const;
 
 /** Each power's colour (see `POWER_LOOK`), linear. */
