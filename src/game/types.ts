@@ -5,9 +5,11 @@ export type GameState = 'serve' | 'play' | 'clear' | 'over' | 'complete';
 export type BrickKind = 'normal' | 'tough' | 'steel';
 
 export type PowerKind = keyof typeof POWER.kinds;
-/** Powers that run on a timer (the rest act once on pickup). */
-export type TimedPower = Exclude<PowerKind, 'multi' | 'life'>;
-export type HitSource = 'ball' | 'laser' | 'pulse';
+/** Powers that give charges, spent one per alt press. */
+export type ChargePower = 'detonator';
+/** Powers that run on a timer (the rest act once on pickup, or give charges). */
+export type TimedPower = Exclude<PowerKind, 'multi' | 'life' | ChargePower>;
+export type HitSource = 'ball' | 'laser' | 'pulse' | 'blast';
 export type StageEventKind = keyof typeof STAGE_EVENTS.kinds;
 
 /** Player input for one tick. Plain data so runs can later be recorded and replayed. */
@@ -19,6 +21,8 @@ export interface TickInput {
   launch: boolean;
   /** Fire button held (auto-fires the laser). */
   fire: boolean;
+  /** Alt button press (spends a charge, e.g. detonates a ball). */
+  alt: boolean;
 }
 
 /** Position is the centre; `px` is x at the previous tick, for render interpolation. */

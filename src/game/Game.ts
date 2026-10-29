@@ -11,6 +11,7 @@ import type {
   Brick,
   BrickKind,
   Capsule,
+  ChargePower,
   GameState,
   HitSource,
   Paddle,
@@ -34,6 +35,7 @@ const BRICK_CODES: Partial<Record<string, { kind: BrickKind; hp: number }>> = {
 
 const POWER_KINDS = Object.keys(POWER.kinds) as PowerKind[];
 const TIMED_POWERS = POWER_KINDS.filter((k): k is TimedPower => POWER.kinds[k].duration > 0);
+const CHARGE_POWERS: readonly ChargePower[] = ['detonator'];
 /** Picking one of these ends the other. */
 const OPPOSITE: Partial<Record<TimedPower, TimedPower>> = { expand: 'narrow', narrow: 'expand', slow: 'fast', fast: 'slow' };
 const GOOD_POWERS = POWER_KINDS.filter((k) => !POWER_LOOK[k].bad);
@@ -67,6 +69,8 @@ export class Game {
   bolts: Bolt[] = [];
   /** Seconds left on each timed power; 0 is off. */
   readonly timers = Object.fromEntries(TIMED_POWERS.map((k) => [k, 0])) as Record<TimedPower, number>;
+  /** Charges held for each charge power, spent by the alt button. */
+  readonly charges = Object.fromEntries(CHARGE_POWERS.map((k) => [k, 0])) as Record<ChargePower, number>;
   state: GameState = 'serve';
   /** Seconds since `state` last changed. */
   stateTime = 0;
@@ -157,6 +161,9 @@ export class Game {
       case 'life':
         this.lives = Math.min(POWER.maxLives, this.lives + 1);
         return;
+      case 'detonator':
+        this.addCharges('detonator', POWER.detonator.charges);
+        return;
     }
     const opposite = OPPOSITE[kind];
     if (opposite && this.isActive(opposite)) this.endPower(opposite);
@@ -190,7 +197,17 @@ export class Game {
       case 'safetyNet':
         this.applyPower('barrier', STAGE_EVENTS.kinds.safetyNet.duration);
         break;
+      case 'demolition':
+        this.addCharges('detonator', STAGE_EVENTS.kinds.demolition.charges);
+        break;
     }
+  }
+
+  /** The ball an alt press would detonate: the highest one, nearest the bricks. */
+  blastBall(): Ball | null {
+    let best: Ball | null = null;
+    for (const b of this.balls) if (!best || b.y > best.y) best = b;
+    return best;
   }
 
   private setState(state: GameState): void {
@@ -272,9 +289,10 @@ export class Game {
   private checkStageEvents(dt: number): void {
     this.sinceHit += dt;
     this.sinceKill += dt;
-    const { supplyDrop, overload, pulse, hunter } = STAGE_EVENTS.kinds;
+    const { supplyDrop, overload, pulse, hunter, demolition } = STAGE_EVENTS.kinds;
     const left = this.breakableLeft;
     if (left <= supplyDrop.bricksLeft) this.tryStageEvent('supplyDrop');
+    if (left <= demolition.bricksLeft) this.tryStageEvent('demolition');
     if (left <= overload.bricksLeft) this.tryStageEvent('overload');
     if (this.sinceHit >= pulse.idleTime) this.tryStageEvent('pulse');
     if (left <= hunter.bricksLeft && this.sinceKill >= hunter.idleTime) this.tryStageEvent('hunter');
@@ -499,22 +517,50 @@ export class Game {
     if (kind === 'slow' || kind === 'fast') this.rescaleBalls();
   }
 
-  /** Lost life or cleared stage: timers, capsules and bolts all go. */
+  /** Lost life or cleared stage: timers, charges, capsules and bolts all go. */
   private clearPowers(): void {
     for (const kind of TIMED_POWERS) this.timers[kind] = 0;
+    for (const kind of CHARGE_POWERS) this.charges[kind] = 0;
     this.capsules = [];
     this.bolts = [];
     this.laserCooldown = 0;
   }
 
-  /** Launch press releases caught balls; otherwise holding fire shoots the laser. */
+  /**
+   * Launch press releases caught balls; otherwise holding fire shoots the laser.
+   * Alt press spends a detonator charge (with none held it does nothing).
+   */
   private handleButtons(dt: number, input: TickInput): void {
     this.laserCooldown = Math.max(0, this.laserCooldown - dt);
+    if (input.alt && this.charges.detonator > 0) this.detonate();
     if (input.launch && this.releaseCaught()) {
       this.laserCooldown = POWER.laserCooldown;
       return;
     }
     if (input.fire && this.isActive('laser') && this.laserCooldown === 0) this.fireLaser();
+  }
+
+  private addCharges(kind: ChargePower, n: number): void {
+    this.charges[kind] = Math.min(POWER[kind].maxCharges, this.charges[kind] + n);
+  }
+
+  /** The highest ball explodes; breakable bricks in reach take damage, the ball flies on. */
+  private detonate(): void {
+    const b = this.blastBall();
+    if (!b) return;
+    this.charges.detonator--;
+    const { radius, damage } = POWER.detonator;
+    const targets: { br: Brick; ix: number; iy: number }[] = [];
+    for (const br of this.bricks) {
+      if (!br.alive || br.kind === 'steel') continue;
+      const ix = clamp(b.x, br.x, br.x + br.w);
+      const iy = clamp(b.y, br.y, br.y + br.h);
+      if ((ix - b.x) ** 2 + (iy - b.y) ** 2 <= radius * radius) targets.push({ br, ix, iy });
+    }
+    this.events.emit('detonate', { id: b.id, x: b.x, y: b.y, radius, bricks: targets.length, charges: this.charges.detonator });
+    for (const { br, ix, iy } of targets) {
+      for (let i = 0; i < damage && br.alive; i++) this.hitBrick(br, 'blast', ix, iy, false);
+    }
   }
 
   private fireLaser(): void {
@@ -662,7 +708,7 @@ export class Game {
     br.alive = false;
     this.breakableLeft--;
     this.sinceKill = 0;
-    this.eventArmed.supplyDrop = this.eventArmed.overload = this.eventArmed.hunter = true;
+    this.eventArmed.supplyDrop = this.eventArmed.overload = this.eventArmed.hunter = this.eventArmed.demolition = true;
     const points = br.kind === 'tough' ? br.maxHp * SCORE.toughPerHp : SCORE.normal;
     this.score += points;
     this.events.emit('brickDestroyed', { id: br.id, kind: br.kind, points, by, x, y, ix, iy });

@@ -18,7 +18,7 @@ type UiState = 'title' | 'playing' | 'paused' | 'ended';
 /** Seconds the final banner stays up in-game before the end screen accepts input. */
 const END_DELAY = 1.5;
 const START_HINT = 'CLICK · MOUSE CONTROL\nENTER · KEYBOARD CONTROL';
-const CONTROLS_HINT = 'MOVE  ← → / A D / MOUSE\nLAUNCH · FIRE  SPACE / CLICK\nPAUSE  P / ESC';
+const CONTROLS_HINT = 'MOVE  ← → / A D / MOUSE\nLAUNCH · FIRE  SPACE / CLICK\nDETONATE  X / RIGHT CLICK\nPAUSE  P / ESC';
 
 function el<T extends HTMLElement = HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -225,7 +225,7 @@ startLoop({
     setText(hudScore, formatScore(game.score));
     setText(hudLives, String(game.lives));
     setText(hudSector, `1-${game.stageIndex + 1}`);
-    powerHud.update(game.timers);
+    powerHud.update(game.timers, game.charges);
     setText(sysFps, fps.toFixed(0));
     setText(sysTick, String(game.tick));
     setText(sysBalls, String(game.balls.length));

@@ -122,3 +122,26 @@ void main() {
   gl_FragColor = vec4(col, 0.0);
 }
 `;
+
+/**
+ * Detonator blast: one thin ring that grows from half the blast radius to all of it while it
+ * fades. The instance rectangle is the full blast diameter. params: x = strength (1 -> 0).
+ */
+export const BLAST_FRAGMENT = /* glsl */ `
+varying vec2 vLocal;
+varying vec2 vHalf;
+varying vec4 vColor;
+varying vec4 vParams;
+
+${SDF}
+
+void main() {
+  float k = vParams.x;
+  float grow = 1.0 - k * k;
+  float r = vHalf.x * mix(0.5, 1.0, grow);
+  float d = abs(length(vLocal) - r) - 0.6;
+  vec3 tint = vColor.rgb;
+  vec3 col = mix(tint, vec3(1.0), 0.4) * fill(d) * 0.9 + tint * exp(-max(d, 0.0) * 0.5) * 0.25;
+  gl_FragColor = vec4(col * k, 0.0);
+}
+`;
