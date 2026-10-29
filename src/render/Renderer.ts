@@ -320,7 +320,6 @@ export class Renderer {
     for (const br of game.bricks) {
       if (!br.alive) continue;
       const flash = Math.max(0, 1 - (game.tick - br.hitTick) / FLASH_TICKS) * this.fx.brickFlash * (this.fx.areaHits.has(br.id) ? AREA_FLASH : 1);
-      const damage = br.kind === 'tough' ? 1 - br.hp / br.maxHp : 0;
       b.push(
         br.x + br.w / 2,
         br.y + br.h / 2,
@@ -329,9 +328,8 @@ export class Renderer {
         brickTint(br, this.color),
         br.kind === 'tough' ? br.hp : 1,
         BRICK_KIND[br.kind],
-        damage,
+        br.maxHp,
         flash * flash,
-        (br.id * 0.6180339) % 1,
       );
     }
     b.commit();
