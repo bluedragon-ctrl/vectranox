@@ -7,7 +7,6 @@ import { SDF } from './common';
  * Instance data: colour = rim tint. params: x = hit pulse (0..1), y = hit offset (-1..1).
  */
 export const PADDLE_FRAGMENT = /* glsl */ `
-uniform float uTime;
 uniform vec3 uAccent;
 varying vec2 vLocal;
 varying vec2 vHalf;
@@ -36,10 +35,9 @@ void main() {
   float capMask = smoothstep(hb.x - 7.0, hb.x - 5.5, abs(pt.x));
 
   vec3 top = tint * 0.12 + tint * fres * 0.8;
-  // Energy core: thin hot line with a slow travelling ripple.
-  float ripple = 0.75 + 0.25 * sin(pt.x * 0.5 - uTime * 9.0);
+  // Energy core: a thin static hot line.
   float core = exp(-abs(pt.y + 0.2) * 2.2) * (1.0 - capMask);
-  top += mix(tint, vec3(1.0), 0.5) * core * ripple * 0.6;
+  top += mix(tint, vec3(1.0), 0.5) * core * 0.5;
   // Segment ticks along the body.
   float ticks = stroke(fract(pt.x / 6.0 + 0.5) - 0.5, 0.03) * smoothstep(0.9, 0.3, abs(yN)) * (1.0 - capMask);
   top += tint * ticks * 0.35;

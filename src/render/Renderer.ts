@@ -48,10 +48,10 @@ export class Renderer {
   private trails = new Trails(COLORS.cyan, COLORS.purple);
   private fx = new GameFx(this.trails);
 
-  private time = { sky: { value: 0 }, fx: { value: 0 } };
+  private skyTime = { value: 0 };
   private resolution = { value: new THREE.Vector2(1, 1) };
   private skyUniforms = {
-    uTime: this.time.sky,
+    uTime: this.skyTime,
     uResolution: this.resolution,
     uVanish: { value: new THREE.Vector2() },
     uSunR: { value: 0.2 },
@@ -92,7 +92,7 @@ export class Renderer {
     pad: 4,
     fragmentShader: PADDLE_FRAGMENT,
     renderOrder: 25,
-    uniforms: { uTime: this.time.fx, uAccent: { value: COLORS.magenta } },
+    uniforms: { uAccent: { value: COLORS.magenta } },
   });
   private balls = new QuadBatch({ max: MAX_BALLS, pad: 3, fragmentShader: BALL_FRAGMENT, renderOrder: 30 });
 
@@ -201,8 +201,7 @@ export class Renderer {
     const dt = Math.min((now - this.lastFrame) / 1000, 0.1);
     this.lastFrame = now;
     this.fx.update(dt);
-    this.time.sky.value += dt;
-    this.time.fx.value = this.fx.now;
+    this.skyTime.value += dt;
 
     const shake = this.fx.shake;
     this.camera.position.set(this.camBase.x + shake.x, this.camBase.y + shake.y, 10);
