@@ -4,7 +4,7 @@ import { SDF } from './common';
  * Stylised glass bricks with a little 2.5D depth: a bevelled top face (fresnel rim, inner
  * highlight, refracted backdrop), a darker side face below it, a soft drop shadow and a neon halo.
  *
- * Instance data: colour rgb = tint, a = build-in progress (0..1, 1 = fully built).
+ * Instance data: colour rgb = tint (alpha unused).
  * params: x = kind (0 normal, 1 tough, 2 steel), y = damage (0..1), z = hit flash, w = random seed.
  * The instance rectangle is the brick's visual footprint; `uPad` leaves room for halo and shadow.
  */
@@ -42,7 +42,6 @@ float crackField(vec2 p) {
 void main() {
   vec2 p = vLocal;
   vec3 tint = vColor.rgb;
-  float appear = vColor.a;
   float kind = vParams.x;
   float damage = vParams.y;
   float flash = vParams.z;
@@ -130,14 +129,6 @@ void main() {
   float outside = 1.0 - fill(dSil);
   float halo = exp(-max(dSil, 0.0) * 0.6) * (steel ? 0.08 : 0.2) + flash * exp(-max(dSil, 0.0) * 0.25) * 0.6;
   col.rgb += edgeColor * halo * outside;
-
-  // Build-in: the brick materialises from the bottom up behind a bright scan line.
-  if (appear < 1.0) {
-    float yAll = (p.y + vHalf.y) / (2.0 * vHalf.y);
-    float front = appear * 1.3 - 0.15;
-    col *= 1.0 - smoothstep(front - 0.03, front + 0.03, yAll);
-    col.rgb += tint * exp(-abs(yAll - front) * 16.0) * fill(abs(p.x) - vHalf.x) * 2.0 * (1.0 - appear);
-  }
   gl_FragColor = col;
 }
 `;

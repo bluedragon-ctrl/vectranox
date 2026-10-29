@@ -30,8 +30,6 @@ export class GameFx {
   danger = 0;
   paddlePulse = 0;
   paddleHitOffset = 0;
-  /** Effect-clock time the current stage started, for the brick build-in. */
-  stageStart = -Infinity;
   /** Brick hit-flash strength, lowered by reduce-flashing. */
   brickFlash = 1;
 
@@ -70,9 +68,6 @@ export class GameFx {
     this.trails.clear();
     const ev = game.events;
     this.unsubscribe = [
-      ev.on('stageStart', () => {
-        this.stageStart = this.time;
-      }),
       ev.on('ballSpawn', ({ x, y }) => {
         this.particles.glow(x, y, 6, 18, 0.35, COLORS.cyan, 0.4);
         this.particles.ring(x, y, 2, 12, 0.3, COLORS.cyan, 0.6);

@@ -21,8 +21,6 @@ const MAX_BALLS = 32;
 const FLASH_TICKS = 12;
 /** Visual gap between neighbouring bricks. */
 const BRICK_GAP = 1.5;
-/** Brick build-in at stage start: seconds per brick, and stagger per row / column. */
-const BUILD = { duration: 0.35, row: 0.06, col: 0.012 } as const;
 /** Horizon height as a fraction of the window, from the bottom. */
 const HORIZON = 0.42;
 /** Sun radius in screen heights: fills this fraction of the gap right of the field, within limits. */
@@ -258,11 +256,9 @@ export class Renderer {
 
   private drawBricks(game: Game): void {
     const b = this.bricks;
-    const since = this.fx.now - this.fx.stageStart;
     b.begin();
     for (const br of game.bricks) {
       if (!br.alive) continue;
-      const appear = clamp01((since - br.row * BUILD.row - br.col * BUILD.col) / BUILD.duration);
       const flash = Math.max(0, 1 - (game.tick - br.hitTick) / FLASH_TICKS) * this.fx.brickFlash;
       const damage = br.kind === 'tough' ? 1 - br.hp / br.maxHp : 0;
       b.push(
@@ -271,7 +267,7 @@ export class Renderer {
         br.w - BRICK_GAP,
         br.h - BRICK_GAP,
         brickTint(br, this.color),
-        appear,
+        1,
         BRICK_KIND[br.kind],
         damage,
         flash * flash,
@@ -306,8 +302,4 @@ function fullscreenQuad(material: THREE.ShaderMaterial): THREE.Mesh {
   mesh.frustumCulled = false;
   mesh.renderOrder = -100;
   return mesh;
-}
-
-function clamp01(v: number): number {
-  return v < 0 ? 0 : v > 1 ? 1 : v;
 }
