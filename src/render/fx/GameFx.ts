@@ -1,8 +1,7 @@
 import * as THREE from 'three';
-import { FIELD } from '../../config/game';
-import { POWER_LOOK } from '../../config/tuning';
+import { BRICK, FIELD } from '../../config/game';
 import type { Game } from '../../game/Game';
-import { BRICK_GAP, brickTint, COLORS } from '../palette';
+import { BRICK_GAP, brickTint, COLORS, POWER_COLORS } from '../palette';
 import { chip, fractureRect } from './fracture';
 import { Particles } from './Particles';
 import { Shake } from './Shake';
@@ -15,9 +14,8 @@ const PIECE_PUSH = 0.12;
 const LASER_PUSH = 45;
 /** Outward push on glass shattered by a detonator blast. */
 const BLAST_PUSH = 60;
-const BLAST_COLOR = new THREE.Color(POWER_LOOK.detonator.color);
 
-export interface WallHit {
+interface WallHit {
   x: number;
   y: number;
   strength: number;
@@ -26,7 +24,7 @@ export interface WallHit {
 /**
  * Turns simulation events into cosmetic effects: shake, flashes and pulses. Particles are
  * reserved for damage (brick hits and destruction).
- * Reads game state only to place effects (ball and brick positions); never writes to it.
+ * Reads game state only to place effects (blast and brick positions); never writes to it.
  */
 export class GameFx {
   readonly particles = new Particles();
@@ -49,7 +47,6 @@ export class GameFx {
   private reduce = false;
   private nextWallHit = 0;
   private time = 0;
-  private game: Game | null = null;
   private unsubscribe: (() => void)[] = [];
   private tint = new THREE.Color();
 
@@ -79,7 +76,6 @@ export class GameFx {
 
   attach(game: Game): void {
     this.unsubscribe.forEach((off) => off());
-    this.game = game;
     this.particles.clear();
     this.trails.clear();
     const ev = game.events;
@@ -115,7 +111,7 @@ export class GameFx {
         this.blast.radius = radius;
         this.blast.strength = 1;
         this.shake.add(0.3);
-        this.pulse(BLAST_COLOR, 0.08, 0.3);
+        this.pulse(POWER_COLORS.detonator, 0.08, 0.3);
       }),
       ev.on('brickHit', ({ id, kind, by, x, y, ix, iy }) => {
         const brick = game.bricks.find((br) => br.id === id);
@@ -136,14 +132,13 @@ export class GameFx {
         this.particles.glints(ix, iy, { count: 4, color, speed: [100, 220], angle: away, spread: 1.0 });
         this.shake.add(by === 'pulse' || by === 'blast' ? 0 : 0.04);
       }),
-      ev.on('brickDestroyed', ({ id, kind, by, x, y, ix, iy }) => {
+      ev.on('brickDestroyed', ({ id, kind, by, x, y, ix, iy, vx, vy }) => {
         const brick = game.bricks.find((br) => br.id === id);
         const color = brick ? brickTint({ ...brick, hp: brick.maxHp }, this.tint) : this.tint.copy(COLORS.magenta);
-        const w = (brick?.w ?? 24) - BRICK_GAP;
-        const h = (brick?.h ?? 12) - BRICK_GAP;
-        const ball = by === 'ball' ? this.nearestBall(x, y) : null;
-        let pushX = (ball?.vx ?? 0) * PIECE_PUSH;
-        let pushY = by === 'laser' ? LASER_PUSH : (ball?.vy ?? 0) * PIECE_PUSH;
+        const w = (brick?.w ?? BRICK.width) - BRICK_GAP;
+        const h = (brick?.h ?? BRICK.height) - BRICK_GAP;
+        let pushX = vx * PIECE_PUSH;
+        let pushY = by === 'laser' ? LASER_PUSH : vy * PIECE_PUSH;
         const centre = by === 'blast' ? this.nearestBlast(x, y) : null;
         if (centre) {
           const d = Math.hypot(x - centre.x, y - centre.y) || 1;
@@ -209,19 +204,6 @@ export class GameFx {
       if (d < bestD) {
         bestD = d;
         best = c;
-      }
-    }
-    return best;
-  }
-
-  private nearestBall(x: number, y: number) {
-    let best = null;
-    let bestD = Infinity;
-    for (const b of this.game?.balls ?? []) {
-      const d = (b.x - x) ** 2 + (b.y - y) ** 2;
-      if (d < bestD) {
-        bestD = d;
-        best = b;
       }
     }
     return best;

@@ -68,4 +68,7 @@ export const PALETTE = {
   purple: 0x9d4dff,
   yellow: 0xffd23f,
   white: 0xf2e9ff,
+  blue: 0x3d8bff,
+  red: 0xff3b30,
+  orange: 0xff8a2a,
 } as const;

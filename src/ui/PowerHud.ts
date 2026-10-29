@@ -1,5 +1,7 @@
 import { POWER, POWER_LOOK } from '../config/tuning';
-import type { ChargePower, TimedPower } from '../game/types';
+import { CHARGE_POWERS, TIMED_POWERS } from '../game/powers';
+import type { ChargePower, PowerKind, TimedPower } from '../game/types';
+import { cssColor } from './dom';
 
 interface Row {
   el: HTMLElement;
@@ -32,30 +34,22 @@ export class PowerHud {
     this.none.className = 'power-none';
     this.none.textContent = 'NONE';
     root.replaceChildren(this.none);
-    for (const kind of Object.keys(POWER.kinds) as (keyof typeof POWER.kinds)[]) {
-      const { duration } = POWER.kinds[kind];
-      if (duration === 0) continue;
-      const el = powerRow(kind);
-      const track = document.createElement('span');
-      track.className = 'bar';
-      const bar = document.createElement('i');
-      track.append(bar);
-      const secs = document.createElement('span');
-      secs.className = 'secs';
-      el.append(track, secs);
+    for (const kind of TIMED_POWERS) {
+      const track = span('bar');
+      const bar = track.appendChild(document.createElement('i'));
+      const secs = span('secs');
+      const el = powerRow(kind, track, secs);
       root.append(el);
-      this.rows.set(kind as TimedPower, { el, bar, secs, shown: '', full: duration, last: 0 });
+      this.rows.set(kind, { el, bar, secs, shown: '', full: POWER.kinds[kind].duration, last: 0 });
     }
-    const kind: ChargePower = 'detonator';
-    const el = powerRow(kind);
-    const track = document.createElement('span');
-    track.className = 'pips';
-    const pips = Array.from({ length: POWER[kind].maxCharges }, () => track.appendChild(document.createElement('i')));
-    const count = document.createElement('span');
-    count.className = 'secs';
-    el.append(track, count);
-    root.append(el);
-    this.chargeRows.set(kind, { el, pips, count, shown: -1 });
+    for (const kind of CHARGE_POWERS) {
+      const track = span('pips');
+      const pips = Array.from({ length: POWER[kind].maxCharges }, () => track.appendChild(document.createElement('i')));
+      const count = span('secs');
+      const el = powerRow(kind, track, count);
+      root.append(el);
+      this.chargeRows.set(kind, { el, pips, count, shown: -1 });
+    }
   }
 
   update(timers: Readonly<Record<TimedPower, number>>, charges: Readonly<Record<ChargePower, number>>): void {
@@ -87,15 +81,21 @@ export class PowerHud {
   }
 }
 
-/** A hidden row in the power colour, holding the power's name. */
-function powerRow(kind: keyof typeof POWER.kinds): HTMLElement {
+/** A hidden row in the power colour: the power's name, then `parts`. */
+function powerRow(kind: PowerKind, ...parts: HTMLElement[]): HTMLElement {
   const look = POWER_LOOK[kind];
   const el = document.createElement('div');
   el.className = 'power hidden';
-  el.style.setProperty('--c', `#${look.color.toString(16).padStart(6, '0')}`);
+  el.style.setProperty('--c', cssColor(look.color));
   el.classList.toggle('bad', look.bad);
   const name = document.createElement('span');
   name.textContent = look.label;
-  el.append(name);
+  el.append(name, ...parts);
+  return el;
+}
+
+function span(className: string): HTMLElement {
+  const el = document.createElement('span');
+  el.className = className;
   return el;
 }

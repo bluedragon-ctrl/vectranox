@@ -12,7 +12,19 @@ export type GameEvents = {
   paddleHit: { id: number; offset: number };
   /** x, y: brick centre; ix, iy: impact point on the brick. */
   brickHit: { id: number; kind: BrickKind; hp: number; by: HitSource; x: number; y: number; ix: number; iy: number };
-  brickDestroyed: { id: number; kind: BrickKind; points: number; by: HitSource; x: number; y: number; ix: number; iy: number };
+  /** As `brickHit`; vx, vy: velocity of the ball that broke it, before it bounced (0 for other sources). */
+  brickDestroyed: {
+    id: number;
+    kind: BrickKind;
+    points: number;
+    by: HitSource;
+    x: number;
+    y: number;
+    ix: number;
+    iy: number;
+    vx: number;
+    vy: number;
+  };
   ballCaught: { id: number; offset: number };
   barrierHit: { id: number; x: number };
   powerDrop: { id: number; kind: PowerKind; x: number; y: number };
