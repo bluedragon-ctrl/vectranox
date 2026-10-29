@@ -3,7 +3,7 @@ import type { GameEvents } from '../game/events';
 const MAX_LINES = 250;
 
 /** Events logged by the UI itself (start, pause, settings) next to the simulation's. */
-export type UiEvent = 'play' | 'pause' | 'resume' | 'pointerLockFallback' | 'settings' | 'audio' | 'track' | 'musicFailed';
+export type UiEvent = 'play' | 'pause' | 'resume' | 'pointerLockFallback' | 'controlSwitch' | 'settings' | 'audio' | 'track' | 'musicFailed';
 type LogEvent = keyof GameEvents | UiEvent;
 
 /** Events tagged as system-level get a different colour in the log. */
@@ -18,6 +18,7 @@ const SYSTEM_EVENTS: ReadonlySet<string> = new Set<LogEvent>([
   'pause',
   'resume',
   'pointerLockFallback',
+  'controlSwitch',
 ]);
 
 /** Power-up events, highlighted separately. */

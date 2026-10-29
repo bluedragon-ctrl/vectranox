@@ -99,6 +99,8 @@ const chainPopups = new ChainPopups(el('popups'), (x, y) => renderer.worldToClie
 let ui: UiState = 'title';
 /** Waiting for the browser to grant pointer lock before play starts in mouse mode. */
 let pendingMouse = false;
+/** Waiting for pointer lock after a click during keyboard play; play goes on meanwhile. */
+let pendingSwitch = false;
 let game = newGame();
 
 function newGame(): Game {
@@ -138,9 +140,18 @@ function enterPlay(mode: ControlMode): void {
   if (ui === 'ended') game = newGame();
   input.mode = mode;
   input.reset();
+  pendingSwitch = false;
   ui = 'playing';
   audio.setMuffled(false);
   logUi(resumed ? 'resume' : 'play', { mode });
+}
+
+/** A keyboard player reached for the mouse: hand steering over without pausing. */
+function switchToMouse(control: 'lock' | 'cursor'): void {
+  pendingSwitch = false;
+  if (ui !== 'playing' || input.mode === 'mouse') return;
+  input.mode = 'mouse';
+  logUi('controlSwitch', { mode: 'mouse', control });
 }
 
 function pause(reason: string): void {
@@ -152,7 +163,15 @@ function pause(reason: string): void {
 }
 
 canvas.addEventListener('mousedown', (e) => {
-  if (e.button === 0 && ui !== 'playing') requestStart('mouse');
+  if (e.button !== 0) return;
+  if (ui !== 'playing') {
+    requestStart('mouse');
+  } else if (input.mode === 'keyboard' && !pendingSwitch) {
+    // The click itself still launches or fires; steering moves to the mouse once locked.
+    pendingSwitch = true;
+    const request = canvas.requestPointerLock() as Promise<void> | undefined;
+    request?.catch(() => undefined);
+  }
 });
 
 document.addEventListener('pointerlockchange', () => {
@@ -160,6 +179,8 @@ document.addEventListener('pointerlockchange', () => {
     if (pendingMouse) {
       pendingMouse = false;
       enterPlay('mouse');
+    } else if (pendingSwitch) {
+      switchToMouse('lock');
     }
   } else if (ui === 'playing' && input.mode === 'mouse') {
     pause('pointer released');
@@ -168,6 +189,10 @@ document.addEventListener('pointerlockchange', () => {
 
 // Lock refused (embedded preview, iframe, Chrome's cooldown right after Esc): play with the visible cursor.
 document.addEventListener('pointerlockerror', () => {
+  if (pendingSwitch) {
+    switchToMouse('cursor');
+    return;
+  }
   if (!pendingMouse) return;
   pendingMouse = false;
   logUi('pointerLockFallback', { control: 'cursor' });
@@ -215,7 +240,7 @@ function overlayContent(): OverlayContent | null {
         case 'serve':
           return {
             title: `STAGE 1-${game.stageIndex + 1}`,
-            sub: `${game.stage.name}\n${input.mode === 'mouse' ? 'CLICK' : 'SPACE'} TO LAUNCH`,
+            sub: `${game.stage.name}\nCLICK / SPACE TO LAUNCH`,
           };
         case 'clear':
           return { title: 'STAGE CLEAR' };

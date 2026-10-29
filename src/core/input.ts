@@ -21,14 +21,17 @@ const ALT_BUTTON = 2;
  * Collects mouse and keyboard input between ticks and hands it to the simulation as plain
  * per-tick data. Menu keys (start, pause) are handled in main.
  *
- * Mouse mode uses relative motion under pointer lock. Where the browser refuses the lock
- * (embedded previews, iframes), the paddle follows the visible cursor instead.
+ * Keys and mouse buttons work in either mode, so players can switch mid-game. Mouse mode
+ * uses relative motion under pointer lock. Where the browser refuses the lock (embedded
+ * previews, iframes), the paddle follows the visible cursor, but only on ticks the cursor
+ * moved, so a resting mouse does not fight the keys.
  */
 export class Input {
   mode: ControlMode = 'mouse';
 
   private dx = 0;
   private cursorX: number | null = null;
+  private cursorMoved = false;
   private launch = false;
   private alt = false;
   private mouseHeld = false;
@@ -40,10 +43,14 @@ export class Input {
   ) {
     document.addEventListener('mousemove', (e) => {
       if (this.locked) this.dx += (e.movementX / this.view.scale) * INPUT.mouseSensitivity;
-      else this.cursorX = e.clientX;
+      else {
+        this.cursorX = e.clientX;
+        this.cursorMoved = true;
+      }
     });
-    document.addEventListener('mousedown', (e) => {
-      if (this.mode !== 'mouse') return;
+    // On the playfield only (under pointer lock every click lands there), so clicking the
+    // side panels during keyboard play does not fire.
+    lockTarget.addEventListener('mousedown', (e) => {
       if (e.button === ALT_BUTTON) this.alt = true;
       if (e.button !== 0) return;
       this.launch = true;
@@ -84,17 +91,17 @@ export class Input {
     const right = RIGHT_KEYS.some((k) => this.held.has(k)) ? 1 : 0;
     const left = LEFT_KEYS.some((k) => this.held.has(k)) ? 1 : 0;
     let dx = this.dx;
-    if (this.absolute && this.cursorX !== null) dx = this.view.screenToWorldX(this.cursorX) - paddleX;
-    const fire = this.held.has(LAUNCH_KEY) || (this.mode === 'mouse' && this.mouseHeld);
+    if (this.absolute && this.cursorMoved && this.cursorX !== null) dx = this.view.screenToWorldX(this.cursorX) - paddleX;
+    const fire = this.held.has(LAUNCH_KEY) || this.mouseHeld;
     const input: TickInput = { dx, axis: right - left, launch: this.launch, fire, alt: this.alt };
     this.dx = 0;
-    this.launch = this.alt = false;
+    this.cursorMoved = this.launch = this.alt = false;
     return input;
   }
 
   /** Drops anything collected while the game was not running. */
   reset(): void {
     this.dx = 0;
-    this.launch = this.alt = false;
+    this.cursorMoved = this.launch = this.alt = false;
   }
 }
