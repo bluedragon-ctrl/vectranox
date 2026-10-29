@@ -7,8 +7,8 @@ export type BrickKind = 'normal' | 'tough' | 'steel';
 export type PowerKind = keyof typeof POWER.kinds;
 /** Powers that give charges, spent one per alt press. */
 export type ChargePower = 'detonator';
-/** Powers that run on a timer (the rest act once on pickup, or give charges). */
-export type TimedPower = Exclude<PowerKind, 'multi' | 'life' | ChargePower>;
+/** Powers that run on a timer: those with a duration (the rest act once on pickup, or give charges). */
+export type TimedPower = { [K in PowerKind]: (typeof POWER.kinds)[K]['duration'] extends 0 ? never : K }[PowerKind];
 export type HitSource = 'ball' | 'laser' | 'pulse' | 'blast';
 export type StageEventKind = keyof typeof STAGE_EVENTS.kinds;
 

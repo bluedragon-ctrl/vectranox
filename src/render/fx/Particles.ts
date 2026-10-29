@@ -9,20 +9,32 @@ const PIECE = 2;
 const WHITE = new THREE.Color(1, 1, 1);
 
 type Kind = (typeof PARTICLE_KIND)[keyof typeof PARTICLE_KIND] | typeof PIECE;
+type Range = readonly [number, number];
 
 export interface BurstOptions {
   count: number;
   color: THREE.Color;
   /** Speed range in world units per second. */
-  speed: [number, number];
+  speed: Range;
   /** Emission direction (radians) and half-spread; omit for all directions. */
   angle?: number;
   spread?: number;
-  life?: [number, number];
-  size?: [number, number];
+  life?: Range;
+  size?: Range;
   gravity?: number;
   drag?: number;
 }
+
+/** Per-kind values for the burst options left out. */
+interface BurstDefaults {
+  life: Range;
+  size: Range;
+  gravity: number;
+  drag: number;
+}
+
+const SPARK: BurstDefaults = { life: [0.18, 0.45], size: [1.2, 2], gravity: -120, drag: 3.5 };
+const GLINT: BurstDefaults = { life: [0.1, 0.2], size: [2.5, 4.5], gravity: 0, drag: 6 };
 
 /**
  * CPU-simulated visual particles: metal sparks, glass glints and shattered glass pieces.
@@ -51,11 +63,9 @@ export class Particles {
   private rgb = new Float32Array(MAX * 3);
   /** Piece vertices relative to the centre: ax, ay, bx, by (the third is -(a + b)). */
   private verts = new Float32Array(MAX * 4);
+  /** The one-value-per-particle arrays, for `remove`. */
+  private scalars = [this.kind, this.x, this.y, this.vx, this.vy, this.age, this.life, this.size, this.rot, this.vrot, this.gravity, this.drag, this.phase];
   private tmp = new THREE.Color();
-
-  get count(): number {
-    return this.n;
-  }
 
   clear(): void {
     this.n = 0;
@@ -63,24 +73,12 @@ export class Particles {
 
   /** Soft sparks with a hot head, for metal hits. */
   sparks(x: number, y: number, o: BurstOptions): void {
-    for (let i = 0; i < o.count; i++) {
-      const [vx, vy] = velocity(o);
-      const k = this.spawn(PARTICLE_KIND.spark, x, y, vx, vy, rand(o.life ?? [0.18, 0.45]), rand(o.size ?? [1.2, 2]), o.color);
-      if (k < 0) return;
-      this.gravity[k] = o.gravity ?? -120;
-      this.drag[k] = o.drag ?? 3.5;
-    }
+    this.burst(PARTICLE_KIND.spark, SPARK, x, y, o);
   }
 
   /** Short sharp slivers of light, for glass. */
   glints(x: number, y: number, o: BurstOptions): void {
-    for (let i = 0; i < o.count; i++) {
-      const [vx, vy] = velocity(o);
-      const k = this.spawn(PARTICLE_KIND.glint, x, y, vx, vy, rand(o.life ?? [0.1, 0.2]), rand(o.size ?? [2.5, 4.5]), o.color);
-      if (k < 0) return;
-      this.gravity[k] = o.gravity ?? 0;
-      this.drag[k] = o.drag ?? 6;
-    }
+    this.burst(PARTICLE_KIND.glint, GLINT, x, y, o);
   }
 
   /** One glass piece (see `fractureRect`), tumbling away with the given velocity. */
@@ -103,17 +101,20 @@ export class Particles {
   update(dt: number): void {
     let i = 0;
     while (i < this.n) {
-      this.age[i] = (this.age[i] ?? 0) + dt;
-      if ((this.age[i] ?? 0) >= (this.life[i] ?? 0)) {
+      const age = this.age[i]! + dt;
+      if (age >= this.life[i]!) {
         this.remove(i);
         continue;
       }
-      const damp = Math.exp(-(this.drag[i] ?? 0) * dt);
-      this.vx[i] = (this.vx[i] ?? 0) * damp;
-      this.vy[i] = (this.vy[i] ?? 0) * damp + (this.gravity[i] ?? 0) * dt;
-      this.x[i] = (this.x[i] ?? 0) + (this.vx[i] ?? 0) * dt;
-      this.y[i] = (this.y[i] ?? 0) + (this.vy[i] ?? 0) * dt;
-      this.rot[i] = (this.rot[i] ?? 0) + (this.vrot[i] ?? 0) * dt;
+      this.age[i] = age;
+      const damp = Math.exp(-this.drag[i]! * dt);
+      const vx = this.vx[i]! * damp;
+      const vy = this.vy[i]! * damp + this.gravity[i]! * dt;
+      this.vx[i] = vx;
+      this.vy[i] = vy;
+      this.x[i] = this.x[i]! + vx * dt;
+      this.y[i] = this.y[i]! + vy * dt;
+      this.rot[i] = this.rot[i]! + this.vrot[i]! * dt;
       i++;
     }
   }
@@ -124,13 +125,13 @@ export class Particles {
     b.begin();
     p.begin();
     for (let i = 0; i < this.n; i++) {
-      const t = (this.age[i] ?? 0) / (this.life[i] ?? 1);
-      const x = this.x[i] ?? 0;
-      const y = this.y[i] ?? 0;
-      const size = this.size[i] ?? 1;
-      const color = this.tmp.setRGB(this.rgb[i * 3] ?? 1, this.rgb[i * 3 + 1] ?? 1, this.rgb[i * 3 + 2] ?? 1);
-      const vx = this.vx[i] ?? 0;
-      const vy = this.vy[i] ?? 0;
+      const t = this.age[i]! / this.life[i]!;
+      const x = this.x[i]!;
+      const y = this.y[i]!;
+      const size = this.size[i]!;
+      const color = this.tmp.fromArray(this.rgb, i * 3);
+      const vx = this.vx[i]!;
+      const vy = this.vy[i]!;
       switch (this.kind[i]) {
         case PARTICLE_KIND.spark: {
           const len = size * 2 + Math.hypot(vx, vy) * 0.03;
@@ -145,29 +146,29 @@ export class Particles {
         case PIECE: {
           // Pieces shrink a little as they fade, and flash when a face turns to the light.
           const s = 1 - 0.35 * t;
-          const rot = this.rot[i] ?? 0;
-          const glint = Math.abs(Math.cos(rot + (this.phase[i] ?? 0))) ** 16 * 0.6 * this.glintScale;
+          const rot = this.rot[i]!;
+          const glint = Math.abs(Math.cos(rot + this.phase[i]!)) ** 16 * 0.6 * this.glintScale;
           color.lerp(WHITE, glint * 0.6).multiplyScalar(1 + glint);
           const extent = 2 * size * s;
-          p.push(
-            x,
-            y,
-            extent,
-            extent,
-            color,
-            1 - t * t * t,
-            (this.verts[i * 4] ?? 0) * s,
-            (this.verts[i * 4 + 1] ?? 0) * s,
-            (this.verts[i * 4 + 2] ?? 0) * s,
-            (this.verts[i * 4 + 3] ?? 0) * s,
-            rot,
-          );
+          const v = i * 4;
+          p.push(x, y, extent, extent, color, 1 - t * t * t, this.verts[v]! * s, this.verts[v + 1]! * s, this.verts[v + 2]! * s, this.verts[v + 3]! * s, rot);
           break;
         }
       }
     }
     b.commit();
     p.commit();
+  }
+
+  private burst(kind: Kind, d: BurstDefaults, x: number, y: number, o: BurstOptions): void {
+    for (let i = 0; i < o.count; i++) {
+      const a = o.angle === undefined ? Math.random() * Math.PI * 2 : o.angle + (Math.random() * 2 - 1) * (o.spread ?? Math.PI);
+      const s = rand(o.speed);
+      const k = this.spawn(kind, x, y, Math.cos(a) * s, Math.sin(a) * s, rand(o.life ?? d.life), rand(o.size ?? d.size), o.color);
+      if (k < 0) return;
+      this.gravity[k] = o.gravity ?? d.gravity;
+      this.drag[k] = o.drag ?? d.drag;
+    }
   }
 
   private spawn(kind: Kind, x: number, y: number, vx: number, vy: number, life: number, size: number, color: THREE.Color): number {
@@ -186,9 +187,7 @@ export class Particles {
     this.gravity[i] = 0;
     this.drag[i] = 0;
     this.phase[i] = 0;
-    this.rgb[i * 3] = color.r;
-    this.rgb[i * 3 + 1] = color.g;
-    this.rgb[i * 3 + 2] = color.b;
+    color.toArray(this.rgb, i * 3);
     return i;
   }
 
@@ -196,20 +195,12 @@ export class Particles {
   private remove(i: number): void {
     const last = --this.n;
     if (i === last) return;
-    for (const arr of [this.kind, this.x, this.y, this.vx, this.vy, this.age, this.life, this.size, this.rot, this.vrot, this.gravity, this.drag, this.phase]) {
-      arr[i] = arr[last] ?? 0;
-    }
-    for (let c = 0; c < 3; c++) this.rgb[i * 3 + c] = this.rgb[last * 3 + c] ?? 0;
-    for (let c = 0; c < 4; c++) this.verts[i * 4 + c] = this.verts[last * 4 + c] ?? 0;
+    for (const arr of this.scalars) arr[i] = arr[last]!;
+    this.rgb.copyWithin(i * 3, last * 3, last * 3 + 3);
+    this.verts.copyWithin(i * 4, last * 4, last * 4 + 4);
   }
 }
 
-function rand([min, max]: [number, number]): number {
+function rand([min, max]: Range): number {
   return min + Math.random() * (max - min);
-}
-
-function velocity(o: BurstOptions): [number, number] {
-  const a = o.angle === undefined ? Math.random() * Math.PI * 2 : o.angle + (Math.random() * 2 - 1) * (o.spread ?? Math.PI);
-  const s = rand(o.speed);
-  return [Math.cos(a) * s, Math.sin(a) * s];
 }

@@ -3,13 +3,15 @@ import { SDF } from './common';
 /**
  * Screen-space synthwave scenery: starry sky, striped sun, mountain ridges and a perspective
  * floor grid scrolling towards the viewer. `uVanish` is the vanishing point in device pixels;
- * the sun sits on it, with radius `uSunR` in screen heights.
+ * the sun sits on it, with radius `uSunR` in screen heights. `uSkip` (min xy, max xy in device
+ * pixels) is covered by the opaque playfield, so nothing is drawn there.
  */
 export const SKY_FRAGMENT = /* glsl */ `
 uniform float uTime;
 uniform vec2 uResolution;
 uniform vec2 uVanish;
 uniform float uSunR;
+uniform vec4 uSkip;
 uniform float uTwinkle;
 uniform vec3 uSkyTop;
 uniform vec3 uSkyHorizon;
@@ -30,6 +32,10 @@ float ridge(float x) {
 
 void main() {
   vec2 frag = gl_FragCoord.xy;
+  if (all(greaterThan(frag, uSkip.xy)) && all(lessThan(frag, uSkip.zw))) {
+    gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+    return;
+  }
   float H = uResolution.y;
   vec2 q = (frag - uVanish) / H;
   vec3 col;

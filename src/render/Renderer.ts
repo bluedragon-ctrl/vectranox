@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { FIELD, PALETTE } from '../config/game';
 import { POWER, POWER_LOOK } from '../config/tuning';
+import { lerp } from '../core/math';
 import type { VisualSettings } from '../core/settings';
 import type { Game } from '../game/Game';
 import type { PowerKind, TimedPower } from '../game/types';
@@ -14,7 +15,7 @@ import { FULLSCREEN_VERTEX } from './materials/common';
 import { PADDLE_FRAGMENT } from './materials/paddle';
 import { BARRIER_FRAGMENT, BLAST_FRAGMENT, BOLT_FRAGMENT, CAPSULE_FRAGMENT } from './materials/power';
 import { glyphMask } from './glyphs';
-import { BRICK_GAP, brickTint, COLORS } from './palette';
+import { BRICK_GAP, brickTint, COLORS, POWER_COLORS } from './palette';
 import { QuadBatch } from './QuadBatch';
 
 /** Screen-space padding (px) between the playfield frame and its area. */
@@ -31,10 +32,12 @@ const FLASH_TICKS = 12;
 const HORIZON = 0.42;
 /** Sun radius in screen heights: fills this fraction of the gap right of the field, within limits. */
 const SUN = { gapFill: 0.8, minRadius: 0.06, maxRadius: 0.27 } as const;
+/** World units the playfield can move under screen shake (offset, plus roll at its corners). */
+const SHAKE_MARGIN = 12;
 const BRICK_KIND = { normal: 0, tough: 1, steel: 2 } as const;
 const POWER_KINDS = Object.keys(POWER_LOOK) as PowerKind[];
 const CAPSULE_LOOK = Object.fromEntries(
-  POWER_KINDS.map((k) => [k, { color: new THREE.Color(POWER_LOOK[k].color), mask: glyphMask(POWER_LOOK[k].glyph), bad: POWER_LOOK[k].bad ? 1 : 0 }]),
+  POWER_KINDS.map((k) => [k, { color: POWER_COLORS[k], mask: glyphMask(POWER_LOOK[k].glyph), bad: POWER_LOOK[k].bad ? 1 : 0 }]),
 ) as Record<PowerKind, { color: THREE.Color; mask: number; bad: number }>;
 
 /**
@@ -66,6 +69,7 @@ export class Renderer {
     uResolution: this.resolution,
     uVanish: { value: new THREE.Vector2() },
     uSunR: { value: 0.2 },
+    uSkip: { value: new THREE.Vector4() },
     uTwinkle: { value: 1 },
     uSkyTop: { value: new THREE.Color(0x0a0326) },
     uSkyHorizon: { value: new THREE.Color(0x3c0d5e) },
@@ -105,7 +109,7 @@ export class Renderer {
     renderOrder: 25,
     uniforms: {
       uAccent: { value: COLORS.magenta },
-      uCatch: { value: CAPSULE_LOOK.catch.color },
+      uCatch: { value: POWER_COLORS.catch },
       uLaserFlash: { value: 0 },
     },
   });
@@ -118,7 +122,6 @@ export class Renderer {
   private ballPositions: { x: number; y: number }[] = [];
   private color = new THREE.Color();
   private armedColor = new THREE.Color();
-  private lastFrame = performance.now();
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -220,6 +223,11 @@ export class Renderer {
     const gap = w - fieldRight;
     this.skyUniforms.uVanish.value.set((fieldRight + gap / 2) * pr, h * HORIZON * pr);
     this.skyUniforms.uSunR.value = Math.min(SUN.maxRadius, Math.max(SUN.minRadius, (gap * SUN.gapFill) / 2 / h));
+    // Device pixels the opaque playfield always covers, even shaken; the sky skips them.
+    const skipW = (FIELD.width / 2 - SHAKE_MARGIN) * scale;
+    const skipH = (FIELD.height / 2 - SHAKE_MARGIN) * scale;
+    const areaCyUp = h - areaCy;
+    this.skyUniforms.uSkip.value.set((areaCx - skipW) * pr, (areaCyUp - skipH) * pr, (areaCx + skipW) * pr, (areaCyUp + skipH) * pr);
 
     const halfW = w / (2 * scale);
     const halfH = h / (2 * scale);
@@ -228,10 +236,9 @@ export class Renderer {
     this.camera.updateProjectionMatrix();
   }
 
-  render(game: Game, alpha: number): void {
-    const now = performance.now();
-    const dt = Math.min((now - this.lastFrame) / 1000, 0.1);
-    this.lastFrame = now;
+  /** `frameTime`: wall-clock seconds since the last frame, which drive the effects. */
+  render(game: Game, alpha: number, frameTime: number): void {
+    const dt = Math.min(frameTime, 0.1);
     this.fx.update(dt);
     this.skyTime.value += dt;
 
@@ -251,7 +258,7 @@ export class Renderer {
     this.drawPaddle(game, alpha);
     this.drawBlast();
     this.drawBalls(game);
-    this.trails.draw(game.balls, this.ballPositions, this.fx.now);
+    this.trails.draw(this.fx.now);
     this.fx.particles.draw();
 
     this.renderer.setRenderTarget(this.backdropTarget);
@@ -272,8 +279,8 @@ export class Renderer {
       const b = game.balls[i];
       if (!b) continue;
       const p = (out[i] ??= { x: 0, y: 0 });
-      p.x = b.px + (b.x - b.px) * alpha;
-      p.y = b.py + (b.y - b.py) * alpha;
+      p.x = lerp(b.px, b.x, alpha);
+      p.y = lerp(b.py, b.y, alpha);
     }
   }
 
@@ -326,7 +333,7 @@ export class Renderer {
     this.capsules.begin();
     for (const c of game.capsules) {
       const look = CAPSULE_LOOK[c.kind];
-      const y = c.py + (c.y - c.py) * alpha;
+      const y = lerp(c.py, c.y, alpha);
       this.capsules.push(c.x, y, POWER.capsuleWidth, POWER.capsuleHeight, look.color, 1, look.mask, look.bad);
     }
     this.capsules.commit();
@@ -335,7 +342,7 @@ export class Renderer {
   private drawBolts(game: Game, alpha: number): void {
     this.bolts.begin();
     for (const bolt of game.bolts) {
-      const tip = bolt.py + (bolt.y - bolt.py) * alpha;
+      const tip = lerp(bolt.py, bolt.y, alpha);
       this.bolts.push(bolt.x, tip - POWER.boltLength / 2, 1.6, POWER.boltLength, COLORS.magenta);
     }
     this.bolts.commit();
@@ -343,7 +350,7 @@ export class Renderer {
 
   private drawPaddle(game: Game, alpha: number): void {
     const p = game.paddle;
-    const x = p.px + (p.x - p.px) * alpha;
+    const x = lerp(p.px, p.x, alpha);
     this.paddle.uniforms.uLaserFlash!.value = this.fx.laserFlash;
     this.paddle.begin();
     this.paddle.push(
@@ -365,9 +372,7 @@ export class Renderer {
     const { centres, radius, strength } = this.fx.blast;
     this.blast.begin();
     if (strength > 0) {
-      for (const c of centres.slice(0, MAX_BALLS)) {
-        this.blast.push(c.x, c.y, radius * 2, radius * 2, CAPSULE_LOOK.detonator.color, 1, strength);
-      }
+      for (const c of centres) this.blast.push(c.x, c.y, radius * 2, radius * 2, POWER_COLORS.detonator, 1, strength);
     }
     this.blast.commit();
   }
@@ -376,13 +381,13 @@ export class Renderer {
   private drawBalls(game: Game): void {
     const pierce = powerLevel(game, 'pierce');
     const armed = game.charges.detonator > 0 ? game.blastBalls() : [];
-    this.color.copy(COLORS.cyan).lerp(CAPSULE_LOOK.pierce.color, pierce * 0.7);
-    this.armedColor.copy(this.color).lerp(CAPSULE_LOOK.detonator.color, 0.75);
+    this.color.copy(COLORS.cyan).lerp(POWER_COLORS.pierce, pierce * 0.7);
+    this.armedColor.copy(this.color).lerp(POWER_COLORS.detonator, 0.75);
     this.balls.begin();
     this.ballPositions.forEach((pos, i) => {
       const ball = game.balls[i];
-      const r = ball?.r ?? 4;
-      this.balls.push(pos.x, pos.y, r * 2, r * 2, ball && armed.includes(ball) ? this.armedColor : this.color, 1, pierce);
+      if (!ball) return;
+      this.balls.push(pos.x, pos.y, ball.r * 2, ball.r * 2, armed.includes(ball) ? this.armedColor : this.color, 1, pierce);
     });
     this.balls.commit();
   }

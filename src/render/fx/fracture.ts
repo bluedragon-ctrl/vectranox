@@ -1,3 +1,5 @@
+import { clamp } from '../../core/math';
+
 /** A triangle as its centroid plus two vertices relative to it; the third is -(a + b). */
 export interface Shard {
   cx: number;
@@ -84,8 +86,4 @@ function perimeterPoint(d: number, w: number, h: number): Pt {
 
 function lerp(a: Pt, b: Pt, t: number): Pt {
   return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
-}
-
-function clamp(v: number, min: number, max: number): number {
-  return v < min ? min : v > max ? max : v;
 }

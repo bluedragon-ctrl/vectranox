@@ -23,6 +23,13 @@ const float DEPTH = 2.6;
 const float RADIUS = 1.6;
 const float BEVEL = 2.4;
 
+/** Gradient of sdRoundBox(p, b, r). */
+vec2 gradRoundBox(vec2 p, vec2 b, float r) {
+  vec2 q = abs(p) - b + r;
+  vec2 g = max(q.x, q.y) > 0.0 ? normalize(max(q, 0.0)) : (q.x > q.y ? vec2(1.0, 0.0) : vec2(0.0, 1.0));
+  return g * vec2(p.x < 0.0 ? -1.0 : 1.0, p.y < 0.0 ? -1.0 : 1.0);
+}
+
 float crackField(vec2 p) {
   vec2 cell = floor(p);
   vec2 f = fract(p);
@@ -57,11 +64,7 @@ void main() {
   float dShadow = sdRoundBox(p - vec2(2.0, -3.0), vHalf, RADIUS);
 
   // Pillow bevel: tilt the normal outwards near the edge of the top face.
-  const vec2 e = vec2(0.05, 0.0);
-  vec2 grad = vec2(
-    sdRoundBox(pt + e.xy, hb, RADIUS) - sdRoundBox(pt - e.xy, hb, RADIUS),
-    sdRoundBox(pt + e.yx, hb, RADIUS) - sdRoundBox(pt - e.yx, hb, RADIUS)
-  ) / (2.0 * e.x);
+  vec2 grad = gradRoundBox(pt, hb, RADIUS);
   float bevel = 1.0 - smoothstep(0.0, BEVEL, -dTop);
   vec3 n = normalize(vec3(grad * bevel * 1.4, 1.0));
   vec3 L = normalize(vec3(-0.45, 0.75, 0.6));
