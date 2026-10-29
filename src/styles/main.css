@@ -114,7 +114,7 @@ body {
   }
 }
 
-/* Chain bonus popups: window-space, over the playfield, under the banners. */
+/* Chain bonus badge: just outside the playfield's bottom-right corner, under the banners. */
 #popups {
   position: fixed;
   inset: 0;
@@ -126,36 +126,38 @@ body {
   animation-play-state: paused;
 }
 
+/* Anchored by its bottom-left corner; a new popup replaces the last one. */
 .popup {
   --c: var(--yellow);
   position: absolute;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  padding: 3px 7px;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 128px;
+  padding: 8px 14px;
   line-height: 1;
   white-space: nowrap;
-  /* Dark plate: the popup sits over lit bricks of every colour. */
   background: rgba(7, 2, 26, 0.82);
   border-top: 1px solid color-mix(in srgb, var(--c) 55%, transparent);
   border-bottom: 1px solid color-mix(in srgb, var(--c) 55%, transparent);
   color: var(--c);
   text-shadow: 0 0 6px color-mix(in srgb, var(--c) 60%, transparent);
-  transform: translate(-50%, -50%);
-  animation: popup-rise 0.9s ease-out forwards;
+  transform: translateY(-100%);
+  transform-origin: left bottom;
+  animation: popup-bonus 1.6s ease-out forwards;
 }
 
 .popup span {
-  font-size: clamp(10px, 0.8vw, 13px);
+  font-family: var(--display);
+  font-size: clamp(11px, 0.9vw, 14px);
   letter-spacing: 0.1em;
-  opacity: 0.85;
 }
 
 .popup b {
   font-family: var(--display);
   font-weight: 800;
-  font-size: clamp(14px, 1.2vw, 19px);
+  font-size: clamp(20px, 1.9vw, 30px);
   letter-spacing: 0.06em;
 }
 
@@ -163,63 +165,51 @@ body {
   --c: var(--magenta);
 }
 
-.popup.t2 b {
-  font-size: clamp(16px, 1.4vw, 22px);
-}
-
 .popup.t3 {
   --c: var(--cyan);
 }
 
-.popup.t3 b {
-  font-size: clamp(18px, 1.6vw, 25px);
-}
-
 .popup.summary {
-  gap: 3px;
-  padding: 6px 16px;
-  animation: popup-hold 1.5s ease-out forwards;
+  animation: popup-summary 2.2s ease-out forwards;
 }
 
-.popup.summary span {
-  font-family: var(--display);
-  font-size: clamp(11px, 0.9vw, 14px);
-  opacity: 1;
+.popup.summary b {
+  font-size: clamp(24px, 2.3vw, 36px);
 }
 
-@keyframes popup-rise {
+@keyframes popup-bonus {
   from {
     opacity: 0;
-    transform: translate(-50%, -20%) scale(0.85);
+    transform: translateY(-100%) scale(1.12);
   }
-  15% {
+  10% {
     opacity: 1;
-    transform: translate(-50%, -50%) scale(1);
+    transform: translateY(-100%) scale(1);
   }
-  65% {
+  70% {
     opacity: 1;
   }
   to {
     opacity: 0;
-    transform: translate(-50%, -160%);
+    transform: translateY(-100%);
   }
 }
 
-@keyframes popup-hold {
+@keyframes popup-summary {
   from {
     opacity: 0;
-    transform: translate(-50%, -30%);
+    transform: translateY(-100%) scale(1.18);
   }
-  12% {
+  8% {
     opacity: 1;
-    transform: translate(-50%, -50%);
+    transform: translateY(-100%) scale(1);
   }
   80% {
     opacity: 1;
   }
   to {
     opacity: 0;
-    transform: translate(-50%, -80%);
+    transform: translateY(-100%);
   }
 }
 
