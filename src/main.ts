@@ -8,6 +8,7 @@ import { chainBonus, Game } from './game/Game';
 import { STAGES } from './levels/stages';
 import { Renderer } from './render/Renderer';
 import { AudioPanel } from './ui/AudioPanel';
+import { ChainPopups } from './ui/ChainPopups';
 import { EventBanner } from './ui/EventBanner';
 import { EventConsole, type UiEvent } from './ui/EventConsole';
 import { Overlay, type OverlayContent } from './ui/Overlay';
@@ -93,6 +94,7 @@ const eventConsole = new EventConsole(el('console'));
 const overlay = new Overlay(el('overlay'), el('overlay-title'), el('overlay-sub'));
 const banner = new EventBanner(el('event-banner'), el('event-title'), el('event-sub'));
 const input = new Input(canvas, renderer);
+const chainPopups = new ChainPopups(el('popups'), (x, y) => renderer.worldToClient(x, y));
 
 let ui: UiState = 'title';
 /** Waiting for the browser to grant pointer lock before play starts in mouse mode. */
@@ -105,6 +107,7 @@ function newGame(): Game {
   g.events.on('stageEvent', ({ kind }) => banner.show(kind, g.time));
   renderer.attach(g);
   sounds.attach(g);
+  chainPopups.attach(g);
   g.start();
   return g;
 }
@@ -266,6 +269,7 @@ startLoop({
     // Paused: the accumulator still runs, so freeze interpolation at the last tick.
     renderer.render(game, ui === 'playing' ? alpha : 1, frameTime);
     canvas.classList.toggle('hide-cursor', ui === 'playing');
+    chainPopups.setPaused(ui !== 'playing');
     const content = overlayContent();
     overlay.show(content);
     // Menus and stage banners take over the field; a stage event banner never shares it.

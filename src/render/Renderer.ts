@@ -193,6 +193,14 @@ export class Renderer {
     return this.camBase.x + (clientX - window.innerWidth / 2) / this.pxPerUnit;
   }
 
+  /** Window-space CSS pixel position of a world point (ignores screen shake). */
+  worldToClient(x: number, y: number): { x: number; y: number } {
+    return {
+      x: window.innerWidth / 2 + (x - this.camBase.x) * this.pxPerUnit,
+      y: window.innerHeight / 2 - (y - this.camBase.y) * this.pxPerUnit,
+    };
+  }
+
   /** Route a (new) game's events to the effects. Call before `game.start()` to catch the first stage. */
   attach(game: Game): void {
     this.fx.attach(game);
