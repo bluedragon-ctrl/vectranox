@@ -13,6 +13,9 @@ export interface FieldView {
 const LEFT_KEYS = ['ArrowLeft', 'KeyA'];
 const RIGHT_KEYS = ['ArrowRight', 'KeyD'];
 const LAUNCH_KEY = 'Space';
+const ALT_KEY = 'KeyX';
+/** MouseEvent.button for the alt action. */
+const ALT_BUTTON = 2;
 
 /**
  * Collects mouse and keyboard input between ticks and hands it to the simulation as plain
@@ -27,6 +30,7 @@ export class Input {
   private dx = 0;
   private cursorX: number | null = null;
   private launch = false;
+  private alt = false;
   private mouseHeld = false;
   private held = new Set<string>();
 
@@ -39,10 +43,14 @@ export class Input {
       else this.cursorX = e.clientX;
     });
     document.addEventListener('mousedown', (e) => {
-      if (this.mode !== 'mouse' || e.button !== 0) return;
+      if (this.mode !== 'mouse') return;
+      if (e.button === ALT_BUTTON) this.alt = true;
+      if (e.button !== 0) return;
       this.launch = true;
       this.mouseHeld = true;
     });
+    // Right click is the alt button, so the playfield never opens a context menu.
+    lockTarget.addEventListener('contextmenu', (e) => e.preventDefault());
     document.addEventListener('mouseup', (e) => {
       if (e.button === 0) this.mouseHeld = false;
     });
@@ -50,6 +58,7 @@ export class Input {
       if (e.code === LAUNCH_KEY || LEFT_KEYS.includes(e.code) || RIGHT_KEYS.includes(e.code)) e.preventDefault();
       this.held.add(e.code);
       if (e.code === LAUNCH_KEY && !e.repeat) this.launch = true;
+      if (e.code === ALT_KEY && !e.repeat) this.alt = true;
     });
     window.addEventListener('keyup', (e) => this.held.delete(e.code));
     window.addEventListener('blur', () => {
@@ -68,7 +77,7 @@ export class Input {
   }
 
   /**
-   * Input for the next tick; consumes accumulated mouse motion and the launch press.
+   * Input for the next tick; consumes accumulated mouse motion and the launch and alt presses.
    * The launch button doubles as fire: `launch` is the press, `fire` is held.
    */
   sample(paddleX: number): TickInput {
@@ -77,15 +86,15 @@ export class Input {
     let dx = this.dx;
     if (this.absolute && this.cursorX !== null) dx = this.view.screenToWorldX(this.cursorX) - paddleX;
     const fire = this.held.has(LAUNCH_KEY) || (this.mode === 'mouse' && this.mouseHeld);
-    const input: TickInput = { dx, axis: right - left, launch: this.launch, fire };
+    const input: TickInput = { dx, axis: right - left, launch: this.launch, fire, alt: this.alt };
     this.dx = 0;
-    this.launch = false;
+    this.launch = this.alt = false;
     return input;
   }
 
   /** Drops anything collected while the game was not running. */
   reset(): void {
     this.dx = 0;
-    this.launch = false;
+    this.launch = this.alt = false;
   }
 }

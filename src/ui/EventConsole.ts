@@ -15,7 +15,7 @@ const SYSTEM_EVENTS = new Set([
 ]);
 
 /** Power-up events, highlighted separately. */
-const POWER_EVENTS = new Set(['powerCollect', 'powerEnd']);
+const POWER_EVENTS = new Set(['powerCollect', 'powerEnd', 'detonate']);
 
 function eventClass(type: string): string {
   if (SYSTEM_EVENTS.has(type)) return 'ev sys';

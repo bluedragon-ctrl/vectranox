@@ -20,6 +20,8 @@ export type GameEvents = {
   powerMissed: { id: number; kind: PowerKind };
   powerEnd: { kind: TimedPower };
   laserFire: { x: number; y: number };
+  /** `balls` balls exploded (see `Game.blastBalls`); `bricks` breakable bricks were in reach, `charges` are left. */
+  detonate: { balls: number; radius: number; bricks: number; charges: number };
   /** A stage event fired; `bricks` is how many breakable bricks were left. */
   stageEvent: { kind: StageEventKind; bricks: number };
   ballLost: { id: number };

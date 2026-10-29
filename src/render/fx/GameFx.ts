@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { FIELD } from '../../config/game';
+import { POWER_LOOK } from '../../config/tuning';
 import type { Game } from '../../game/Game';
 import { BRICK_GAP, brickTint, COLORS } from '../palette';
 import { chip, fractureRect } from './fracture';
@@ -12,6 +13,9 @@ const WALL_HIT_SLOTS = 8;
 const PIECE_PUSH = 0.12;
 /** Upward push on glass shattered by a laser bolt. */
 const LASER_PUSH = 45;
+/** Outward push on glass shattered by a detonator blast. */
+const BLAST_PUSH = 60;
+const BLAST_COLOR = new THREE.Color(POWER_LOOK.detonator.color);
 
 export interface WallHit {
   x: number;
@@ -37,6 +41,8 @@ export class GameFx {
   /** Laser emitters light up on every shot. */
   laserFlash = 0;
   readonly barrierHit = { x: 0, strength: 0 };
+  /** Last detonator press: a ring per exploding ball, all growing to the blast radius and fading together. */
+  readonly blast = { centres: [] as { x: number; y: number }[], radius: 0, strength: 0 };
   /** Brick hit-flash strength, lowered by reduce-flashing. */
   brickFlash = 1;
 
@@ -65,6 +71,7 @@ export class GameFx {
     this.paddlePulse = Math.max(0, this.paddlePulse - dt * 4);
     this.laserFlash = Math.max(0, this.laserFlash - dt * 6);
     this.barrierHit.strength = Math.max(0, this.barrierHit.strength - dt * 2.5);
+    this.blast.strength = Math.max(0, this.blast.strength - dt * 4);
     for (const h of this.wallHits) h.strength = Math.max(0, h.strength - dt * 3);
     this.particles.update(dt);
     this.shake.update(dt);
@@ -103,6 +110,13 @@ export class GameFx {
       ev.on('laserFire', () => {
         this.laserFlash = 1;
       }),
+      ev.on('detonate', ({ radius }) => {
+        this.blast.centres = game.blastBalls().map((b) => ({ x: b.x, y: b.y }));
+        this.blast.radius = radius;
+        this.blast.strength = 1;
+        this.shake.add(0.3);
+        this.pulse(BLAST_COLOR, 0.08, 0.3);
+      }),
       ev.on('brickHit', ({ id, kind, by, x, y, ix, iy }) => {
         const brick = game.bricks.find((br) => br.id === id);
         const away = Math.atan2(iy - y, ix - x);
@@ -120,7 +134,7 @@ export class GameFx {
           this.particles.piece(chip(ix, iy, 0.9 + Math.random() * 0.8), Math.cos(a) * s, Math.sin(a) * s, color, 0.35 + Math.random() * 0.25);
         }
         this.particles.glints(ix, iy, { count: 4, color, speed: [100, 220], angle: away, spread: 1.0 });
-        this.shake.add(by === 'pulse' ? 0 : 0.04);
+        this.shake.add(by === 'pulse' || by === 'blast' ? 0 : 0.04);
       }),
       ev.on('brickDestroyed', ({ id, kind, by, x, y, ix, iy }) => {
         const brick = game.bricks.find((br) => br.id === id);
@@ -128,8 +142,14 @@ export class GameFx {
         const w = (brick?.w ?? 24) - BRICK_GAP;
         const h = (brick?.h ?? 12) - BRICK_GAP;
         const ball = by === 'ball' ? this.nearestBall(x, y) : null;
-        const pushX = (ball?.vx ?? 0) * PIECE_PUSH;
-        const pushY = by === 'laser' ? LASER_PUSH : (ball?.vy ?? 0) * PIECE_PUSH;
+        let pushX = (ball?.vx ?? 0) * PIECE_PUSH;
+        let pushY = by === 'laser' ? LASER_PUSH : (ball?.vy ?? 0) * PIECE_PUSH;
+        const centre = by === 'blast' ? this.nearestBlast(x, y) : null;
+        if (centre) {
+          const d = Math.hypot(x - centre.x, y - centre.y) || 1;
+          pushX = ((x - centre.x) / d) * BLAST_PUSH;
+          pushY = ((y - centre.y) / d) * BLAST_PUSH;
+        }
         // The brick breaks into pieces radiating from the impact; tough glass breaks finer.
         for (const s of fractureRect(x, y, w, h, ix, iy, kind === 'tough' ? 5 : 2)) {
           const dx = s.cx - ix;
@@ -139,8 +159,8 @@ export class GameFx {
           this.particles.piece(s, (dx / dist) * speed + pushX, (dy / dist) * speed + pushY, color, 0.55 + Math.random() * 0.35);
         }
         this.particles.glints(ix, iy, { count: 5, color, speed: [120, 260] });
-        // A pulse breaks many bricks in one tick; its own kick below stands in for theirs.
-        if (by !== 'pulse') this.shake.add(kind === 'tough' ? 0.16 : 0.1);
+        // A pulse or blast breaks many bricks in one tick; its own kick stands in for theirs.
+        if (by !== 'pulse' && by !== 'blast') this.shake.add(kind === 'tough' ? 0.16 : 0.1);
       }),
       ev.on('stageEvent', ({ kind }) => {
         if (kind !== 'pulse') return;
@@ -179,6 +199,19 @@ export class GameFx {
     this.flashColor.copy(color);
     this.flash = Math.max(this.flash, flash);
     this.aberration = Math.max(this.aberration, aberration);
+  }
+
+  private nearestBlast(x: number, y: number) {
+    let best = null;
+    let bestD = Infinity;
+    for (const c of this.blast.centres) {
+      const d = (c.x - x) ** 2 + (c.y - y) ** 2;
+      if (d < bestD) {
+        bestD = d;
+        best = c;
+      }
+    }
+    return best;
   }
 
   private nearestBall(x: number, y: number) {

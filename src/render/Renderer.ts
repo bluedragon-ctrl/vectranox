@@ -12,7 +12,7 @@ import { BALL_FRAGMENT } from './materials/ball';
 import { BRICK_FRAGMENT } from './materials/brick';
 import { FULLSCREEN_VERTEX } from './materials/common';
 import { PADDLE_FRAGMENT } from './materials/paddle';
-import { BARRIER_FRAGMENT, BOLT_FRAGMENT, CAPSULE_FRAGMENT } from './materials/power';
+import { BARRIER_FRAGMENT, BLAST_FRAGMENT, BOLT_FRAGMENT, CAPSULE_FRAGMENT } from './materials/power';
 import { glyphMask } from './glyphs';
 import { BRICK_GAP, brickTint, COLORS } from './palette';
 import { QuadBatch } from './QuadBatch';
@@ -113,9 +113,11 @@ export class Renderer {
   private barrier = new QuadBatch({ max: 1, pad: 6, fragmentShader: BARRIER_FRAGMENT, renderOrder: 15 });
   private capsules = new QuadBatch({ max: MAX_CAPSULES, pad: 4, fragmentShader: CAPSULE_FRAGMENT, renderOrder: 22 });
   private bolts = new QuadBatch({ max: MAX_BOLTS, pad: 4, fragmentShader: BOLT_FRAGMENT, renderOrder: 24 });
+  private blast = new QuadBatch({ max: MAX_BALLS, pad: 4, fragmentShader: BLAST_FRAGMENT, renderOrder: 26 });
 
   private ballPositions: { x: number; y: number }[] = [];
   private color = new THREE.Color();
+  private armedColor = new THREE.Color();
   private lastFrame = performance.now();
 
   constructor(
@@ -155,6 +157,7 @@ export class Renderer {
       this.capsules.mesh,
       this.bolts.mesh,
       this.paddle.mesh,
+      this.blast.mesh,
       this.balls.mesh,
       this.fx.particles.pieces.mesh,
       this.fx.particles.batch.mesh,
@@ -246,6 +249,7 @@ export class Renderer {
     this.drawCapsules(game, alpha);
     this.drawBolts(game, alpha);
     this.drawPaddle(game, alpha);
+    this.drawBlast();
     this.drawBalls(game);
     this.trails.draw(game.balls, this.ballPositions, this.fx.now);
     this.fx.particles.draw();
@@ -357,14 +361,28 @@ export class Renderer {
     this.paddle.commit();
   }
 
-  /** Piercing balls burn hotter. */
+  private drawBlast(): void {
+    const { centres, radius, strength } = this.fx.blast;
+    this.blast.begin();
+    if (strength > 0) {
+      for (const c of centres.slice(0, MAX_BALLS)) {
+        this.blast.push(c.x, c.y, radius * 2, radius * 2, CAPSULE_LOOK.detonator.color, 1, strength);
+      }
+    }
+    this.blast.commit();
+  }
+
+  /** Piercing balls burn hotter; with detonator charges held, the balls that would blow are tinted. */
   private drawBalls(game: Game): void {
     const pierce = powerLevel(game, 'pierce');
+    const armed = game.charges.detonator > 0 ? game.blastBalls() : [];
     this.color.copy(COLORS.cyan).lerp(CAPSULE_LOOK.pierce.color, pierce * 0.7);
+    this.armedColor.copy(this.color).lerp(CAPSULE_LOOK.detonator.color, 0.75);
     this.balls.begin();
     this.ballPositions.forEach((pos, i) => {
-      const r = game.balls[i]?.r ?? 4;
-      this.balls.push(pos.x, pos.y, r * 2, r * 2, this.color, 1, pierce);
+      const ball = game.balls[i];
+      const r = ball?.r ?? 4;
+      this.balls.push(pos.x, pos.y, r * 2, r * 2, ball && armed.includes(ball) ? this.armedColor : this.color, 1, pierce);
     });
     this.balls.commit();
   }

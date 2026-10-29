@@ -21,10 +21,11 @@ npm run dev
 | Move | mouse | ← → or A D |
 | Launch / release caught ball | click | Space |
 | Fire laser | hold button | hold Space |
+| Alt action (detonate a charge) | right click | X |
 | Pause | Esc | P or Esc |
 
 In dev builds the running game is available in the browser console as `vnx.game`;
-`vnx.game.applyPower('laser')` grants a power-up (any kind from `POWER.kinds`) and
+`vnx.game.applyPower('laser')` grants a power-up (any kind from `POWER.kinds`, e.g. `'detonator'` for charges) and
 `vnx.game.fireStageEvent('overload')` runs a stage event (any kind from `STAGE_EVENTS.kinds`).
 Both live in `src/config/tuning.ts`, together with drop chances, weights, durations and the event triggers.
 
