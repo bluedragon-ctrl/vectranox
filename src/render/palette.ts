@@ -12,8 +12,8 @@ const STEEL_COLOR = 0x9a92c4;
 const EXPLOSIVE_COLOR = 0xff5a1f;
 const REGEN_COLOR = 0x2dffb4;
 /**
- * Brightest a glass or gold tint may be (linear luminance). Yellow and cyan are far brighter than
- * magenta or purple at full strength and would flood the bloom, so they are dimmed to this.
+ * Brightest a brick tint may be (linear luminance). Yellow and cyan are far brighter than magenta
+ * or purple at full strength and would flood the bloom, so they are dimmed to this.
  */
 const MAX_TINT_LUMA = 0.35;
 
@@ -27,10 +27,7 @@ interface BrickLook {
 export function brickTint(br: BrickLook, out: THREE.Color): THREE.Color {
   if (br.kind === 'steel') return out.setHex(STEEL_COLOR);
   if (br.kind === 'explosive') return capBrightness(out.setHex(EXPLOSIVE_COLOR));
-  if (br.kind === 'tough' || br.kind === 'regen') {
-    const hex = br.kind === 'tough' ? PALETTE.yellow : REGEN_COLOR;
-    return capBrightness(out.setHex(hex)).multiplyScalar(0.55 + 0.45 * (br.hp / br.maxHp));
-  }
+  if (br.kind === 'regen') return capBrightness(out.setHex(REGEN_COLOR)).multiplyScalar(0.55 + 0.45 * (br.hp / br.maxHp));
   return capBrightness(out.setHex(ROW_COLORS[br.row % ROW_COLORS.length] ?? PALETTE.magenta));
 }
 

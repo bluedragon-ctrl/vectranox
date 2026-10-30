@@ -6,6 +6,14 @@ import type { HitSource } from '../game/types';
 import type { AudioEngine } from './AudioEngine';
 import { note, type Synth } from './synth';
 
+/** Glass: a bright shatter and a ringing note that climbs with the combo. */
+function glass(s: Synth, ping: number, p: number): void {
+  s.noise({ filter: 'highpass', freq: 3200, dur: 0.2, gain: 0.22, pan: p });
+  s.noise({ filter: 'bandpass', freq: 6500, q: 3, attack: 0.01, dur: 0.12, gain: 0.12, pan: p });
+  s.tone({ freq: ping, dur: 0.28, gain: 0.13, pan: p });
+  s.tone({ freq: ping * 1.5, at: 0.02, dur: 0.2, gain: 0.05, pan: p });
+}
+
 /** Semitone steps of a major pentatonic scale, for the brick-combo pitch. */
 const PENTATONIC = [0, 2, 4, 7, 9];
 /** Stereo width: a sound at the field's edge pans this far. */
@@ -66,7 +74,11 @@ export class GameSounds {
           return;
         }
         const ping = this.comboNote(by);
-        // Armoured plate that holds: a dull clank plus the combo note.
+        if (kind === 'normal') {
+          this.play('glass', (s) => glass(s, ping, p));
+          return;
+        }
+        // Plate that holds: a dull clank plus the combo note.
         this.play('clank', (s) => {
           s.tone({ type: 'triangle', freq: 420, to: 380, dur: 0.12, gain: 0.14, pan: p });
           s.tone({ type: 'triangle', freq: 667, to: 610, dur: 0.1, gain: 0.08, pan: p });
@@ -86,13 +98,7 @@ export class GameSounds {
           });
           return;
         }
-        // Glass: a bright shatter and a ringing note that climbs with the combo.
-        this.play('glass', (s) => {
-          s.noise({ filter: 'highpass', freq: 3200, dur: 0.2, gain: 0.22, pan: p });
-          s.noise({ filter: 'bandpass', freq: 6500, q: 3, attack: 0.01, dur: 0.12, gain: 0.12, pan: p });
-          s.tone({ freq: ping, dur: 0.28, gain: 0.13, pan: p });
-          s.tone({ freq: ping * 1.5, at: 0.02, dur: 0.2, gain: 0.05, pan: p });
-        });
+        this.play('glass', (s) => glass(s, ping, p));
       }),
       ev.on('explosion', ({ source, centres }) => {
         if (source === 'charge') {

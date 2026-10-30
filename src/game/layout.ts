@@ -4,8 +4,8 @@ import type { Brick, BrickKind, Portal, Target } from './types';
 
 export const BRICK_CODES: Partial<Record<string, { kind: BrickKind; hp: number }>> = {
   '1': { kind: 'normal', hp: 1 },
-  '2': { kind: 'tough', hp: 2 },
-  '3': { kind: 'tough', hp: 3 },
+  '2': { kind: 'normal', hp: 2 },
+  '3': { kind: 'normal', hp: 3 },
   '#': { kind: 'steel', hp: 0 },
   '*': { kind: 'explosive', hp: 1 },
   r: { kind: 'regen', hp: BRICK_TYPES.regen.hp },

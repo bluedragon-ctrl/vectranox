@@ -1149,7 +1149,7 @@ export class Game {
     const x = br.x + br.w / 2;
     const y = br.y + br.h / 2;
     const multiplier = this.multiplier;
-    const points = SCORE.normal * multiplier;
+    const points = SCORE.perHp * multiplier;
     this.score += points;
     this.events.emit('brickDestroyed', { id: br.id, kind: br.kind, points, chain: 0, bonus: 0, multiplier, by: 'explosion', x, y, ix, iy, vx: 0, vy: 0 });
     this.maybeDrop(x, y);
@@ -1172,7 +1172,7 @@ function isBreakable(br: Brick): boolean {
 /** Points for breaking a brick, before the multiplier and chain bonus. */
 function brickPoints(br: Brick): number {
   if (br.kind === 'explosive') return SCORE.explosive;
-  return br.kind === 'normal' ? SCORE.normal : br.maxHp * SCORE.toughPerHp;
+  return br.maxHp * SCORE.perHp;
 }
 
 /** Bonus for the `chain`-th brick of a chain; the first brick earns none. */

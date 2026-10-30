@@ -14,7 +14,7 @@ export type RoomKind = 'standard' | 'formation' | 'elite';
  * `rooms` is the mix of room kinds per sector, in stage order; each slot takes a template of that
  * kind (the first stage of the run is always the opener).
  *
- * Depth scaling: stage n of the run (0-based) turns each normal brick tough (2 hits) with chance
+ * Depth scaling: stage n of the run (0-based) turns each 1-hit brick into a 2-hit one with chance
  * `toughPerStage * n` and each 2-hit brick into a 3-hit one with `hardPerStage * n`, capped at
  * the `Max` values. Formations move `formationPerStage * n` faster. A layout is mirrored
  * left-right with `mirrorChance`.

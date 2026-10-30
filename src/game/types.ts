@@ -4,7 +4,7 @@ import type { POWER, STAGE_EVENTS } from '../config/tuning';
 /** `draft` (the pick between stages) waits for the player's choice. */
 export type GameState = 'serve' | 'play' | 'clear' | 'draft' | 'over' | 'complete';
 
-export type BrickKind = 'normal' | 'tough' | 'steel' | 'explosive' | 'regen';
+export type BrickKind = 'normal' | 'steel' | 'explosive' | 'regen';
 
 export type PowerKind = keyof typeof POWER.kinds;
 /** Powers that give charges, spent one per alt press. */

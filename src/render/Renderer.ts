@@ -50,7 +50,7 @@ const HORIZON = 0.42;
 const SUN = { gapFill: 0.8, minRadius: 0.06, maxRadius: 0.27 } as const;
 /** World units the playfield can move under screen shake (offset, plus roll at its corners). */
 const SHAKE_MARGIN = 12;
-const BRICK_KIND = { normal: 0, tough: 1, steel: 2, explosive: 3, regen: 4 } as const;
+const BRICK_KIND = { normal: 0, steel: 1, explosive: 2, regen: 3 } as const;
 const POWER_KINDS = Object.keys(POWER_LOOK) as PowerKind[];
 const CAPSULE_LOOK = Object.fromEntries(
   POWER_KINDS.map((k) => [k, { color: CAPSULE_COLORS[k], mask: glyphMask(POWER_LOOK[k].glyph), bad: POWER_LOOK[k].bad ? 1 : 0 }]),
@@ -358,7 +358,7 @@ export class Renderer {
         br.w - BRICK_GAP,
         br.h - BRICK_GAP,
         brickTint(br, this.color),
-        br.kind === 'tough' || br.kind === 'regen' ? br.hp : 1,
+        br.kind === 'regen' ? br.hp : 1,
         BRICK_KIND[br.kind],
         br.maxHp,
         Math.max(flash * flash, heal),
