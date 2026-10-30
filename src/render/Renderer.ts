@@ -51,7 +51,7 @@ const HORIZON = 0.42;
 const SUN = { gapFill: 0.8, minRadius: 0.06, maxRadius: 0.27 } as const;
 /** World units the playfield can move under screen shake (offset, plus roll at its corners). */
 const SHAKE_MARGIN = 12;
-const BRICK_KIND = { normal: 0, tough: 1, steel: 2, explosive: 3, regen: 4, core: 5, turret: 6, spawner: 7, phantom: 8 } as const;
+const BRICK_KIND = { normal: 0, steel: 1, explosive: 2, regen: 3, core: 4, turret: 5, spawner: 6, phantom: 7 } as const;
 /** Shadow balls fade out over their last second, and never quite match a real ball's brightness. */
 const SHADOW_LOOK = { fade: 1, alpha: 0.7 } as const;
 const POWER_KINDS = Object.keys(POWER_LOOK) as PowerKind[];
@@ -366,7 +366,7 @@ export class Renderer {
         br.w - BRICK_GAP,
         br.h - BRICK_GAP,
         brickTint(br, this.color),
-        br.kind === 'tough' || br.kind === 'regen' ? br.hp : 1,
+        br.kind === 'regen' ? br.hp : 1,
         BRICK_KIND[br.kind],
         br.maxHp,
         Math.max(flash * flash, heal),

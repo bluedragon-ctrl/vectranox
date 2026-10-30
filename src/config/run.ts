@@ -22,7 +22,7 @@ export type RoomKind = 'standard' | 'formation' | 'elite' | 'boss';
  * Tiers: `tierWeights` is how likely a room of each tier is, per template (relative weights, tier 1
  * first), for each `bandRooms` rooms of the run; the last row is used past the end.
  *
- * Depth scaling: stage n of the run (0-based) turns each normal brick tough (2 hits) with chance
+ * Depth scaling: stage n of the run (0-based) turns each 1-hit brick into a 2-hit one with chance
  * `toughPerStage * n` and each 2-hit brick into a 3-hit one with `hardPerStage * n`, capped at
  * the `Max` values. Formations move `formationPerStage * n` faster. A layout is mirrored
  * left-right with `mirrorChance`.

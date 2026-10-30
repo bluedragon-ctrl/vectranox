@@ -88,7 +88,7 @@ function mirrorCols([from, to]: readonly [number, number]): [number, number] {
   return [BRICK.cols - 1 - to, BRICK.cols - 1 - from];
 }
 
-/** Deeper stages turn more bricks tough; any stage may come mirrored. */
+/** Deeper stages add hits to more bricks; any stage may come mirrored. */
 function scaleLayout(layout: readonly string[], depth: number, mirror: boolean, rng?: Rng): string[] {
   const { toughPerStage, toughMax, hardPerStage, hardMax } = RUN.depth;
   const tough = Math.min(toughMax, toughPerStage * depth);

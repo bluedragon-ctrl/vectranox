@@ -4,7 +4,7 @@ import type { POWER, STAGE_EVENTS } from '../config/tuning';
 /** `draft` (the pick between stages) waits for the player's choice. */
 export type GameState = 'serve' | 'play' | 'clear' | 'draft' | 'over' | 'complete';
 
-export type BrickKind = 'normal' | 'tough' | 'steel' | 'explosive' | 'regen' | 'core' | EmitterKind;
+export type BrickKind = 'normal' | 'steel' | 'explosive' | 'regen' | 'core' | EmitterKind;
 /** Boss bricks that act on the phase's timers: fire shots, send falling bricks, release shadow balls. */
 export type EmitterKind = 'turret' | 'spawner' | 'phantom';
 

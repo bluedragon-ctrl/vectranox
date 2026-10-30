@@ -4,14 +4,14 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { FULLSCREEN_VERTEX } from '../materials/common';
-import { FINAL_FRAGMENT } from '../materials/post';
+import { BLOOM_BRIGHT_FRAGMENT, FINAL_FRAGMENT } from '../materials/post';
 
 /**
  * `reach` scales how far the glow spreads; `radius` only reweights the blur levels, not their extent.
  * A tighter blur packs the same light into less area, so `strength` must drop with `reach` or the
  * halo just gets brighter and looks no smaller.
  */
-const BLOOM = { strength: 0.22, radius: 0.25, threshold: 0.75, reach: 0.5 } as const;
+const BLOOM = { strength: 0.12, radius: 0.25, threshold: 0.75, reach: 0.5 } as const;
 /** Chromatic aberration in UV units at the screen corner: resting value and full pulse. */
 const ABERRATION = { base: 0, pulse: 0.018 } as const;
 
@@ -33,6 +33,7 @@ export class PostFx {
     this.composer = new EffectComposer(renderer);
     this.composer.addPass(new RenderPass(scene, camera));
     this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), BLOOM.strength, BLOOM.radius, BLOOM.threshold);
+    this.bloom.materialHighPassFilter.fragmentShader = BLOOM_BRIGHT_FRAGMENT;
     this.composer.addPass(this.bloom);
     this.final = new ShaderPass(
       new THREE.ShaderMaterial({

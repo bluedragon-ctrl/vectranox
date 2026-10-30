@@ -125,7 +125,7 @@ export class GameFx {
         this.shake.add(0.3);
         this.pulse(POWER_COLORS.detonator, 0.08, 0.3);
       }),
-      // Only metal bricks survive a hit (glass breaks at once). They just flash and kick: no particles.
+      // A brick that survives a hit just flashes and kicks: no particles.
       ev.on('brickHit', ({ id, kind, by }) => {
         const area = isArea(by);
         if (area) this.areaHits.add(id);
@@ -146,8 +146,8 @@ export class GameFx {
           pushX = ((x - centre.x) / d) * BLAST_PUSH;
           pushY = ((y - centre.y) / d) * BLAST_PUSH;
         }
-        // The brick breaks into pieces radiating from the impact: glass shards and glints, or for an
-        // armoured (tough) or steel plate a few metal pieces and nothing else.
+        // The brick breaks into pieces radiating from the impact: glass shards and glints, or for
+        // any other kind a few metal pieces and nothing else.
         const metal = kind !== 'normal';
         for (const s of fractureRect(x, y, w, h, ix, iy, metal ? 3 : 2)) {
           const dx = s.cx - ix;
@@ -158,7 +158,7 @@ export class GameFx {
         }
         if (!metal) this.particles.glints(ix, iy, { count: 5, color, speed: [120, 260] });
         // An area hit breaks many bricks in one tick; its own kick stands in for theirs.
-        if (!isArea(by)) this.shake.add(kind === 'tough' ? 0.16 : 0.1);
+        if (!isArea(by)) this.shake.add(0.1);
       }),
       ev.on('paddleStun', () => {
         this.shake.add(0.2);

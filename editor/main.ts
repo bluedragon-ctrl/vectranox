@@ -32,9 +32,9 @@ const MOTIONS = Object.keys(FORMATION.motions) as FormationDef['motion'][];
 const NEW_BOSS: BossDef = { hp: 16, phases: [{ at: 1, fire: 'straight', turret: 2.5 }] };
 
 const TOOLS: readonly { tool: Tool; label: string; title: string }[] = [
-  { tool: '1', label: '1', title: 'Normal brick' },
-  { tool: '2', label: '2', title: 'Tough, 2 hits' },
-  { tool: '3', label: '3', title: 'Tough, 3 hits' },
+  { tool: '1', label: '1', title: 'Normal, 1 hit' },
+  { tool: '2', label: '2', title: 'Normal, 2 hits' },
+  { tool: '3', label: '3', title: 'Normal, 3 hits' },
   { tool: '#', label: '#', title: 'Steel' },
   { tool: '*', label: '*', title: 'Explosive' },
   { tool: 'r', label: 'r', title: 'Regenerating' },

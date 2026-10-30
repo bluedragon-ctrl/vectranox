@@ -4,7 +4,7 @@ import type { FORMATION } from '../config/tuning';
 /**
  * Stage templates, one JSON file each in `rooms/`, written by the room editor (`npm run editor`).
  * A run is assembled from these (see assemble.ts). One string per brick row, top row first, 13 columns.
- * `1` normal · `2` / `3` tough (hits to break) · `#` steel (indestructible) · `.` empty
+ * `1` / `2` / `3` normal (hits to break) · `#` steel (indestructible) · `.` empty
  * `*` explosive · `r` regenerating (see `BRICK_TYPES`)
  * Pinball pieces (see `PINBALL`): `o` target · `A`–`Z` portal, each letter used exactly twice (its two ends).
  * Boss rooms only: `c` core, a filled rectangle of cells that makes one big brick · `t` turret ·

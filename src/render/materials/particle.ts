@@ -45,7 +45,7 @@ void main() {
 `;
 
 /**
- * Metal piece of a broken armoured (tough) brick: the same triangle as PIECE_FRAGMENT, but an
+ * Metal piece of a broken non-glass brick: the same triangle as PIECE_FRAGMENT, but an
  * opaque plate with a lit cut edge and no glow. The spin glint in colour rgb reads as metal flashing.
  */
 export const METAL_PIECE_FRAGMENT = /* glsl */ `
