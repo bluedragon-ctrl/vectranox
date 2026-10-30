@@ -32,7 +32,21 @@ In dev builds the running game is available in the browser console as `vnx.game`
 Both live in `src/config/tuning.ts`, together with drop chances, weights, durations and the event triggers.
 `vnx.game.applyMod('heavy')` adds a mod stack (any kind from `MODS`). Mods, their rarity and the
 lives card live in `src/config/mods.ts`; run length, room mix and depth scaling in `src/config/run.ts`.
-`vnx.game.tryStage('PINWHEEL')` swaps the current stage for any template from `src/levels/stages.ts`.
+`vnx.game.tryStage('PINWHEEL')` swaps the current stage for any room from `src/levels/rooms/`.
+
+## Room editor
+
+```bash
+npm run editor
+```
+
+Or double-click `room-editor.bat` on Windows. Opens at <http://localhost:5174/editor/>. Rooms are one JSON file each in `src/levels/rooms/`; the editor reads them from GitHub (the open room PR if there is one, otherwise `main`), so `git` and a logged-in `gh` are needed.
+
+- Pick a tool and drag on the grid; the right button erases. Keys: `1 2 3 # * r o` bricks and targets, `p` portal, `e` erase, `m` symmetry, Ctrl+Z / Ctrl+Y undo and redo.
+- Formations are outlined in their colour, a rotation with its orbit. **Drag area** sets a formation's rows and columns from the grid.
+- **Play this room** opens the game on the room as it stands, unsaved edits included. Every new game there starts on it.
+- **Save** puts all changed rooms in one pull request and keeps adding to it until it is merged or closed. Your checkout is left alone. Unsaved edits are kept in the browser.
+- Checks run as you edit. Errors hold back Save and Play; `npm run build` runs the same checks on the room files.
 
 ## Music
 

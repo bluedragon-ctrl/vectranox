@@ -2,7 +2,7 @@ import { BRICK, FIELD } from '../config/game';
 import { BRICK_TYPES, PINBALL } from '../config/tuning';
 import type { Brick, BrickKind, Portal, Target } from './types';
 
-const BRICK_CODES: Partial<Record<string, { kind: BrickKind; hp: number }>> = {
+export const BRICK_CODES: Partial<Record<string, { kind: BrickKind; hp: number }>> = {
   '1': { kind: 'normal', hp: 1 },
   '2': { kind: 'tough', hp: 2 },
   '3': { kind: 'tough', hp: 3 },

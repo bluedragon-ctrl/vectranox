@@ -7,12 +7,14 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "editor": "vite --config editor/vite.config.ts"
   },
   "dependencies": {
     "three": "^0.186.1"
   },
   "devDependencies": {
+    "@types/node": "^20.19.43",
     "@types/three": "^0.186.0",
     "typescript": "^7.0.2",
     "vite": "^7.3.7"
