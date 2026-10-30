@@ -267,13 +267,14 @@ window.addEventListener(
 function overlayContent(): OverlayContent | null {
   switch (ui) {
     case 'title':
-      return { title: 'READY', sub: START_HINT };
+      return { title: 'READY', sub: START_HINT, menu: true };
     case 'paused':
-      return { title: 'PAUSED', sub: `${START_HINT}\n\n${CONTROLS_HINT}` };
+      return { title: 'PAUSED', sub: `${START_HINT}\n\n${CONTROLS_HINT}`, menu: true };
     case 'ended':
       return {
         title: game.state === 'complete' ? 'RUN COMPLETE' : 'GAME OVER',
         sub: `SCORE ${formatScore(game.score)}\n\n${START_HINT}`,
+        menu: true,
       };
     case 'between':
     case 'playing':
@@ -313,15 +314,12 @@ renderScores(el('score-list'));
 
 const hudScore = el('hud-score');
 const hudLives = el('hud-lives');
-const hudSector = el('hud-sector');
 const hudChain = el('hud-chain');
 const hudMult = el('hud-mult');
 const powerHud = new PowerHud(el('power-list'));
 const modHud = new ModHud(el('mod-list'));
 const sysFps = el('sys-fps');
-const sysTick = el('sys-tick');
 const sysBalls = el('sys-balls');
-const sysState = el('sys-state');
 let fps = 60;
 
 startLoop({
@@ -355,15 +353,12 @@ startLoop({
     if (frameTime > 0) fps += (1 / frameTime - fps) * 0.05;
     setText(hudScore, formatScore(game.score));
     setText(hudLives, String(game.lives));
-    setText(hudSector, `${game.stage.sector}-${game.stage.number}`);
     setText(hudChain, formatChain(game));
     setText(hudMult, `×${game.multiplier}`);
     powerHud.update(game.timers, game.charges);
     modHud.update(game.mods);
     setText(sysFps, fps.toFixed(0));
-    setText(sysTick, String(game.tick));
     setText(sysBalls, String(game.balls.length));
-    setText(sysState, `${ui}/${game.state}`.toUpperCase());
   },
 });
 
