@@ -3,10 +3,12 @@ import { SDF } from './common';
 /**
  * Bricks with a little 2.5D depth: a bevelled top face, a darker side face below it, a soft drop
  * shadow and a halo. Normal bricks are stylised glass (fresnel rim, inner highlight, refracted
- * backdrop); tough ones are armoured gold plates and steel ones grey riveted plates, both opaque.
+ * backdrop). The rest are opaque: tough ones armoured gold plates, regenerating ones the same plate
+ * in mint, steel ones grey riveted plates, explosive ones hazard-striped casings with a hot core.
  *
- * Instance data: colour rgb = tint, alpha = hits left (tough bricks show a lit slot per hit).
- * params: x = kind (0 normal, 1 tough, 2 steel), y = hits a tough brick started with, z = hit flash.
+ * Instance data: colour rgb = tint, alpha = hits left (tough and regenerating bricks show a lit slot per hit).
+ * params: x = kind (0 normal, 1 tough, 2 steel, 3 explosive, 4 regenerating), y = hits a tough or
+ * regenerating brick started with, z = hit flash.
  * The instance rectangle is the brick's visual footprint; `uPad` leaves room for halo and shadow.
  */
 export const BRICK_FRAGMENT = /* glsl */ `
@@ -39,8 +41,10 @@ void main() {
   float kind = vParams.x;
   float maxHp = vParams.y;
   float flash = vParams.z;
-  bool steel = kind > 1.5;
-  bool tough = kind > 0.5 && !steel;
+  bool steel = kind > 1.5 && kind < 2.5;
+  bool explosive = kind > 2.5 && kind < 3.5;
+  bool regen = kind > 3.5;
+  bool tough = (kind > 0.5 && kind < 1.5) || regen;
 
   // Top face sits above the side face; together they fill the footprint.
   vec2 hb = vec2(vHalf.x, vHalf.y - DEPTH * 0.5);
@@ -83,13 +87,27 @@ void main() {
     top = mix(top, tint * (0.3 + 0.7 * rivetLit), fill(rivet));
     side = tint * 0.2;
     edgeColor = mix(tint, vec3(0.6, 0.95, 1.0), 0.45);
+  } else if (explosive) {
+    // A casing, not glass: dark, with bold hazard stripes on an inset panel and a hot core in the
+    // middle. Static, and bold enough to read at ~40 px.
+    float panel = sdRoundBox(pt, vec2(hb.x - 1.4, hb.y - 1.2), 0.6);
+    float stripes = step(0.5, fract((pt.x - pt.y) / 6.0)) * fill(panel);
+    top = tint * (0.14 + 0.1 * diff);
+    top = mix(top, tint * 0.8, stripes);
+    float core = sdRoundBox(pt, vec2(3.6, 2.0), 1.2);
+    top = mix(top, tint * 0.08, fill(core - 0.9));
+    top = mix(top, mix(tint, vec3(1.0), 0.6), fill(core));
+    top += vec3(spec) * 0.35 + tint * fres * 0.7;
+    side = tint * 0.25;
   } else if (tough) {
-    // Armoured plate, not glass: opaque polished gold. Metal reads by contrast, so the face runs
+    // Armoured plate, not glass: opaque polished metal. Metal reads by contrast, so the face runs
     // from dark at the bottom to a sharp bright band near the top, under a strong bevel. The lit
-    // slots carry the damage, so the plate itself stays clean.
-    float band = exp(-pow((yN - 0.45) * 3.2, 2.0));
+    // slots carry the damage, so the plate itself stays clean. A regenerating plate drops the band
+    // for a soft inner glow, which keeps it apart from gold by more than its colour.
+    float band = regen ? 0.0 : exp(-pow((yN - 0.45) * 3.2, 2.0));
     top = tint * (0.28 + 0.3 * smoothstep(-1.0, 0.6, yN) + 0.25 * diff);
     top += mix(tint, vec3(1.0), 0.35) * band * 0.55 + vec3(spec) * 0.5 + mix(tint, vec3(1.0), 0.4) * fres * 0.9;
+    if (regen) top += tint * exp(-length(pt * vec2(0.14, 0.3))) * 0.5;
     // A slot per hit sunk into the plate across the middle; the ones still to take are lit.
     float hp = vColor.a;
     float slot = floor(pt.x / NOTCH_STEP + maxHp * 0.5);

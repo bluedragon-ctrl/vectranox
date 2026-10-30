@@ -106,11 +106,13 @@ void main() {
 /**
  * The playfield: opaque dark well over the scenery, neon U-shaped frame (the bottom is open) and a dashed death line.
  * `uHits` holds recent wall impacts: xy = world position, z = strength (0..1).
+ * `uLine` is the line marching formations must not reach: x = height, y = brightness (0 when the stage has none).
  */
 export const FIELD_FRAGMENT = /* glsl */ `
 uniform vec2 uField;
 uniform vec4 uHits[8];
 uniform float uDanger;
+uniform vec2 uLine;
 uniform vec3 uFrame;
 uniform vec3 uGuide;
 uniform vec3 uDeath;
@@ -144,6 +146,10 @@ void main() {
 
   float dash = step(0.5, fract(w.x / 8.0)) * step(0.0, w.x) * step(w.x, uField.x);
   col.rgb += uDeath * stroke(w.y, 0.35) * dash * (0.5 + uDanger);
+
+  float lineY = w.y - uLine.x;
+  float lineDash = step(0.35, fract(w.x / 13.0));
+  col.rgb += uDeath * (stroke(lineY, 0.4) * lineDash + exp(-abs(lineY) * 0.3) * 0.12) * uLine.y * inside;
   gl_FragColor = col;
 }
 `;

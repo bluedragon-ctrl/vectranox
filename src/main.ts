@@ -2,6 +2,7 @@ import './styles/main.css';
 import { AudioEngine } from './audio/AudioEngine';
 import { GameSounds } from './audio/GameSounds';
 import { Input, type ControlMode } from './core/input';
+import { ELITE, ROOM_LABEL } from './config/run';
 import { startLoop } from './core/loop';
 import { loadAudioSettings, loadVisualSettings, saveAudioSettings, saveVisualSettings } from './core/settings';
 import { Game } from './game/Game';
@@ -280,12 +281,13 @@ function overlayContent(): OverlayContent | null {
     case 'playing':
       switch (game.state) {
         case 'serve':
+          if (game.breached) return { title: 'LINE BREACHED', sub: 'FORMATION PUSHED BACK\nCLICK / SPACE TO LAUNCH' };
           return {
             title: `STAGE ${game.stage.sector}-${game.stage.number}`,
-            sub: `${game.stage.name}\nCLICK / SPACE TO LAUNCH`,
+            sub: `${stageLabel(game)}\nCLICK / SPACE TO LAUNCH`,
           };
         case 'clear':
-          return { title: 'STAGE CLEAR' };
+          return game.stage.room === 'elite' ? { title: 'STAGE CLEAR', sub: `ELITE BONUS +${ELITE.clearBonus}` } : { title: 'STAGE CLEAR' };
         // The pick screen takes over.
         case 'draft':
           return null;
@@ -301,6 +303,12 @@ function overlayContent(): OverlayContent | null {
 
 function formatScore(score: number): string {
   return String(score).padStart(6, '0');
+}
+
+/** The stage's name, after its room kind unless it is a standard room. */
+function stageLabel(g: Game): string {
+  const room = ROOM_LABEL[g.stage.room];
+  return room ? `${room} · ${g.stage.name}` : g.stage.name;
 }
 
 /** The longest live chain and the bonus its last brick earned (multiplied); a dash until a chain pays. */

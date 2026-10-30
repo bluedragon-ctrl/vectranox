@@ -1,5 +1,5 @@
 import { BRICK, FIELD } from '../config/game';
-import { PINBALL } from '../config/tuning';
+import { BRICK_TYPES, PINBALL } from '../config/tuning';
 import type { Brick, BrickKind, Portal, Target } from './types';
 
 const BRICK_CODES: Partial<Record<string, { kind: BrickKind; hp: number }>> = {
@@ -7,6 +7,8 @@ const BRICK_CODES: Partial<Record<string, { kind: BrickKind; hp: number }>> = {
   '2': { kind: 'tough', hp: 2 },
   '3': { kind: 'tough', hp: 3 },
   '#': { kind: 'steel', hp: 0 },
+  '*': { kind: 'explosive', hp: 1 },
+  r: { kind: 'regen', hp: BRICK_TYPES.regen.hp },
 };
 
 export interface StagePieces {
@@ -49,6 +51,8 @@ export function parseLayout(layout: readonly string[], nextId: () => number): St
         col,
         x,
         y,
+        px: x,
+        py: y,
         w: BRICK.width,
         h: BRICK.height,
         kind: code.kind,
@@ -56,6 +60,7 @@ export function parseLayout(layout: readonly string[], nextId: () => number): St
         maxHp: code.hp,
         alive: true,
         hitTick: -Infinity,
+        healTick: -Infinity,
       });
     }
   });

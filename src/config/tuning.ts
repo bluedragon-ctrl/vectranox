@@ -1,8 +1,8 @@
 import { PALETTE } from './game';
 
 /*
- * Gameplay tuning: power-ups and stage events. Everything here is meant to be tweaked by hand;
- * the simulation reads it but never changes it.
+ * Gameplay tuning: power-ups, stage events, special bricks and formations. Everything here is
+ * meant to be tweaked by hand; the simulation reads it but never changes it.
  */
 
 /**
@@ -142,4 +142,51 @@ export const PINBALL = {
   bankBonus: 500,
   multipliers: [1, 2, 3, 5],
   portal: { radius: 10, capture: 5 },
+} as const;
+
+/**
+ * Special bricks.
+ *
+ * Explosive: `fuse` seconds after it breaks, every breakable brick within `radius` of its centre
+ * (measured to the nearest point of the brick) takes `damage` hits; explosives caught in that set
+ * each other off, one fuse later. Steel is unaffected.
+ *
+ * Regenerating: takes `hp` hits and wins one back after `delay` seconds without a hit, again
+ * every `delay` until it is whole.
+ */
+export const BRICK_TYPES = {
+  explosive: { radius: 22, damage: 1, fuse: 0.08 },
+  regen: { hp: 2, delay: 4 },
+} as const;
+
+/**
+ * Formations: groups of bricks that move while the ball is in play (see `StageTemplate.formations`).
+ *
+ * A marching formation's breakable bricks reaching `line` cost a life and send it back to its
+ * starting height at `retreatSpeed`. The line lights up over the last `warning` units.
+ *
+ * A brick moving onto a ball shoves it out, with at least `shove` units/s away from the brick.
+ *
+ * Motions, each scaled by the stage's depth:
+ * - sweep: side to side at `speed`, turning `margin` short of the walls.
+ * - march: a hop of `step` every `beat` seconds at `hopSpeed`. At the walls the hop is a `drop`
+ *   downwards instead, and the direction flips. Both the sweep and the march turn at the bricks
+ *   still alive, so clearing the outer columns widens their path. The beat runs up to `fury`
+ *   times faster as the formation's bricks are destroyed.
+ * - rotate: orbits the middle of the formation at `rate` radians/s. Bricks stay level, so spacing
+ *   them at least 24 units apart (every second row) keeps them from overlapping.
+ * - sine: columns bob `height` up and down over `period` seconds, each `wave` radians behind the last.
+ */
+export const FORMATION = {
+  line: 72,
+  warning: 60,
+  retreatSpeed: 300,
+  shove: 120,
+  margin: 10,
+  motions: {
+    sweep: { speed: 38 },
+    march: { step: 8, beat: 0.42, drop: 12, hopSpeed: 140, fury: 2.2 },
+    rotate: { rate: 0.5 },
+    sine: { height: 14, period: 3.4, wave: 0.6 },
+  },
 } as const;

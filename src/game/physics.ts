@@ -25,6 +25,24 @@ export function sweepWalls(b: Ball, dx: number, dy: number): (SweepHit & { side:
   return best;
 }
 
+/**
+ * For a ball overlapping a box: the shortest way out that stays inside the walls, as the side's
+ * normal and the distance to go. Null when it doesn't overlap (the box is grown by the ball's radius).
+ */
+export function pushOut(b: Ball, box: { x: number; y: number; w: number; h: number }): { nx: number; ny: number; depth: number } | null {
+  const left = b.x - box.x + b.r;
+  const right = box.x + box.w + b.r - b.x;
+  const down = b.y - box.y + b.r;
+  const up = box.y + box.h + b.r - b.y;
+  if (left <= 0 || right <= 0 || down <= 0 || up <= 0) return null;
+  // The bottom is open, so down is always a way out.
+  let best = { nx: 0, ny: -1, depth: down };
+  if (b.x - left >= b.r && left < best.depth) best = { nx: -1, ny: 0, depth: left };
+  if (b.x + right <= FIELD.width - b.r && right < best.depth) best = { nx: 1, ny: 0, depth: right };
+  if (b.y + up <= FIELD.height - b.r && up < best.depth) best = { nx: 0, ny: 1, depth: up };
+  return best;
+}
+
 /** Sends a ball off at `angle` from vertical (positive is right). */
 export function aim(b: Ball, angle: number, speed: number): void {
   b.vx = Math.sin(angle) * speed;

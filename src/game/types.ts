@@ -4,14 +4,14 @@ import type { POWER, STAGE_EVENTS } from '../config/tuning';
 /** `draft` (the pick between stages) waits for the player's choice. */
 export type GameState = 'serve' | 'play' | 'clear' | 'draft' | 'over' | 'complete';
 
-export type BrickKind = 'normal' | 'tough' | 'steel';
+export type BrickKind = 'normal' | 'tough' | 'steel' | 'explosive' | 'regen';
 
 export type PowerKind = keyof typeof POWER.kinds;
 /** Powers that give charges, spent one per alt press. */
 export type ChargePower = 'detonator';
 /** Powers that run on a timer: those with a duration (the rest act once on pickup, or give charges). */
 export type TimedPower = { [K in PowerKind]: (typeof POWER.kinds)[K]['duration'] extends 0 ? never : K }[PowerKind];
-export type HitSource = 'ball' | 'laser' | 'pulse' | 'blast';
+export type HitSource = 'ball' | 'laser' | 'pulse' | 'blast' | 'explosion';
 export type StageEventKind = keyof typeof STAGE_EVENTS.kinds;
 export type ModKind = keyof typeof MODS;
 
@@ -106,13 +106,15 @@ export interface Bolt {
   pierce: number;
 }
 
-/** Position is the bottom-left corner. */
+/** Position is the bottom-left corner; `px`, `py` are where it was at the previous tick. */
 export interface Brick {
   id: number;
   row: number;
   col: number;
   x: number;
   y: number;
+  px: number;
+  py: number;
   w: number;
   h: number;
   kind: BrickKind;
@@ -122,4 +124,6 @@ export interface Brick {
   alive: boolean;
   /** Tick of the last hit, for flash effects. */
   hitTick: number;
+  /** Tick a regenerating brick last won back a hit. */
+  healTick: number;
 }
