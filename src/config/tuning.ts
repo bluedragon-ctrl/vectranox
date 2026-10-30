@@ -71,19 +71,27 @@ export const POWER = {
   },
 } as const;
 
+/** Power colours by family: negative powers are always red, the rest go by what they act on. */
+const POWER_FAMILY = {
+  ball: PALETTE.cyan,
+  paddle: PALETTE.magenta,
+  life: PALETTE.yellow,
+  bad: PALETTE.red,
+} as const;
+
 /** How each power shows up: capsule letter, colour, and whether it is a negative one. */
 export const POWER_LOOK = {
-  multi: { label: 'MULTI', glyph: 'M', color: PALETTE.cyan, bad: false },
-  laser: { label: 'LASER', glyph: 'L', color: PALETTE.magenta, bad: false },
-  expand: { label: 'EXPAND', glyph: 'E', color: PALETTE.blue, bad: false },
-  narrow: { label: 'NARROW', glyph: 'N', color: PALETTE.red, bad: true },
-  slow: { label: 'SLOW', glyph: 'S', color: 0x2dffb4, bad: false },
-  fast: { label: 'FAST', glyph: 'F', color: PALETTE.red, bad: true },
-  catch: { label: 'CATCH', glyph: 'C', color: PALETTE.purple, bad: false },
-  pierce: { label: 'PIERCE', glyph: 'P', color: PALETTE.white, bad: false },
-  barrier: { label: 'BARRIER', glyph: 'B', color: PALETTE.yellow, bad: false },
-  life: { label: 'LIFE', glyph: '+', color: 0xff7ad9, bad: false },
-  detonator: { label: 'DETONATOR', glyph: 'X', color: PALETTE.orange, bad: false },
+  multi: { label: 'MULTI', glyph: 'M', color: POWER_FAMILY.ball, bad: false },
+  laser: { label: 'LASER', glyph: 'L', color: POWER_FAMILY.paddle, bad: false },
+  expand: { label: 'EXPAND', glyph: 'E', color: POWER_FAMILY.paddle, bad: false },
+  narrow: { label: 'NARROW', glyph: 'N', color: POWER_FAMILY.bad, bad: true },
+  slow: { label: 'SLOW', glyph: 'S', color: POWER_FAMILY.ball, bad: false },
+  fast: { label: 'FAST', glyph: 'F', color: POWER_FAMILY.bad, bad: true },
+  catch: { label: 'CATCH', glyph: 'C', color: POWER_FAMILY.paddle, bad: false },
+  pierce: { label: 'PIERCE', glyph: 'P', color: POWER_FAMILY.ball, bad: false },
+  barrier: { label: 'BARRIER', glyph: 'B', color: POWER_FAMILY.ball, bad: false },
+  life: { label: 'LIFE', glyph: '+', color: POWER_FAMILY.life, bad: false },
+  detonator: { label: 'DETONATOR', glyph: 'X', color: POWER_FAMILY.paddle, bad: false },
 } as const satisfies Record<keyof typeof POWER.kinds, { label: string; glyph: string; color: number; bad: boolean }>;
 
 /**
@@ -122,8 +130,8 @@ export const STAGE_EVENT_LOOK = {
   overload: { label: 'OVERLOAD', sub: 'BALLS SPLIT', color: PALETTE.cyan },
   pulse: { label: 'PULSE', sub: 'GRID SHOCKED', color: PALETTE.purple },
   hunter: { label: 'HUNTER', sub: 'LASER ONLINE', color: PALETTE.magenta },
-  safetyNet: { label: 'SAFETY NET', sub: 'BARRIER UP', color: PALETTE.yellow },
-  demolition: { label: 'DEMOLITION', sub: 'CHARGES ARMED', color: PALETTE.orange },
+  safetyNet: { label: 'SAFETY NET', sub: 'BARRIER UP', color: POWER_LOOK.barrier.color },
+  demolition: { label: 'DEMOLITION', sub: 'CHARGES ARMED', color: POWER_LOOK.detonator.color },
 } as const satisfies Record<keyof typeof STAGE_EVENTS.kinds, { label: string; sub: string; color: number }>;
 
 /**

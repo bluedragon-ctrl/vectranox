@@ -80,7 +80,7 @@ export const MODS = {
     rarity: 'common',
     maxStacks: 3,
     /** Capsule drop chance per destroyed brick, added (base: `POWER.dropChance`). */
-    perStack: 0.03,
+    perStack: 0.05,
     describe: (v) => `CAPSULE DROP CHANCE +${pct(v)}`,
   },
   magnet: {
