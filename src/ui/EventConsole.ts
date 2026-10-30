@@ -27,7 +27,7 @@ const SYSTEM_EVENTS: ReadonlySet<string> = new Set<LogEvent>([
 const POWER_EVENTS: ReadonlySet<string> = new Set<LogEvent>([
   'powerCollect',
   'powerEnd',
-  'detonate',
+  'explosion',
   'targetBank',
   'modPick',
   'livesPick',
@@ -99,6 +99,13 @@ function toConstCase(name: string): string {
 function formatPayload(payload: unknown): string {
   if (typeof payload !== 'object' || payload === null) return '';
   return Object.entries(payload)
-    .map(([k, v]) => `${k}=${typeof v === 'number' && !Number.isInteger(v) ? v.toFixed(1) : String(v)}`)
+    .map(([k, v]) => `${k}=${formatValue(v)}`)
     .join(' ');
+}
+
+function formatValue(v: unknown): string {
+  if (typeof v === 'number' && !Number.isInteger(v)) return v.toFixed(1);
+  // A list of points would print as [object Object]; how many there are is enough.
+  if (Array.isArray(v) && typeof v[0] === 'object') return String(v.length);
+  return String(v);
 }

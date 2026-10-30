@@ -11,7 +11,9 @@ export type PowerKind = keyof typeof POWER.kinds;
 export type ChargePower = 'detonator';
 /** Powers that run on a timer: those with a duration (the rest act once on pickup, or give charges). */
 export type TimedPower = { [K in PowerKind]: (typeof POWER.kinds)[K]['duration'] extends 0 ? never : K }[PowerKind];
-export type HitSource = 'ball' | 'laser' | 'pulse' | 'blast' | 'explosion';
+export type HitSource = 'ball' | 'laser' | 'pulse' | 'explosion';
+/** What set off an explosion: a detonator charge, or an explosive brick's fuse. */
+export type ExplosionSource = 'charge' | 'brick';
 export type StageEventKind = keyof typeof STAGE_EVENTS.kinds;
 export type ModKind = keyof typeof MODS;
 

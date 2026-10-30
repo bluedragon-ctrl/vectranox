@@ -17,7 +17,7 @@ import { PADDLE_FRAGMENT } from './materials/paddle';
 import { PORTAL_FRAGMENT, TARGET_FRAGMENT } from './materials/pinball';
 import { BARRIER_FRAGMENT, BLAST_FRAGMENT, BOLT_FRAGMENT, CAPSULE_FRAGMENT, CHARGE_FRAGMENT } from './materials/power';
 import { glyphMask } from './glyphs';
-import { BRICK_GAP, brickTint, CAPSULE_COLORS, COLORS, EXPLOSION_COLOR, PORTAL_COLORS, POWER_COLORS, TARGET_COLOR } from './palette';
+import { BRICK_GAP, brickTint, CAPSULE_COLORS, COLORS, PORTAL_COLORS, POWER_COLORS, TARGET_COLOR } from './palette';
 import { QuadBatch } from './QuadBatch';
 
 /** Screen-space padding (px) between the playfield frame and its area. */
@@ -456,12 +456,8 @@ export class Renderer {
   }
 
   private drawBlast(): void {
-    const { centres, radius, strength } = this.fx.blast;
     this.blast.begin();
-    if (strength > 0) {
-      for (const c of centres) this.blast.push(c.x, c.y, radius * 2, radius * 2, POWER_COLORS.detonator, 1, strength);
-    }
-    for (const e of this.fx.explosions) this.blast.push(e.x, e.y, e.radius * 2, e.radius * 2, EXPLOSION_COLOR, 1, e.strength);
+    for (const e of this.fx.explosions) this.blast.push(e.x, e.y, e.radius * 2, e.radius * 2, e.color, 1, e.strength);
     this.blast.commit();
   }
 

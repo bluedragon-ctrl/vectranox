@@ -1,5 +1,5 @@
 import type { RoomKind } from '../config/run';
-import type { BrickKind, HitSource, ModKind, PowerKind, StageEventKind, TimedPower } from './types';
+import type { BrickKind, ExplosionSource, HitSource, ModKind, PowerKind, StageEventKind, TimedPower } from './types';
 
 export type WallSide = 'left' | 'right' | 'top';
 
@@ -36,8 +36,8 @@ export type GameEvents = {
   };
   /** A regenerating brick won back a hit; `hp` is what it has now. */
   brickHeal: { id: number; hp: number };
-  /** An explosive brick's fuse ran out at (x, y); `bricks` breakable bricks were in reach. */
-  explosion: { x: number; y: number; radius: number; bricks: number };
+  /** One explosion (see `Game.explode`), going off at every point of `centres`; `bricks` bricks were in reach. */
+  explosion: { source: ExplosionSource; centres: { x: number; y: number }[]; radius: number; bricks: number };
   /** A marching formation hopped (`dropped`: towards the line). */
   formationStep: { dropped: boolean };
   /** A marching formation reached the line and costs a life; it goes back to its starting height. */
@@ -62,8 +62,6 @@ export type GameEvents = {
   laserFire: { x: number; y: number };
   /** Ball `id` broke brick `brick` and carried on through it (critical mod). */
   breakthrough: { id: number; brick: number };
-  /** `balls` balls exploded (see `Game.blastBalls`); `bricks` breakable bricks were in reach, `charges` are left. */
-  detonate: { balls: number; radius: number; bricks: number; charges: number };
   /** A stage event fired; `bricks` is how many breakable bricks were left. */
   stageEvent: { kind: StageEventKind; bricks: number };
   ballLost: { id: number };

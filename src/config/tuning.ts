@@ -56,11 +56,10 @@ export const POWER = {
   boltInset: 5,
   barrierY: 7,
   /**
-   * Alt press spends one charge: every ball explodes (`target: 'highest'` blows only the ball
-   * nearest the bricks) and each breakable brick within `radius` of any of them (measured to the
-   * nearest point of the brick) takes `damage` hits, once per press however many balls reach it.
-   * Steel is unaffected (bar the steel breaker mod) and the balls fly on. A capsule gives `charges` when none are held, else
-   * `recharge` more, up to `maxCharges`.
+   * Alt press spends one charge: every ball goes off as one explosion of this `radius` and `damage`
+   * (`target: 'highest'` blows only the ball nearest the bricks) and the balls fly on. An explosion
+   * works the same whatever set it off (see `BRICK_TYPES`). A capsule gives `charges` when none are
+   * held, else `recharge` more, up to `maxCharges`.
    */
   detonator: {
     charges: 3,
@@ -147,9 +146,11 @@ export const PINBALL = {
 /**
  * Special bricks.
  *
- * Explosive: `fuse` seconds after it breaks, every breakable brick within `radius` of its centre
- * (measured to the nearest point of the brick) takes `damage` hits; explosives caught in that set
- * each other off, one fuse later. Steel is unaffected.
+ * Explosive: `fuse` seconds after it breaks, it goes off as an explosion of this `radius` and
+ * `damage` at its centre. Every breakable brick in reach (measured to the nearest point of the
+ * brick) takes the damage once; explosives caught in it set each other off, one fuse later. Steel
+ * is unaffected, bar the steel breaker mod. Detonator charges work the same way, and the blast
+ * radius, steel breaker and cluster charge mods apply to both.
  *
  * Regenerating: takes `hp` hits and wins one back after `delay` seconds without a hit, again
  * every `delay` until it is whole.

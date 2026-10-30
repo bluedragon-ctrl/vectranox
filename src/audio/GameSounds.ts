@@ -94,13 +94,22 @@ export class GameSounds {
           s.tone({ freq: ping * 1.5, at: 0.02, dur: 0.2, gain: 0.05, pan: p });
         });
       }),
-      ev.on('explosion', ({ x }) => {
-        const p = pan(x);
+      ev.on('explosion', ({ source, centres }) => {
+        if (source === 'charge') {
+          this.play('detonate', (s) => {
+            s.noise({ filter: 'lowpass', freq: 2400, to: 140, dur: 0.55, gain: 0.5 });
+            s.tone({ freq: 130, to: 34, dur: 0.5, gain: 0.5 });
+          });
+          return;
+        }
         // A smaller cousin of the detonator's boom.
-        this.play('explosion', (s) => {
-          s.noise({ filter: 'lowpass', freq: 1800, to: 180, dur: 0.28, gain: 0.32, pan: p });
-          s.tone({ freq: 110, to: 42, dur: 0.24, gain: 0.3, pan: p });
-        });
+        for (const { x } of centres) {
+          const p = pan(x);
+          this.play('explosion', (s) => {
+            s.noise({ filter: 'lowpass', freq: 1800, to: 180, dur: 0.28, gain: 0.32, pan: p });
+            s.tone({ freq: 110, to: 42, dur: 0.24, gain: 0.3, pan: p });
+          });
+        }
       }),
       ev.on('brickHeal', () => {
         this.play('heal', (s) => s.tone({ type: 'triangle', freq: 520, to: 780, dur: 0.12, gain: 0.05 }));
@@ -161,12 +170,6 @@ export class GameSounds {
       }),
       ev.on('laserFire', ({ x }) => {
         this.play('laser', (s) => s.tone({ type: 'sawtooth', freq: 1700, to: 320, cutoff: 4200, dur: 0.09, gain: 0.07, pan: pan(x) }));
-      }),
-      ev.on('detonate', () => {
-        this.play('detonate', (s) => {
-          s.noise({ filter: 'lowpass', freq: 2400, to: 140, dur: 0.55, gain: 0.5 });
-          s.tone({ freq: 130, to: 34, dur: 0.5, gain: 0.5 });
-        });
       }),
       ev.on('stageEvent', ({ kind }) => {
         this.play('event', (s) => {
