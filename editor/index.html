@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VectraNox room editor</title>
+    <link rel="stylesheet" href="./editor.css" />
+  </head>
+  <body>
+    <header id="top">
+      <h1>ROOM EDITOR</h1>
+      <span id="source"></span>
+      <span id="message"></span>
+      <button id="play" title="Open the game on this room, unsaved edits included">Play this room</button>
+      <button id="save" class="primary"></button>
+    </header>
+    <main>
+      <aside id="rooms">
+        <input id="filter" type="search" placeholder="Filter rooms" />
+        <div id="room-list"></div>
+        <button id="new-room">New room</button>
+      </aside>
+      <section id="workspace">
+        <div id="tools"></div>
+        <div id="field-wrap"><canvas id="field"></canvas></div>
+        <div id="hover"></div>
+      </section>
+      <aside id="side">
+        <div id="form"></div>
+        <div id="problems"></div>
+      </aside>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

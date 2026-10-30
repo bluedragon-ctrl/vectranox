@@ -171,6 +171,6 @@ export function buildFormations(defs: readonly FormationDef[], bricks: readonly 
   return formations;
 }
 
-function within(n: number, range?: readonly [number, number]): boolean {
+export function within(n: number, range?: readonly [number, number]): boolean {
   return !range || (n >= range[0] && n <= range[1]);
 }

@@ -1,0 +1,267 @@
+:root {
+  --bg: #07021a;
+  --panel: #0f0526;
+  --border: rgba(157, 77, 255, 0.45);
+  --magenta: #ff2a9d;
+  --cyan: #2de2ff;
+  --yellow: #ffd23f;
+  --red: #ff3b30;
+  --text: #e8dcff;
+  --text-dim: #8a76b8;
+  --mono: 'Share Tech Mono', ui-monospace, Consolas, monospace;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.4 var(--mono);
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  padding: 4px 8px;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--cyan);
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+button.primary {
+  background: var(--magenta);
+  border-color: var(--magenta);
+  color: #fff;
+}
+
+button.active {
+  border-color: var(--cyan);
+  color: var(--cyan);
+}
+
+a {
+  color: var(--cyan);
+}
+
+#top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+h1 {
+  font-size: 16px;
+  letter-spacing: 2px;
+  color: var(--cyan);
+}
+
+h2 {
+  font-size: 12px;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  margin: 12px 0 6px;
+}
+
+#source {
+  color: var(--text-dim);
+}
+
+#message {
+  flex: 1;
+  min-width: 0;
+}
+
+#message.bad {
+  color: var(--red);
+}
+
+main {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr) 320px;
+}
+
+aside {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  overflow-y: auto;
+}
+
+#rooms {
+  border-right: 1px solid var(--border);
+}
+
+#side {
+  border-left: 1px solid var(--border);
+}
+
+#room-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.room-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  background: none;
+  text-align: left;
+  padding: 2px 6px;
+}
+
+.room-item.current {
+  background: rgba(157, 77, 255, 0.3);
+}
+
+.room-item.changed {
+  color: var(--yellow);
+}
+
+.room-item.deleted {
+  color: var(--text-dim);
+  text-decoration: line-through;
+}
+
+.room-item.bad {
+  color: var(--red);
+}
+
+.room-item .tier {
+  color: var(--text-dim);
+}
+
+#workspace {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-height: 0;
+  padding: 8px;
+}
+
+#tools {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+}
+
+#tools .gap {
+  width: 12px;
+}
+
+#field-wrap {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+#field {
+  display: block;
+  cursor: crosshair;
+  border: 1px solid var(--border);
+}
+
+#hover {
+  min-height: 20px;
+  color: var(--text-dim);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.row label {
+  width: 56px;
+  color: var(--text-dim);
+}
+
+.row input[type='text'],
+.row select {
+  flex: 1;
+  min-width: 0;
+}
+
+.row input[type='number'] {
+  width: 56px;
+}
+
+.actions {
+  margin-top: 8px;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.formation {
+  border: 1px solid var(--border);
+  border-left-width: 4px;
+  padding: 6px;
+  margin-bottom: 6px;
+}
+
+.formation.selected {
+  background: rgba(157, 77, 255, 0.15);
+}
+
+.row label.check {
+  width: auto;
+}
+
+#problems p {
+  margin-bottom: 4px;
+}
+
+#problems .error {
+  color: var(--red);
+}
+
+#problems .warning {
+  color: var(--yellow);
+}
+
+#problems .ok {
+  color: var(--text-dim);
+}

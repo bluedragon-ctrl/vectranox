@@ -6,7 +6,7 @@ import { EventBus } from '../core/events';
 import { clamp, lerp } from '../core/math';
 import { Rng } from '../core/rng';
 import { assembleRun, buildStage } from '../levels/assemble';
-import { TEMPLATES, type StageDef } from '../levels/stages';
+import { TEMPLATES, type StageDef, type StageTemplate } from '../levels/stages';
 import { sweepBox, sweepCircle, type SweepHit } from './collision';
 import type { GameEvents, WallSide } from './events';
 import { buildFormations, type Formation } from './formation';
@@ -301,6 +301,11 @@ export class Game {
   tryStage(name: string): void {
     const template = TEMPLATES.find((t) => t.name === name);
     if (!template) throw new Error(`No stage template '${name}'`);
+    this.tryTemplate(template);
+  }
+
+  /** As `tryStage`, for any template. The room editor's Play button comes through here. */
+  tryTemplate(template: StageTemplate): void {
     const { sector, number } = this.stage;
     this.stages[this.stageIndex] = buildStage(template, this.stageIndex, sector, number, false);
     this.loadStage(this.stageIndex);

@@ -6,6 +6,7 @@ import { ELITE, ROOM_LABEL } from './config/run';
 import { startLoop } from './core/loop';
 import { loadAudioSettings, loadVisualSettings, saveAudioSettings, saveVisualSettings } from './core/settings';
 import { Game } from './game/Game';
+import type { StageTemplate } from './levels/stages';
 import { Renderer } from './render/Renderer';
 import { AudioPanel } from './ui/AudioPanel';
 import { ChainPopups } from './ui/ChainPopups';
@@ -107,6 +108,8 @@ let ui: UiState = 'title';
 let pendingMouse = false;
 /** Waiting for pointer lock after a click during keyboard play; play goes on meanwhile. */
 let pendingSwitch = false;
+/** The room the editor's Play button sent, if any: every new game starts on it. */
+const playtest = import.meta.env.DEV ? new URLSearchParams(location.search).get('room') : null;
 let game = newGame();
 
 function newGame(): Game {
@@ -117,6 +120,7 @@ function newGame(): Game {
   sounds.attach(g);
   chainPopups.attach(g);
   g.start();
+  if (playtest) g.tryTemplate(JSON.parse(playtest) as StageTemplate);
   return g;
 }
 
