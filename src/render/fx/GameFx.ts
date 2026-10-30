@@ -141,8 +141,8 @@ export class GameFx {
           pushY = ((y - centre.y) / d) * BLAST_PUSH;
         }
         // The brick breaks into pieces radiating from the impact: glass shards and glints, or for an
-        // armoured (tough) plate a few metal pieces and nothing else.
-        const metal = kind === 'tough';
+        // armoured (tough) or steel plate a few metal pieces and nothing else.
+        const metal = kind !== 'normal';
         for (const s of fractureRect(x, y, w, h, ix, iy, metal ? 3 : 2)) {
           const dx = s.cx - ix;
           const dy = s.cy - iy;

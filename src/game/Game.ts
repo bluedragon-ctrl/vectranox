@@ -768,9 +768,10 @@ export class Game {
     this.charges.detonator--;
     const radius = POWER.detonator.radius * (1 + this.modValue('blast'));
     const { damage } = POWER.detonator;
+    const steelChance = this.modValue('steelbreak');
     const targets: { br: Brick; ix: number; iy: number }[] = [];
     for (const br of this.bricks) {
-      if (!isBreakable(br)) continue;
+      if (!br.alive || (br.kind === 'steel' && steelChance === 0)) continue;
       let best: { br: Brick; ix: number; iy: number } | null = null;
       let bestD = radius * radius;
       for (const b of balls) {
@@ -782,10 +783,14 @@ export class Game {
           bestD = d;
         }
       }
-      if (best) targets.push(best);
+      // Steel breaker mod: steel in reach rolls once per press, however many balls reach it.
+      if (best && (br.kind !== 'steel' || this.rng.next() < steelChance)) targets.push(best);
     }
     this.events.emit('detonate', { balls: balls.length, radius, bricks: targets.length, charges: this.charges.detonator });
-    for (const { br, ix, iy } of targets) this.damageBrick(br, 'blast', ix, iy, damage);
+    for (const { br, ix, iy } of targets) {
+      if (br.kind === 'steel') this.breakSteel(br, ix, iy);
+      else this.damageBrick(br, 'blast', ix, iy, damage);
+    }
     // Cluster charge mod: new balls fly out of the first blast.
     const src = balls[0];
     for (let i = 0; src && i < this.modValue('cluster') && this.balls.length < POWER.maxBalls; i++) {
@@ -865,6 +870,9 @@ export class Game {
    * plus one per extra ball mod stack. Up to the ball limit.
    */
   private splitBalls(): void {
+    // Split guard mod: applying a power restarts its timer, so skip it if that would cut the barrier short.
+    const guard = this.modValue('splitguard');
+    if (guard * (1 + this.modValue('extender')) > this.timers.barrier) this.applyPower('barrier', guard);
     const twins = 2 + this.modValue('extraball');
     for (const src of this.balls.slice()) {
       const [dirX, dirY] = ballDirection(src);
@@ -975,6 +983,18 @@ export class Game {
     const vx = ball?.vx ?? 0;
     const vy = ball?.vy ?? 0;
     this.events.emit('brickDestroyed', { id: br.id, kind: br.kind, points, chain, bonus, multiplier, by, x, y, ix, iy, vx, vy });
+    this.maybeDrop(x, y);
+  }
+
+  /** Steel never counts towards clearing a stage, so breaking it pays like a normal brick and nothing more. */
+  private breakSteel(br: Brick, ix: number, iy: number): void {
+    br.alive = false;
+    const x = br.x + br.w / 2;
+    const y = br.y + br.h / 2;
+    const multiplier = this.multiplier;
+    const points = SCORE.normal * multiplier;
+    this.score += points;
+    this.events.emit('brickDestroyed', { id: br.id, kind: br.kind, points, chain: 0, bonus: 0, multiplier, by: 'blast', x, y, ix, iy, vx: 0, vy: 0 });
     this.maybeDrop(x, y);
   }
 }
