@@ -6,7 +6,12 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { FULLSCREEN_VERTEX } from '../materials/common';
 import { FINAL_FRAGMENT } from '../materials/post';
 
-const BLOOM = { strength: 0.7, radius: 0.25, threshold: 0.75 } as const;
+/**
+ * `reach` scales how far the glow spreads; `radius` only reweights the blur levels, not their extent.
+ * A tighter blur packs the same light into less area, so `strength` must drop with `reach` or the
+ * halo just gets brighter and looks no smaller.
+ */
+const BLOOM = { strength: 0.22, radius: 0.25, threshold: 0.75, reach: 0.5 } as const;
 /** Chromatic aberration in UV units at the screen corner: resting value and full pulse. */
 const ABERRATION = { base: 0, pulse: 0.018 } as const;
 
@@ -48,6 +53,10 @@ export class PostFx {
   setSize(width: number, height: number, pixelRatio: number): void {
     this.composer.setPixelRatio(pixelRatio);
     this.composer.setSize(width, height);
+    // The pass resets invSize on every resize. Shrinking it packs the blur taps closer together.
+    for (const material of this.bloom.separableBlurMaterials) {
+      (this.uniform('invSize', material.uniforms).value as THREE.Vector2).multiplyScalar(BLOOM.reach);
+    }
   }
 
   render(p: PostParams): void {
@@ -57,8 +66,8 @@ export class PostFx {
     this.composer.render();
   }
 
-  private uniform(name: string): THREE.IUniform {
-    const u = this.final.uniforms[name];
+  private uniform(name: string, uniforms = this.final.uniforms): THREE.IUniform {
+    const u = uniforms[name];
     if (!u) throw new Error(`Missing uniform ${name}`);
     return u;
   }
