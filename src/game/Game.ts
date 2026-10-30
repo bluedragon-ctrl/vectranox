@@ -1,12 +1,13 @@
-import { BALL, FIELD, PADDLE, RULES, SCORE, SIM } from '../config/game';
-import { DRAFT, ELITE_WEIGHTS, MODS } from '../config/mods';
-import { ELITE } from '../config/run';
-import { BRICK_TYPES, FORMATION, PINBALL, POWER, POWER_LOOK, STAGE_EVENTS } from '../config/tuning';
+import { BALL, BRICK, FIELD, PADDLE, RULES, SCORE, SIM } from '../config/game';
+import { BOSS_WEIGHTS, DRAFT, ELITE_WEIGHTS, MODS } from '../config/mods';
+import { BOSS_ROOM, ELITE } from '../config/run';
+import { BOSS, BRICK_TYPES, FORMATION, PINBALL, POWER, POWER_LOOK, STAGE_EVENTS } from '../config/tuning';
 import { EventBus } from '../core/events';
 import { clamp, lerp } from '../core/math';
 import { Rng } from '../core/rng';
 import { assembleRun, buildStage } from '../levels/assemble';
 import { TEMPLATES, type StageDef, type StageTemplate } from '../levels/stages';
+import { BossFight } from './boss';
 import { sweepBox, sweepCircle, type SweepHit } from './collision';
 import type { GameEvents, WallSide } from './events';
 import { buildFormations, type Formation } from './formation';
@@ -21,6 +22,7 @@ import type {
   Brick,
   Capsule,
   ChargePower,
+  EmitterKind,
   ExplosionSource,
   GameState,
   HitSource,
@@ -28,6 +30,8 @@ import type {
   Paddle,
   Portal,
   PowerKind,
+  ShadowBall,
+  Shot,
   StageEventKind,
   Target,
   TickInput,
@@ -84,8 +88,14 @@ export class Game {
   portals: Portal[] = [];
   capsules: Capsule[] = [];
   bolts: Bolt[] = [];
+  shots: Shot[] = [];
+  shadows: ShadowBall[] = [];
   /** The moving groups of bricks in this stage; any other brick stands still. */
   formations: Formation[] = [];
+  /** Set in boss rooms. */
+  fight: BossFight | null = null;
+  /** Seconds the paddle can't move for yet. */
+  stun = 0;
   /** The run's stages, assembled from the seed. */
   readonly stages: StageDef[];
   /** Stacks held of each mod; mods last the whole run. */
@@ -163,9 +173,12 @@ export class Game {
   /** How close marching formations are to the line, 0..1; null when this stage has no line. */
   get linePressure(): number | null {
     const marching = this.formations.filter((f) => f.descends);
-    if (marching.length === 0) return null;
-    const gap = Math.min(...marching.map((f) => f.lowest)) - FORMATION.line;
-    return clamp(1 - gap / FORMATION.warning, 0, 1);
+    const sending = this.bricks.some((br) => br.falling || br.kind === 'spawner');
+    if (marching.length === 0 && !sending) return null;
+    let lowest = Infinity;
+    for (const f of marching) lowest = Math.min(lowest, f.lowest);
+    for (const br of this.bricks) if (br.falling) lowest = Math.min(lowest, br.y);
+    return clamp(1 - (lowest - FORMATION.line) / FORMATION.warning, 0, 1);
   }
 
   start(): void {
@@ -183,9 +196,9 @@ export class Game {
     }
     for (const c of this.capsules) c.py = c.y;
     for (const bolt of this.bolts) bolt.py = bolt.y;
-    for (const br of this.bricks) {
-      br.px = br.x;
-      br.py = br.y;
+    for (const moving of [...this.bricks, ...this.shots, ...this.shadows]) {
+      moving.px = moving.x;
+      moving.py = moving.y;
     }
 
     switch (this.state) {
@@ -200,8 +213,12 @@ export class Game {
         this.tickPowers(dt);
         this.handleButtons(dt, input);
         this.updateFormations(dt);
+        this.moveFallers(dt);
+        this.fight?.update(dt, this.bricks, (kind, br) => this.emitterActs(kind, br));
         this.updateBalls(dt);
+        this.updateShadows(dt);
         this.updateBolts(dt);
+        this.updateShots(dt);
         this.updateCapsules(dt);
         this.burnFuses(this.tick);
         this.healBricks();
@@ -349,8 +366,11 @@ export class Game {
   private loadStage(index: number): void {
     this.stageIndex = index;
     const stage = this.stage;
-    ({ bricks: this.bricks, targets: this.targets, portals: this.portals } = parseLayout(stage.layout, () => this.nextId++));
+    ({ bricks: this.bricks, targets: this.targets, portals: this.portals } = parseLayout(stage.layout, () => this.nextId++, stage.boss?.hp));
     this.formations = buildFormations(stage.formations, this.bricks, stage.formationPace);
+    const core = this.bricks.find((br) => br.kind === 'core');
+    this.fight = stage.boss && core ? new BossFight(stage.boss, core) : null;
+    this.paceFormations();
     this.breakableLeft = this.bricks.filter(isBreakable).length;
     this.breached = false;
     this.paddle.x = this.paddle.px = FIELD.width / 2;
@@ -399,7 +419,8 @@ export class Game {
   /** Mods on offer for the next stage's sector; an elite room just cleared pays with better ones. */
   private rollOffers(count: number): ModKind[] {
     const next = this.stages[this.stageIndex + 1] ?? this.stage;
-    const weights = this.stage.room === 'elite' ? ELITE_WEIGHTS : sectorWeights(next.sector);
+    const { room } = this.stage;
+    const weights = room === 'boss' ? BOSS_WEIGHTS : room === 'elite' ? ELITE_WEIGHTS : sectorWeights(next.sector);
     return rollMods(this.offerRng, this.mods, weights, count);
   }
 
@@ -419,6 +440,7 @@ export class Game {
   private serve(keepPowers = false): void {
     this.balls = [];
     this.fuses = [];
+    this.clearThreats();
     if (!keepPowers) this.clearPowers();
     const x = this.paddle.x;
     const y = this.restY(BALL.radius);
@@ -498,7 +520,12 @@ export class Game {
     const target = this.paddleWidth() * scale;
     p.w += (target - p.w) * Math.min(1, POWER.widthRate * dt);
     if (Math.abs(target - p.w) < 0.01) p.w = target;
-    p.x = clamp(p.x + input.dx + this.keyTravel(dt, input.axis), p.w / 2, FIELD.width - p.w / 2);
+    this.stun = Math.max(0, this.stun - dt);
+    // Stunned, only the width still changes (the clamp keeps a growing paddle inside the walls),
+    // and a held key starts its ramp over, so the paddle doesn't shoot off when it wakes.
+    if (this.stun > 0) this.keyHeld = 0;
+    const travel = this.stun > 0 ? 0 : input.dx + this.keyTravel(dt, input.axis);
+    p.x = clamp(p.x + travel, p.w / 2, FIELD.width - p.w / 2);
   }
 
   /** Keyboard travel this tick. Any change of direction restarts the ramp; letting go stops dead. */
@@ -531,6 +558,208 @@ export class Game {
     }
   }
 
+  /** Falling bricks come down like formations do, ahead of the balls; `resolveStage` checks the line. */
+  private moveFallers(dt: number): void {
+    for (const br of this.bricks) {
+      if (!br.falling || !br.alive) continue;
+      br.y -= BOSS.faller.speed * dt;
+      for (const b of this.balls) if (b.stuck === null) this.shoveBall(b, br);
+    }
+  }
+
+  private emitterActs(kind: EmitterKind, br: Brick): void {
+    if (kind === 'turret') this.fireTurret(br);
+    else if (kind === 'spawner') this.spawnFaller(br);
+    else this.releaseShadow(br);
+  }
+
+  private fireTurret(br: Brick): void {
+    const pattern = this.fight?.phase.fire ?? 'straight';
+    const x = br.x + br.w / 2;
+    const y = br.y;
+    const down = -Math.PI / 2;
+    const headings = pattern === 'fan' ? [down - BOSS.shot.fan, down, down + BOSS.shot.fan] : [pattern === 'aimed' ? Math.atan2(this.paddle.y - y, this.paddle.x - x) : down];
+    for (const angle of headings) {
+      const vx = Math.cos(angle) * BOSS.shot.speed;
+      const vy = Math.sin(angle) * BOSS.shot.speed;
+      this.shots.push({ id: this.nextId++, x, y, px: x, py: y, vx, vy });
+    }
+    this.events.emit('shotFired', { x, y, pattern, count: headings.length });
+  }
+
+  private spawnFaller(from: Brick): void {
+    if (this.bricks.filter((br) => br.falling).length >= BOSS.faller.max) return;
+    const x = from.x;
+    const y = from.y - BRICK.height;
+    const brick: Brick = {
+      ...from,
+      id: this.nextId++,
+      x,
+      y,
+      px: x,
+      py: y,
+      w: BRICK.width,
+      h: BRICK.height,
+      kind: 'normal',
+      hp: 1,
+      maxHp: 1,
+      hitTick: -Infinity,
+      falling: true,
+      charge: 0,
+    };
+    this.bricks.push(brick);
+    this.events.emit('brickSpawn', { id: brick.id, x: x + brick.w / 2, y: y + brick.h / 2 });
+  }
+
+  private releaseShadow(from: Brick): void {
+    if (this.shadows.length >= BOSS.shadow.max) return;
+    const x = from.x + from.w / 2;
+    const y = from.y - BALL.radius;
+    const shadow: ShadowBall = { id: this.nextId++, x, y, px: x, py: y, vx: 0, vy: 0, r: BALL.radius, life: BOSS.shadow.life };
+    // At the speed of the real thing, so speed doesn't give it away.
+    const speed = this.balls[0]?.speed ?? BALL.baseSpeed;
+    aim(shadow, Math.PI + this.rng.range(-BOSS.shadow.spread, BOSS.shadow.spread), speed);
+    this.shadows.push(shadow);
+    this.events.emit('shadowSpawn', { id: shadow.id, x, y });
+  }
+
+  private updateShadows(dt: number): void {
+    this.shadows = this.shadows.filter((s) => {
+      s.life -= dt;
+      if (s.life <= 0) return false;
+      this.moveShadow(s, dt);
+      return s.y >= RULES.lostBallY;
+    });
+  }
+
+  /** As `moveBall` with every rule taken out: it bounces off walls, bricks and the paddle, and that's all. */
+  private moveShadow(s: ShadowBall, dt: number): void {
+    const speed = Math.hypot(s.vx, s.vy);
+    let remaining = 1;
+    for (let i = 0; i < MAX_BOUNCES && remaining > 0; i++) {
+      const dx = s.vx * dt * remaining;
+      const dy = s.vy * dt * remaining;
+      let hit: SweepHit | null = sweepWalls(s, dx, dy);
+      for (const br of this.bricks) {
+        if (!br.alive) continue;
+        const h = sweepBox(s.x, s.y, dx, dy, br.x - s.r, br.y - s.r, br.x + br.w + s.r, br.y + br.h + s.r);
+        if (closer(h, hit)) hit = h;
+      }
+      let onPaddle = false;
+      if (s.vy < 0) {
+        const box = this.paddleBox(s.r);
+        const h = sweepBox(s.x, s.y, dx, dy, box.minX, box.minY, box.maxX, box.maxY);
+        if (closer(h, hit)) {
+          hit = h;
+          onPaddle = h.ny > 0;
+        }
+      }
+      if (!hit) {
+        s.x += dx;
+        s.y += dy;
+        return;
+      }
+      s.x += dx * hit.t + hit.nx * SKIN;
+      s.y += dy * hit.t + hit.ny * SKIN;
+      remaining *= 1 - hit.t;
+      if (hit.nx !== 0) s.vx = Math.abs(s.vx) * hit.nx;
+      if (hit.ny !== 0) s.vy = Math.abs(s.vy) * hit.ny;
+      if (onPaddle) aim(s, (clamp((s.x - this.paddle.x) / (this.paddle.w / 2), -1, 1)) * BALL.maxBounceAngle, speed);
+      normalizeVelocity(s, speed);
+    }
+  }
+
+  /** Shots fly through the bricks; the only thing they can hit is the paddle. */
+  private updateShots(dt: number): void {
+    const p = this.paddle;
+    const { radius } = BOSS.shot;
+    this.shots = this.shots.filter((s) => {
+      s.x += s.vx * dt;
+      s.y += s.vy * dt;
+      if (Math.abs(s.x - p.x) < p.w / 2 + radius && Math.abs(s.y - p.y) < p.h / 2 + radius) {
+        this.stun = BOSS.stun;
+        this.events.emit('paddleStun', { x: p.x, seconds: BOSS.stun });
+        return false;
+      }
+      return s.y >= -radius && s.x >= -radius && s.x <= FIELD.width + radius;
+    });
+  }
+
+  /** Each serve starts clean: what a boss sent out goes, and the paddle can move. */
+  private clearThreats(): void {
+    this.shots = [];
+    this.shadows = [];
+    this.stun = 0;
+    if (this.bricks.some((br) => br.falling)) this.bricks = this.bricks.filter((br) => !br.falling);
+  }
+
+  private paceFormations(): void {
+    const pace = this.fight?.phase.pace ?? 1;
+    for (const f of this.formations) f.boost = pace;
+  }
+
+  /** The core takes the hit, up to the phase's threshold; reaching that starts the next phase or ends the fight. */
+  private hitCore(core: Brick, by: HitSource, ix: number, iy: number): void {
+    const fight = this.fight;
+    const x = core.x + core.w / 2;
+    const y = core.y + core.h / 2;
+    if (!fight || fight.shielded) {
+      this.events.emit('brickHit', { id: core.id, kind: core.kind, hp: core.hp, by, x, y, ix, iy });
+      return;
+    }
+    const floor = fight.floor;
+    core.hp = Math.max(floor, core.hp - (by === 'laser' ? BOSS.laserDamage : 1));
+    this.score += SCORE.hit * this.multiplier;
+    this.events.emit('brickHit', { id: core.id, kind: core.kind, hp: core.hp, by, x, y, ix, iy });
+    if (core.hp > floor) return;
+    if (core.hp > 0) this.nextPhase(fight);
+    else this.killCore(core, x, y);
+  }
+
+  private nextPhase(fight: BossFight): void {
+    fight.advance();
+    this.paceFormations();
+    this.ejectFromVault();
+    this.events.emit('bossPhase', { phase: fight.phaseIndex + 1, phases: fight.def.phases.length, hp: fight.core.hp });
+  }
+
+  /** Balls in the vault go back out through the first portal outside it, heading down. */
+  private ejectFromVault(): void {
+    const vault = this.fight?.def.vault;
+    if (!vault) return;
+    const minX = vault.cols[0] * BRICK.width;
+    const maxX = (vault.cols[1] + 1) * BRICK.width;
+    const maxY = FIELD.height - BRICK.top - vault.rows[0] * BRICK.height;
+    const minY = FIELD.height - BRICK.top - (vault.rows[1] + 1) * BRICK.height;
+    const inside = (p: { x: number; y: number }): boolean => p.x >= minX && p.x <= maxX && p.y >= minY && p.y <= maxY;
+    const exit = this.portals.find((p) => !inside(p));
+    if (!exit) return;
+    for (const b of this.balls) {
+      if (!inside(b)) continue;
+      b.x = b.px = exit.x;
+      b.y = b.py = exit.y;
+      b.vy = -Math.abs(b.vy);
+      b.inPortal = exit.id;
+      this.events.emit('portalWarp', { id: b.id, from: exit.exit, to: exit.id, x: exit.x, y: exit.y });
+    }
+  }
+
+  /** The core goes and the room goes with it; `resolveStage` picks up the win. */
+  private killCore(core: Brick, x: number, y: number): void {
+    core.alive = false;
+    this.breakableLeft--;
+    const multiplier = this.multiplier;
+    this.events.emit('bossDown', { x, y });
+    this.events.emit('brickDestroyed', { id: core.id, kind: core.kind, points: 0, chain: 0, bonus: 0, multiplier, by: 'explosion', x, y, ix: x, iy: y, vx: 0, vy: 0 });
+    for (const br of this.bricks) {
+      if (!br.alive) continue;
+      br.alive = false;
+      const cx = br.x + br.w / 2;
+      const cy = br.y + br.h / 2;
+      this.events.emit('brickDestroyed', { id: br.id, kind: br.kind, points: 0, chain: 0, bonus: 0, multiplier, by: 'explosion', x: cx, y: cy, ix: cx, iy: cy, vx: 0, vy: 0 });
+    }
+  }
+
   /**
    * Bricks move before the balls do, so one can land on a ball: the ball goes out the nearest side
    * and counts as hitting it. It leaves faster than a brick moves, or it would be caught again.
@@ -538,7 +767,7 @@ export class Game {
   private shoveBall(b: Ball, br: Brick): void {
     const out = pushOut(b, br);
     if (!out) return;
-    if (br.kind !== 'steel' && this.isActive('pierce')) {
+    if (!isSolid(br) && this.isActive('pierce')) {
       this.ballHitsBrick(br, b, true);
       return;
     }
@@ -625,13 +854,15 @@ export class Game {
 
   /** After everything moved: drop broken bricks, then check for a cleared stage or a lost life. */
   private resolveStage(): void {
-    if (this.breakableLeft === 0) {
+    if (this.fight ? !this.fight.core.alive : this.breakableLeft === 0) {
       // Whatever is still burning has nothing left to break, but it should still be seen.
       this.burnFuses(Infinity);
       this.bricks = this.bricks.filter((br) => br.alive);
-      const bonus = this.stage.room === 'elite' ? ELITE.clearBonus : 0;
+      const { room } = this.stage;
+      const bonus = room === 'boss' ? BOSS_ROOM.clearBonus : room === 'elite' ? ELITE.clearBonus : 0;
       this.score += bonus;
       this.balls = [];
+      this.clearThreats();
       this.clearPowers();
       this.setState('clear');
       this.events.emit('stageClear', { stage: this.stageIndex + 1, score: this.score, bonus });
@@ -640,7 +871,7 @@ export class Game {
     if (this.bricks.some((br) => !br.alive)) this.bricks = this.bricks.filter((br) => br.alive);
 
     // Ahead of the lost balls: this life is gone either way, and the formation must still turn back.
-    if (this.formations.some((f) => f.breached)) {
+    if (this.formations.some((f) => f.breached) || this.bricks.some((br) => br.falling && br.y <= FORMATION.line)) {
       for (const f of this.formations) f.pushBack();
       this.events.emit('formationBreach', { lives: this.lives - 1 });
       this.breached = true;
@@ -740,7 +971,7 @@ export class Game {
       }
 
       // Piercing balls go straight through anything breakable.
-      if (typeof target === 'object' && target.kind !== 'steel' && this.isActive('pierce')) {
+      if (typeof target === 'object' && !isSolid(target) && this.isActive('pierce')) {
         b.x += dx * hit.t;
         b.y += dy * hit.t;
         remaining *= 1 - hit.t;
@@ -783,7 +1014,7 @@ export class Game {
       if (!from || (b.x - from.x) ** 2 + (b.y - from.y) ** 2 > from.r ** 2) b.inPortal = null;
       return;
     }
-    const capture = PINBALL.portal.capture ** 2;
+    const capture = (this.fight ? BOSS.portalCapture : PINBALL.portal.capture) ** 2;
     for (const p of this.portals) {
       if ((b.x - p.x) ** 2 + (b.y - p.y) ** 2 >= capture) continue;
       const exit = this.portals.find((q) => q.id === p.exit);
@@ -1088,7 +1319,7 @@ export class Game {
   private ballHitsBrick(br: Brick, b: Ball, smash: boolean): void {
     // The dampener mod cuts the top speed too, so hits don't win back what it takes.
     const max = BALL.maxSpeed * (1 - this.modValue('dampener'));
-    if (br.kind !== 'steel') b.speed = Math.min(max, b.speed + BALL.hitSpeedStep);
+    if (!isSolid(br)) b.speed = Math.min(max, b.speed + BALL.hitSpeedStep);
     const ix = clamp(b.x, br.x, br.x + br.w);
     const iy = clamp(b.y, br.y, br.y + br.h);
     this.hitBrick(br, 'ball', ix, iy, smash, b);
@@ -1119,6 +1350,10 @@ export class Game {
 
     this.sinceHit = 0;
     this.stageEvents.arm('pulse');
+    if (br.kind === 'core') {
+      this.hitCore(br, by, ix, iy);
+      return;
+    }
     br.hp = smash ? 0 : br.hp - 1;
     if (br.hp > 0) {
       this.score += SCORE.hit * this.multiplier;
@@ -1127,6 +1362,10 @@ export class Game {
     }
 
     br.alive = false;
+    if (br.falling) {
+      this.events.emit('brickDestroyed', { id: br.id, kind: br.kind, points: 0, chain: 0, bonus: 0, multiplier: this.multiplier, by, x, y, ix, iy, vx: ball?.vx ?? 0, vy: ball?.vy ?? 0 });
+      return;
+    }
     this.breakableLeft--;
     this.sinceKill = 0;
     this.stageEvents.arm('supplyDrop', 'overload', 'hunter', 'demolition');
@@ -1167,6 +1406,11 @@ function ballDirection(b: Ball): [number, number] {
 
 function isBreakable(br: Brick): boolean {
   return br.alive && br.kind !== 'steel';
+}
+
+/** A ball can't pierce it, and hitting it doesn't speed the ball up. */
+function isSolid(br: Brick): boolean {
+  return br.kind === 'steel' || br.kind === 'core';
 }
 
 /** Points for breaking a brick, before the multiplier and chain bonus. */

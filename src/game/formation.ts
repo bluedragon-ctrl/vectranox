@@ -30,6 +30,8 @@ export class Formation {
   private hop = 0;
   /** The current hop is a drop. */
   dropping = false;
+  /** Scales the motion on top of `pace`; a boss's phases set it. */
+  boost = 1;
 
   /** `pace` scales the motion's speed. */
   constructor(
@@ -69,10 +71,11 @@ export class Formation {
       this.settle(dt);
       return false;
     }
-    this.time += dt * this.pace;
+    const paced = dt * this.pace * this.boost;
+    this.time += paced;
     let hopped = false;
     if (this.def.motion === 'sweep') {
-      if (this.travel(sweep.speed * this.pace * dt)) this.dir = -this.dir;
+      if (this.travel(sweep.speed * paced)) this.dir = -this.dir;
     } else if (this.def.motion === 'march') {
       hopped = this.march(dt);
     }
@@ -100,7 +103,7 @@ export class Formation {
       if (this.dropping) this.sunk += step;
       else if (this.travel(step)) this.hop = 0;
     }
-    this.beat -= dt * this.pace * lerp(march.fury, 1, this.strength());
+    this.beat -= dt * this.pace * this.boost * lerp(march.fury, 1, this.strength());
     if (this.beat > 0) return false;
     this.beat += march.beat;
     this.dropping = this.room() < 1;

@@ -2,13 +2,15 @@ import './styles/main.css';
 import { AudioEngine } from './audio/AudioEngine';
 import { GameSounds } from './audio/GameSounds';
 import { Input, type ControlMode } from './core/input';
-import { ELITE, ROOM_LABEL } from './config/run';
+import { PALETTE } from './config/game';
+import { BOSS_ROOM, ELITE, ROOM_LABEL } from './config/run';
 import { startLoop } from './core/loop';
 import { loadAudioSettings, loadVisualSettings, saveAudioSettings, saveVisualSettings } from './core/settings';
 import { Game } from './game/Game';
 import type { StageTemplate } from './levels/stages';
 import { Renderer } from './render/Renderer';
 import { AudioPanel } from './ui/AudioPanel';
+import { BossBar } from './ui/BossBar';
 import { ChainPopups } from './ui/ChainPopups';
 import { EventBanner } from './ui/EventBanner';
 import { EventConsole, type UiEvent } from './ui/EventConsole';
@@ -102,6 +104,7 @@ const banner = new EventBanner(el('event-banner'), el('event-title'), el('event-
 const input = new Input(canvas, renderer);
 const chainPopups = new ChainPopups(el('popups'), (x, y) => renderer.worldToClient(x, y));
 const runScreen = new RunScreen(el('run-screen'), (action) => runAction(action, 'mouse'));
+const bossBar = new BossBar(el('boss-bar'), (x, y) => renderer.worldToClient(x, y));
 
 let ui: UiState = 'title';
 /** Waiting for the browser to grant pointer lock before play starts in mouse mode. */
@@ -116,6 +119,7 @@ function newGame(): Game {
   const g = new Game(Date.now() >>> 0);
   g.events.onAny((type, payload) => eventConsole.log(g.time, String(type), payload));
   g.events.on('stageEvent', ({ kind }) => banner.show(kind, g.time));
+  g.events.on('bossPhase', ({ phase, phases }) => banner.announce({ label: `PHASE ${phase}/${phases}`, sub: 'CORE SHIELDED', color: PALETTE.yellow }, g.time));
   renderer.attach(g);
   sounds.attach(g);
   chainPopups.attach(g);
@@ -291,6 +295,7 @@ function overlayContent(): OverlayContent | null {
             sub: `${stageLabel(game)}\nCLICK / SPACE TO LAUNCH`,
           };
         case 'clear':
+          if (game.stage.room === 'boss') return { title: 'BOSS DESTROYED', sub: `BOSS BONUS +${BOSS_ROOM.clearBonus}` };
           return game.stage.room === 'elite' ? { title: 'STAGE CLEAR', sub: `ELITE BONUS +${ELITE.clearBonus}` } : { title: 'STAGE CLEAR' };
         // The pick screen takes over.
         case 'draft':
@@ -337,7 +342,7 @@ let fps = 60;
 startLoop({
   update: (dt) => {
     if (ui !== 'playing') return;
-    game.update(dt, input.sample(game.paddle.x));
+    game.update(dt, input.sample(game.paddle.x, game.stun > 0));
     if ((game.state === 'over' || game.state === 'complete') && game.stateTime >= END_DELAY) {
       ui = 'ended';
       releasePointer();
@@ -358,6 +363,7 @@ startLoop({
     const content = overlayContent();
     overlay.show(content);
     runScreen.update(ui === 'between' ? game : null);
+    bossBar.update(ui === 'title' || ui === 'ended' ? null : game);
     // Menus and stage banners take over the field; a stage event banner never shares it.
     if (content || ui === 'between') banner.hide();
     else banner.update(game.time);

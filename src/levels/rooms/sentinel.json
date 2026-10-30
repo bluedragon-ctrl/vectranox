@@ -1,0 +1,25 @@
+{
+  "name": "SENTINEL",
+  "tier": 1,
+  "room": "boss",
+  "layout": [
+    ".............",
+    "...#22222#...",
+    "...t2ccc2t...",
+    "...22ccc22...",
+    "...#11111#...",
+    ".............",
+    ".............",
+    "1.1.1.1.1.1.1"
+  ],
+  "formations": [
+    { "motion": "sweep", "rows": [1, 4] }
+  ],
+  "boss": {
+    "hp": 16,
+    "phases": [
+      { "at": 1, "fire": "straight", "turret": 2.4 },
+      { "at": 0.5, "fire": "aimed", "turret": 1.8, "pace": 1.4 }
+    ]
+  }
+}

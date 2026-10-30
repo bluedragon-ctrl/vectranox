@@ -4,7 +4,9 @@ import type { POWER, STAGE_EVENTS } from '../config/tuning';
 /** `draft` (the pick between stages) waits for the player's choice. */
 export type GameState = 'serve' | 'play' | 'clear' | 'draft' | 'over' | 'complete';
 
-export type BrickKind = 'normal' | 'tough' | 'steel' | 'explosive' | 'regen';
+export type BrickKind = 'normal' | 'tough' | 'steel' | 'explosive' | 'regen' | 'core' | EmitterKind;
+/** Boss bricks that act on the phase's timers: fire shots, send falling bricks, release shadow balls. */
+export type EmitterKind = 'turret' | 'spawner' | 'phantom';
 
 export type PowerKind = keyof typeof POWER.kinds;
 /** Powers that give charges, spent one per alt press. */
@@ -89,6 +91,34 @@ export interface Portal {
   warpTick: number;
 }
 
+/**
+ * Decoy from a phantom brick: bounces like a ball but breaks nothing, and losing it costs nothing.
+ * Kept out of `Game.balls`, so no ball rule ever applies to it.
+ */
+export interface ShadowBall {
+  id: number;
+  x: number;
+  y: number;
+  px: number;
+  py: number;
+  vx: number;
+  vy: number;
+  r: number;
+  /** Seconds until it fades away. */
+  life: number;
+}
+
+/** Boss shot, stuns the paddle it reaches. Position is the centre. */
+export interface Shot {
+  id: number;
+  x: number;
+  y: number;
+  px: number;
+  py: number;
+  vx: number;
+  vy: number;
+}
+
 /** Falling power-up. Position is the centre. */
 export interface Capsule {
   id: number;
@@ -128,4 +158,8 @@ export interface Brick {
   hitTick: number;
   /** Tick a regenerating brick last won back a hit. */
   healTick: number;
+  /** Sent by a spawner: falls to the line, pays nothing and doesn't count towards the clear. */
+  falling: boolean;
+  /** How far an emitter has wound up towards acting, 0..1. */
+  charge: number;
 }

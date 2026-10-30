@@ -3,8 +3,11 @@
  * Like tuning.ts, everything here is meant to be tweaked by hand.
  */
 
-/** Standard rooms are still layouts, formation rooms move, elite rooms are hard and pay for it. */
-export type RoomKind = 'standard' | 'formation' | 'elite';
+/**
+ * Standard rooms are still layouts, formation rooms move, elite rooms are hard and pay for it,
+ * boss rooms end a sector and are won by destroying the core.
+ */
+export type RoomKind = 'standard' | 'formation' | 'elite' | 'boss';
 
 /**
  * A run is `sectors` × `stagesPerSector` stages, assembled from the stage templates when the run
@@ -23,9 +26,9 @@ export const RUN = {
   sectors: 3,
   stagesPerSector: 4,
   rooms: [
-    ['standard', 'standard', 'formation', 'elite'],
-    ['standard', 'formation', 'standard', 'elite'],
-    ['formation', 'standard', 'formation', 'elite'],
+    ['standard', 'formation', 'elite', 'boss'],
+    ['standard', 'formation', 'elite', 'boss'],
+    ['formation', 'standard', 'elite', 'boss'],
   ] as readonly (readonly RoomKind[])[],
   depth: {
     // Off for now: difficulty comes from ball speed alone (`BALL.stageSpeedStep`) while it is
@@ -48,9 +51,15 @@ export const ELITE = {
   clearBonus: 1000,
 } as const;
 
+/** Boss rooms: killing the boss pays `clearBonus` (no multiplier); the pick after it rolls by `BOSS_WEIGHTS` in mods.ts. */
+export const BOSS_ROOM = {
+  clearBonus: 2500,
+} as const;
+
 /** How each room kind is named on screen; standard rooms go by their stage name alone. */
 export const ROOM_LABEL: Record<RoomKind, string> = {
   standard: '',
   formation: 'FORMATION',
   elite: 'ELITE',
+  boss: 'BOSS',
 };

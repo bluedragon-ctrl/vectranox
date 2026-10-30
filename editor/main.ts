@@ -1,7 +1,7 @@
 import { BRICK } from '../src/config/game';
 import { ROOM_LABEL, type RoomKind } from '../src/config/run';
 import { FORMATION } from '../src/config/tuning';
-import type { FormationDef, StageTemplate } from '../src/levels/stages';
+import type { BossDef, FormationDef, StageTemplate } from '../src/levels/stages';
 import { checkRoom, checkRun, MAX_ROWS, roomFile, type Problem } from '../src/levels/validate';
 import type { RoomChange, RoomsState, SaveResult } from './api';
 import { cellAt, drawField, fitField, FORMATION_COLORS, type Cell } from './field';
@@ -27,6 +27,7 @@ const AREA = 'area';
 const EMPTY_ROW = '.'.repeat(BRICK.cols);
 const KINDS = Object.keys(ROOM_LABEL) as RoomKind[];
 const MOTIONS = Object.keys(FORMATION.motions) as FormationDef['motion'][];
+const NEW_BOSS: BossDef = { hp: 16, phases: [{ at: 1, fire: 'straight', turret: 2.5 }] };
 
 const TOOLS: readonly { tool: Tool; label: string; title: string }[] = [
   { tool: '1', label: '1', title: 'Normal brick' },
@@ -35,6 +36,10 @@ const TOOLS: readonly { tool: Tool; label: string; title: string }[] = [
   { tool: '#', label: '#', title: 'Steel' },
   { tool: '*', label: '*', title: 'Explosive' },
   { tool: 'r', label: 'r', title: 'Regenerating' },
+  { tool: 'c', label: 'c', title: 'Boss core: its cells make one brick, so fill a rectangle' },
+  { tool: 't', label: 't', title: 'Boss turret' },
+  { tool: 's', label: 's', title: 'Boss spawner: sends bricks down to the line' },
+  { tool: 'g', label: 'g', title: 'Boss phantom: releases shadow balls' },
   { tool: 'o', label: 'o', title: 'Pinball target' },
   { tool: PORTAL, label: 'Portal', title: 'Portal end (p); pairs up with the next one placed' },
   { tool: ERASE, label: 'Erase', title: 'Erase (e), or drag with the right button' },
@@ -430,8 +435,10 @@ function renderForm(): void {
   const kind = make('select', {}, ...options(KINDS, room.room ?? 'standard'));
   kind.onchange = () => {
     if (!current?.room) return;
-    const { room: _old, ...rest } = current.room;
-    change(kind.value === 'standard' ? rest : { ...rest, room: kind.value as RoomKind });
+    const { room: _old, boss, ...rest } = current.room;
+    const next = kind.value === 'standard' ? rest : { ...rest, room: kind.value as RoomKind };
+    change(kind.value === 'boss' ? { ...next, boss: boss ?? NEW_BOSS } : next);
+    renderForm();
   };
   const opener = make('input', { type: 'checkbox', checked: room.opener === true });
   opener.onchange = () => {
@@ -450,6 +457,18 @@ function renderForm(): void {
     renderForm();
   };
 
+  // Hand-edited: a fight is tuned as numbers, and the checks below say what is wrong with them.
+  const bossBlock = make('textarea', { rows: 10, spellcheck: false, value: JSON.stringify(room.boss ?? NEW_BOSS, null, 1) });
+  bossBlock.onchange = () => {
+    if (!current?.room) return;
+    try {
+      change({ ...current.room, boss: JSON.parse(bossBlock.value) as BossDef });
+      showMessage('');
+    } catch {
+      showMessage('The boss block is not valid JSON.', true);
+    }
+  };
+
   revertButton = make('button', { onclick: revert, disabled: !current.base || !isChanged(current) }, 'Revert');
   formPanel.replaceChildren(
     field('Name', name),
@@ -466,6 +485,7 @@ function renderForm(): void {
     make('h2', {}, 'FORMATIONS'),
     ...(room.formations ?? []).map(formationCard),
     add,
+    ...(room.room === 'boss' ? [make('h2', {}, 'BOSS'), bossBlock] : []),
   );
 }
 

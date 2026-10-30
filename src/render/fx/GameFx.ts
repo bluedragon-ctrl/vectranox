@@ -160,6 +160,19 @@ export class GameFx {
         // An area hit breaks many bricks in one tick; its own kick stands in for theirs.
         if (!isArea(by)) this.shake.add(kind === 'tough' ? 0.16 : 0.1);
       }),
+      ev.on('paddleStun', () => {
+        this.shake.add(0.2);
+        this.paddlePulse = 1;
+        this.paddleHitOffset = 0;
+      }),
+      ev.on('bossPhase', () => {
+        this.shake.add(0.3);
+        this.pulse(COLORS.yellow, 0.12, 0.4);
+      }),
+      ev.on('bossDown', () => {
+        this.shake.add(0.7);
+        this.pulse(COLORS.yellow, 0.3, 0.9);
+      }),
       ev.on('stageEvent', ({ kind }) => {
         if (kind !== 'pulse') return;
         this.shake.add(0.25);

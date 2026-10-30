@@ -9,6 +9,10 @@ export const BRICK_CODES: Partial<Record<string, { kind: BrickKind; hp: number }
   '#': { kind: 'steel', hp: 0 },
   '*': { kind: 'explosive', hp: 1 },
   r: { kind: 'regen', hp: BRICK_TYPES.regen.hp },
+  c: { kind: 'core', hp: 1 },
+  t: { kind: 'turret', hp: 2 },
+  s: { kind: 'spawner', hp: 2 },
+  g: { kind: 'phantom', hp: 2 },
 };
 
 export interface StagePieces {
@@ -17,11 +21,16 @@ export interface StagePieces {
   portals: Portal[];
 }
 
-/** Bricks and pinball pieces for a stage layout (see `StageDef`). */
-export function parseLayout(layout: readonly string[], nextId: () => number): StagePieces {
+/** Bricks and pinball pieces for a stage layout (see `StageDef`). All its `c` cells make one core of `coreHp`. */
+export function parseLayout(layout: readonly string[], nextId: () => number, coreHp = 1): StagePieces {
   const bricks: Brick[] = [];
   const targets: Target[] = [];
   const ends = new Map<string, { x: number; y: number }[]>();
+  const coreCells: { row: number; col: number }[] = [];
+  const addBrick = (row: number, col: number, kind: BrickKind, hp: number, w: number, h: number, y: number): void => {
+    const x = col * BRICK.width;
+    bricks.push({ id: nextId(), row, col, x, y, px: x, py: y, w, h, kind, hp, maxHp: hp, alive: true, hitTick: -Infinity, healTick: -Infinity, falling: false, charge: 0 });
+  };
   layout.forEach((line, row) => {
     if (line.length !== BRICK.cols) {
       throw new Error(`Stage row ${row} has ${line.length} columns, expected ${BRICK.cols}`);
@@ -29,9 +38,8 @@ export function parseLayout(layout: readonly string[], nextId: () => number): St
     for (let col = 0; col < line.length; col++) {
       const ch = line.charAt(col);
       if (ch === '.') continue;
-      const x = col * BRICK.width;
       const y = FIELD.height - BRICK.top - (row + 1) * BRICK.height;
-      const cx = x + BRICK.width / 2;
+      const cx = col * BRICK.width + BRICK.width / 2;
       const cy = y + BRICK.height / 2;
       if (ch === 'o') {
         targets.push({ kind: 'target', id: nextId(), x: cx, y: cy, r: PINBALL.target.radius, lit: false, hitTick: -Infinity });
@@ -45,25 +53,20 @@ export function parseLayout(layout: readonly string[], nextId: () => number): St
       }
       const code = BRICK_CODES[ch];
       if (!code) throw new Error(`Unknown brick code '${ch}' at row ${row}, col ${col}`);
-      bricks.push({
-        id: nextId(),
-        row,
-        col,
-        x,
-        y,
-        px: x,
-        py: y,
-        w: BRICK.width,
-        h: BRICK.height,
-        kind: code.kind,
-        hp: code.hp,
-        maxHp: code.hp,
-        alive: true,
-        hitTick: -Infinity,
-        healTick: -Infinity,
-      });
+      if (code.kind === 'core') coreCells.push({ row, col });
+      else addBrick(row, col, code.kind, code.hp, BRICK.width, BRICK.height, y);
     }
   });
+
+  if (coreCells.length > 0) {
+    const rows = coreCells.map((c) => c.row);
+    const cols = coreCells.map((c) => c.col);
+    const top = Math.min(...rows);
+    const left = Math.min(...cols);
+    const across = Math.max(...cols) - left + 1;
+    const down = Math.max(...rows) - top + 1;
+    addBrick(top, left, 'core', coreHp, across * BRICK.width, down * BRICK.height, FIELD.height - BRICK.top - (top + down) * BRICK.height);
+  }
 
   const portals: Portal[] = [];
   [...ends.entries()]
