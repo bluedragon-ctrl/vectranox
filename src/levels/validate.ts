@@ -206,9 +206,6 @@ export function checkRun(rooms: readonly StageTemplate[]): Problem[] {
     if (names.length > 1) problems.push(error(`Room names clash: ${names.join(', ')}.`));
   }
 
-  const openers = rooms.filter((r) => r.opener).map((r) => r.name);
-  if (openers.length > 1) problems.push(error(`Only one room can open the run: ${openers.join(', ')}.`));
-
   for (const kind of Object.keys(ROOM_LABEL)) {
     if (!rooms.some((r) => !r.opener && (r.room ?? 'standard') === kind)) problems.push(error(`No ${kind} room.`));
   }

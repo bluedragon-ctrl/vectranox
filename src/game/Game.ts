@@ -1249,20 +1249,22 @@ export class Game {
   }
 
   /**
-   * Each source ball gets twins fanned out around its direction, `POWER.splitAngle` apart: two,
-   * plus one per extra ball mod stack. Up to the ball limit.
+   * Each source ball gets twins fanned out around its direction, `POWER.splitAngle` apart, on a
+   * random side first: enough to make `POWER.splitInto` balls, plus one per extra ball mod stack.
+   * Up to the ball limit.
    */
   private splitBalls(): void {
     // Split guard mod: applying a power restarts its timer, so skip it if that would cut the barrier short.
     const guard = this.modValue('splitguard');
     if (guard * (1 + this.modValue('extender')) > this.timers.barrier) this.applyPower('barrier', guard);
-    const twins = 2 + this.modValue('extraball');
+    const twins = POWER.splitInto - 1 + this.modValue('extraball');
     for (const src of this.balls.slice()) {
       const [dirX, dirY] = ballDirection(src);
+      const side = this.rng.next() < 0.5 ? 1 : -1;
       for (let i = 0; i < twins; i++) {
         if (this.balls.length >= POWER.maxBalls) return;
         // +1, -1, +2, -2 steps out from the source's direction.
-        this.addTwin(src, dirX, dirY, (i % 2 === 0 ? 1 : -1) * (Math.floor(i / 2) + 1) * POWER.splitAngle);
+        this.addTwin(src, dirX, dirY, side * (i % 2 === 0 ? 1 : -1) * (Math.floor(i / 2) + 1) * POWER.splitAngle);
       }
     }
   }

@@ -14,7 +14,7 @@ export type RoomKind = 'standard' | 'formation' | 'elite' | 'boss';
  * levels/assemble.ts). After every cleared room but the last the player picks a mod or extra lives
  * (see `DRAFT` in mods.ts).
  *
- * The first room is the opener and the last the final boss; each room between rolls its kind.
+ * The first room is a random opener and the last the final boss; each room between rolls its kind.
  * `bossChance` and `eliteChance` are the chance of that kind by rooms since the last one (the last
  * entry holds from there on). Bosses leave at least a room before the final boss, elites never
  * follow a boss, and bosses never repeat. `formationChance` splits the rooms left over.

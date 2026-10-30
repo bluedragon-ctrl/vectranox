@@ -494,7 +494,7 @@ function renderForm(): void {
     field('Tier', tier),
     field('Threat', threat),
     field('Kind', kind),
-    make('label', { className: 'check' }, opener, 'Always opens the run'),
+    make('label', { className: 'check' }, opener, 'Can open the run'),
     make(
       'div',
       { className: 'row actions' },

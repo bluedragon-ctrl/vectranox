@@ -8,8 +8,9 @@ const LAYOUT_SALT = 0x5f3759df;
 
 /**
  * The run's stages, from its seed alone: the same seed always gives the same stages, however the
- * run is played. Each room rolls its kind (see `RUN`), then a template of that kind; templates
- * don't repeat while unused ones are left. Bosses come in tier order, the highest one last.
+ * run is played. The first room is a random opener. Each room after it rolls its kind (see `RUN`),
+ * then a template of that kind; templates don't repeat while unused ones are left. Bosses come in
+ * tier order, the highest one last.
  */
 export function assembleRun(seed: number): StageDef[] {
   const rng = new Rng(seed ^ LAYOUT_SALT);
@@ -18,9 +19,10 @@ export function assembleRun(seed: number): StageDef[] {
   const bosses = TEMPLATES.filter((t) => t.room === 'boss').sort((a, b) => a.tier - b.tier);
   const finalBoss = bosses.pop();
   if (!finalBoss) throw new Error('No boss stage template');
+  const openers = TEMPLATES.filter((t) => t.opener);
   for (let depth = 0; depth < RUN.rooms; depth++) {
     const room = rollRoom(rng, stages, bosses.length > 0);
-    const opener = depth === 0 ? TEMPLATES.find((t) => t.opener) : undefined;
+    const opener = depth === 0 ? openers[Math.floor(rng.next() * openers.length)] : undefined;
     const boss = room === 'boss' ? (depth === RUN.rooms - 1 ? finalBoss : bosses.shift()) : undefined;
     const template = opener ?? boss ?? pickTemplate(rng, used, depth, room);
     used.add(template);

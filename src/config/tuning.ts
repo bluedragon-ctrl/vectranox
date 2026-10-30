@@ -22,14 +22,14 @@ export const POWER = {
   maxCapsules: 3,
   kinds: {
     multi: { duration: 0, weight: 14 },
-    laser: { duration: 10, weight: 10 },
+    laser: { duration: 5, weight: 10 },
     expand: { duration: 15, weight: 12 },
     narrow: { duration: 10, weight: 8 },
     slow: { duration: 12, weight: 10 },
     fast: { duration: 10, weight: 8 },
     catch: { duration: 15, weight: 9 },
     pierce: { duration: 8, weight: 6 },
-    barrier: { duration: 12, weight: 7 },
+    barrier: { duration: 8, weight: 7 },
     life: { duration: 0, weight: 3 },
     detonator: { duration: 0, weight: 6 },
   },
@@ -39,6 +39,8 @@ export const POWER = {
   fallSpeed: 70,
   maxBalls: 12,
   maxLives: 9,
+  /** Balls each ball becomes on a split, before the extra ball mod. */
+  splitInto: 2,
   /** Angle between split balls. */
   splitAngle: (22 * Math.PI) / 180,
   expandScale: 1.5,
@@ -106,7 +108,7 @@ export const STAGE_EVENTS = {
   kinds: {
     /** A brick spits out a capsule (never a negative one) once few bricks are left. */
     supplyDrop: { chance: 0.75, maxPerStage: 1, bricksLeft: 8 },
-    /** Every ball splits in three when the stage is almost done. */
+    /** Every ball splits (see `POWER.splitInto`) when the stage is almost done. */
     overload: { chance: 1, maxPerStage: 1, bricksLeft: 4 },
     /**
      * No breakable brick hit for `idleTime`: a pulse rises from the paddle and the lowest `maxBricks`
@@ -114,7 +116,7 @@ export const STAGE_EVENTS = {
      */
     pulse: { chance: 1, maxPerStage: 2, idleTime: 10, maxBricks: 8, damage: 1 },
     /** Last few bricks survive `idleTime` without a kill: the paddle gets the laser. */
-    hunter: { chance: 1, maxPerStage: 1, bricksLeft: 3, idleTime: 12, duration: 8 },
+    hunter: { chance: 1, maxPerStage: 1, bricksLeft: 3, idleTime: 12, duration: 5 },
     /** Serving on the last life late in a stage raises the barrier. */
     safetyNet: { chance: 0.5, maxPerStage: 1, lives: 1, bricksLeft: 15, duration: 15 },
     /** Few bricks left: the paddle gets free detonator charges. */

@@ -12,7 +12,8 @@ import type { FORMATION } from '../config/tuning';
  *
  * `room` is the kind of room it fills (standard unless given); `tier` says how deep in a run it
  * tends to appear (see `RUN.tierWeights`), and for bosses their order. `threat` is the 1 to 3 pips
- * announcing how hard it plays, the tier unless given. The `opener` always starts the run.
+ * announcing how hard it plays, the tier unless given. A run starts with one of the `opener` rooms,
+ * which appear nowhere else.
  * Pinball pieces don't move, so keep them out of a formation's way.
  */
 export interface StageTemplate {
