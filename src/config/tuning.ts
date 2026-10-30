@@ -59,7 +59,7 @@ export const POWER = {
    * Alt press spends one charge: every ball explodes (`target: 'highest'` blows only the ball
    * nearest the bricks) and each breakable brick within `radius` of any of them (measured to the
    * nearest point of the brick) takes `damage` hits, once per press however many balls reach it.
-   * Steel is unaffected and the balls fly on. A capsule gives `charges` when none are held, else
+   * Steel is unaffected (bar the steel breaker mod) and the balls fly on. A capsule gives `charges` when none are held, else
    * `recharge` more, up to `maxCharges`.
    */
   detonator: {

@@ -205,6 +205,14 @@ export const MODS = {
     perStack: 0.25,
     describe: (v) => `${pct(v)} CHANCE A BALL LEAVES A PORTAL AS TWO`,
   },
+  steelbreak: {
+    name: 'STEEL BREAKER',
+    rarity: 'rare',
+    maxStacks: 2,
+    /** Chance each steel brick in reach of a detonation breaks (rolled once per press). */
+    perStack: 0.25,
+    describe: (v) => `${pct(v)} CHANCE A DETONATION BREAKS EACH STEEL BRICK IN REACH`,
+  },
 
   // ── Epic ──
   heavy: {
@@ -246,6 +254,17 @@ export const MODS = {
     /** Balls added by every detonation (up to `POWER.maxBalls`). */
     perStack: 1,
     describe: (v) => `EVERY DETONATION ADDS ${v} BALL${v === 1 ? '' : 'S'}`,
+  },
+  splitguard: {
+    name: 'SPLIT GUARD',
+    rarity: 'epic',
+    maxStacks: 2,
+    /**
+     * Seconds of barrier from every split (multi-ball capsule, multi start, splitter, overload
+     * event). A longer barrier already up is left alone.
+     */
+    perStack: 5,
+    describe: (v, held) => `EVERY MULTI-BALL SPLIT RAISES ${secs(v * (1 + held.extender))} S OF BARRIER`,
   },
 } as const satisfies Record<string, ModDef>;
 

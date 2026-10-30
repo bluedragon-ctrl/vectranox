@@ -77,7 +77,7 @@ export class GameSounds {
       ev.on('brickDestroyed', ({ kind, by, ix }) => {
         const p = pan(ix);
         const ping = this.comboNote(by);
-        if (kind === 'tough') {
+        if (kind !== 'normal') {
           // Metal giving way: a low crunch.
           this.play('crunch', (s) => {
             s.noise({ filter: 'bandpass', freq: 1400, to: 350, q: 1.5, dur: 0.3, gain: 0.32, pan: p });
