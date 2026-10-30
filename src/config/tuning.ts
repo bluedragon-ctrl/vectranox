@@ -29,7 +29,7 @@ export const POWER = {
     fast: { duration: 10, weight: 8 },
     catch: { duration: 15, weight: 9 },
     pierce: { duration: 8, weight: 6 },
-    barrier: { duration: 12, weight: 7 },
+    barrier: { duration: 8, weight: 7 },
     life: { duration: 0, weight: 3 },
     detonator: { duration: 0, weight: 6 },
   },
@@ -39,6 +39,8 @@ export const POWER = {
   fallSpeed: 70,
   maxBalls: 12,
   maxLives: 9,
+  /** Balls each ball becomes on a split, before the extra ball mod. */
+  splitInto: 2,
   /** Angle between split balls. */
   splitAngle: (22 * Math.PI) / 180,
   expandScale: 1.5,
@@ -106,7 +108,7 @@ export const STAGE_EVENTS = {
   kinds: {
     /** A brick spits out a capsule (never a negative one) once few bricks are left. */
     supplyDrop: { chance: 0.75, maxPerStage: 1, bricksLeft: 8 },
-    /** Every ball splits in three when the stage is almost done. */
+    /** Every ball splits (see `POWER.splitInto`) when the stage is almost done. */
     overload: { chance: 1, maxPerStage: 1, bricksLeft: 4 },
     /**
      * No breakable brick hit for `idleTime`: a pulse rises from the paddle and the lowest `maxBricks`

@@ -2,8 +2,8 @@ import { POWER } from '../../config/tuning';
 import { SDF } from './common';
 
 /**
- * Paddle: glass capsule with a neon rim, a white-hot energy core and magenta emitters at both
- * ends. Same 2.5D treatment as the bricks (top face, side face, shadow).
+ * Paddle: glass capsule with a neon rim, a white-hot energy core, a centre mark and magenta emitters
+ * at both ends. Same 2.5D treatment as the bricks (top face, side face, shadow).
  *
  * Power-ups add to it: laser raises two emitters where the bolts leave, catch coats the top
  * with a glowing film.
@@ -63,6 +63,9 @@ void main() {
   // Catch: a sticky film along the top edge.
   top = mix(top, top * 0.6 + uCatch * 0.3, catchFilm);
   top += uCatch * catchFilm * stroke(pt.y - hb.y + 0.9, 0.6) * 1.2;
+
+  // Centre mark: a thin line across the body, on top of any film so it always reads.
+  top = mix(top, mix(tint, vec3(1.0), 0.7), stroke(pt.x, 0.45) * 0.9);
 
   vec3 rimColor = mix(tint, uAccent, capMask);
   rimColor = mix(rimColor, uCatch, catchFilm * smoothstep(0.2, 0.8, yN));

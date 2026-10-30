@@ -1,4 +1,5 @@
 import { PALETTE } from './game';
+import { POWER } from './tuning';
 
 /*
  * Mods: the cards picked between stages. Everything about them lives here: name, rarity, how
@@ -62,7 +63,7 @@ const pct = (v: number) => `${Math.round(v * 100)}%`;
 /** 8.399999 → "8.4". */
 const secs = (v: number) => `${Math.round(v * 10) / 10}`;
 /** Balls each ball becomes on a split. */
-const splitInto = (held: Boosts) => 3 + held.extraball;
+const splitInto = (held: Boosts) => POWER.splitInto + held.extraball;
 
 /** Every mod. The key is the mod's id (used by the dev console: `vnx.game.applyMod('wide')`). */
 export const MODS = {
@@ -130,7 +131,7 @@ export const MODS = {
     maxStacks: 2,
     /**
      * More balls from every split (multi-ball capsule, multi start, splitter, overload event): each
-     * ball splits into 3 plus this many.
+     * ball splits into `POWER.splitInto` plus this many.
      */
     perStack: 1,
     describe: (v, held) => `MULTI-BALL SPLITS EACH BALL INTO ${splitInto({ ...held, extraball: v })}`,
@@ -148,7 +149,7 @@ export const MODS = {
     rarity: 'common',
     maxStacks: 3,
     /** Seconds of barrier at the start of each stage. */
-    perStack: 7,
+    perStack: 5,
     describe: (v, held) => `START EACH STAGE WITH ${secs(v * (1 + held.extender))} S OF BARRIER`,
   },
 
@@ -242,7 +243,7 @@ export const MODS = {
     name: 'SPLITTER',
     rarity: 'epic',
     maxStacks: 1,
-    /** On/off: every serve launch splits the ball in three. */
+    /** On/off: every serve launch splits the ball, as if a multi-ball capsule was caught. */
     perStack: 1,
     describe: (_, held) => `EVERY SERVE SPLITS THE BALL INTO ${splitInto(held)}`,
   },
