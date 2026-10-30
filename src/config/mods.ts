@@ -162,9 +162,9 @@ export const MODS = {
     name: 'BLAST RADIUS',
     rarity: 'rare',
     maxStacks: 3,
-    /** Detonator blast radius, fraction added (base: `POWER.detonator.radius`). */
+    /** Radius of every explosion, fraction added (base: `POWER.detonator.radius`, `BRICK_TYPES.explosive.radius`). */
     perStack: 0.3,
-    describe: (v) => `DETONATOR BLAST RADIUS +${pct(v)}`,
+    describe: (v) => `EXPLOSION RADIUS +${pct(v)}`,
   },
   chainlink: {
     name: 'CHAIN LINK',
@@ -213,9 +213,9 @@ export const MODS = {
     name: 'STEEL BREAKER',
     rarity: 'rare',
     maxStacks: 2,
-    /** Chance each steel brick in reach of a detonation breaks (rolled once per press). */
+    /** Chance each steel brick in reach of an explosion breaks (rolled once per explosion). */
     perStack: 0.25,
-    describe: (v) => `${pct(v)} CHANCE A DETONATION BREAKS EACH STEEL BRICK IN REACH`,
+    describe: (v) => `${pct(v)} CHANCE AN EXPLOSION BREAKS EACH STEEL BRICK IN REACH`,
   },
 
   // ── Epic ──
@@ -255,9 +255,9 @@ export const MODS = {
     name: 'CLUSTER CHARGE',
     rarity: 'epic',
     maxStacks: 1,
-    /** Balls added by every detonation (up to `POWER.maxBalls`). */
+    /** Balls added by every explosion (up to `POWER.maxBalls`). */
     perStack: 1,
-    describe: (v) => `EVERY DETONATION ADDS ${v} BALL${v === 1 ? '' : 'S'}`,
+    describe: (v) => `EVERY EXPLOSION ADDS ${v} BALL${v === 1 ? '' : 'S'}`,
   },
   splitguard: {
     name: 'SPLIT GUARD',

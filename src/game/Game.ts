@@ -21,6 +21,7 @@ import type {
   Brick,
   Capsule,
   ChargePower,
+  ExplosionSource,
   GameState,
   HitSource,
   ModKind,
@@ -40,6 +41,12 @@ const OFFER_SALT = 0x9e3779b9;
 const SKIN = 0.01;
 /** Bounces resolved per ball per tick; leftover motion is dropped (only matters in tight corners). */
 const MAX_BOUNCES = 4;
+
+/** Each explosion's size before mods; everything else about them is the same (see `Game.explode`). */
+const EXPLOSIONS: Record<ExplosionSource, { radius: number; damage: number }> = {
+  charge: POWER.detonator,
+  brick: BRICK_TYPES.explosive,
+};
 
 type HitTarget = Brick | Target | WallSide | 'paddle' | 'barrier';
 
@@ -543,15 +550,60 @@ export class Game {
     const due = this.fuses.filter((f) => f.tick <= tick);
     if (due.length === 0) return;
     this.fuses = this.fuses.filter((f) => f.tick > tick);
-    for (const f of due) this.explode(f.x, f.y);
+    for (const f of due) this.explode('brick', [f]);
   }
 
-  /** Breakable bricks in reach take damage; explosives among them light their own fuses. */
-  private explode(x: number, y: number): void {
-    const { radius, damage } = BRICK_TYPES.explosive;
-    const reach = this.bricks.filter((br) => isBreakable(br) && distanceSq(br, x, y) <= radius * radius);
-    this.events.emit('explosion', { x, y, radius, bricks: reach.length });
-    for (const br of reach) this.damageBrick(br, 'explosion', clamp(x, br.x, br.x + br.w), clamp(y, br.y, br.y + br.h), damage);
+  /**
+   * One explosion, going off at every centre at once: each breakable brick within reach of any of
+   * them takes its damage once, struck from the nearest centre, and explosives among them light
+   * their own fuses. Steel is unaffected, bar the steel breaker mod. Reach grows with the blast
+   * radius mod; the cluster charge mod adds balls.
+   */
+  private explode(source: ExplosionSource, centres: readonly { x: number; y: number }[]): void {
+    const { damage } = EXPLOSIONS[source];
+    const radius = EXPLOSIONS[source].radius * (1 + this.modValue('blast'));
+    const steelChance = this.modValue('steelbreak');
+    const targets: { br: Brick; ix: number; iy: number }[] = [];
+    for (const br of this.bricks) {
+      if (!br.alive || (br.kind === 'steel' && steelChance === 0)) continue;
+      let best: { br: Brick; ix: number; iy: number } | null = null;
+      let bestD = radius * radius;
+      for (const c of centres) {
+        const ix = clamp(c.x, br.x, br.x + br.w);
+        const iy = clamp(c.y, br.y, br.y + br.h);
+        const d = (ix - c.x) ** 2 + (iy - c.y) ** 2;
+        if (d <= bestD) {
+          best = { br, ix, iy };
+          bestD = d;
+        }
+      }
+      // Steel breaker mod: steel in reach rolls once per explosion, however many centres reach it.
+      if (best && (br.kind !== 'steel' || this.rng.next() < steelChance)) targets.push(best);
+    }
+    this.events.emit('explosion', { source, centres: centres.map(({ x, y }) => ({ x, y })), radius, bricks: targets.length });
+    for (const { br, ix, iy } of targets) {
+      if (br.kind === 'steel') this.breakSteel(br, ix, iy);
+      else this.damageBrick(br, 'explosion', ix, iy, damage);
+    }
+    // Cluster charge mod: new balls split off the ball nearest the first centre.
+    const src = centres[0] && this.nearestBall(centres[0].x, centres[0].y);
+    for (let i = 0; src && i < this.modValue('cluster') && this.balls.length < POWER.maxBalls; i++) {
+      const [dirX, dirY] = ballDirection(src);
+      this.addTwin(src, dirX, dirY, (i % 2 === 0 ? 1 : -1) * POWER.splitAngle);
+    }
+  }
+
+  private nearestBall(x: number, y: number): Ball | null {
+    let best: Ball | null = null;
+    let bestD = Infinity;
+    for (const b of this.balls) {
+      const d = (b.x - x) ** 2 + (b.y - y) ** 2;
+      if (d < bestD) {
+        best = b;
+        bestD = d;
+      }
+    }
+    return best;
   }
 
   /** Regenerating bricks left alone long enough win back a hit. */
@@ -888,45 +940,12 @@ export class Game {
     this.charges[kind] = Math.min(POWER[kind].maxCharges, this.charges[kind] + n);
   }
 
-  /**
-   * The blast balls explode; breakable bricks in reach of any of them take damage once, struck
-   * from the nearest blast. The balls fly on.
-   */
+  /** The blast balls explode as one and fly on. */
   private detonate(): void {
     const balls = this.blastBalls();
     if (balls.length === 0) return;
     this.charges.detonator--;
-    const radius = POWER.detonator.radius * (1 + this.modValue('blast'));
-    const { damage } = POWER.detonator;
-    const steelChance = this.modValue('steelbreak');
-    const targets: { br: Brick; ix: number; iy: number }[] = [];
-    for (const br of this.bricks) {
-      if (!br.alive || (br.kind === 'steel' && steelChance === 0)) continue;
-      let best: { br: Brick; ix: number; iy: number } | null = null;
-      let bestD = radius * radius;
-      for (const b of balls) {
-        const ix = clamp(b.x, br.x, br.x + br.w);
-        const iy = clamp(b.y, br.y, br.y + br.h);
-        const d = (ix - b.x) ** 2 + (iy - b.y) ** 2;
-        if (d <= bestD) {
-          best = { br, ix, iy };
-          bestD = d;
-        }
-      }
-      // Steel breaker mod: steel in reach rolls once per press, however many balls reach it.
-      if (best && (br.kind !== 'steel' || this.rng.next() < steelChance)) targets.push(best);
-    }
-    this.events.emit('detonate', { balls: balls.length, radius, bricks: targets.length, charges: this.charges.detonator });
-    for (const { br, ix, iy } of targets) {
-      if (br.kind === 'steel') this.breakSteel(br, ix, iy);
-      else this.damageBrick(br, 'blast', ix, iy, damage);
-    }
-    // Cluster charge mod: new balls fly out of the first blast.
-    const src = balls[0];
-    for (let i = 0; src && i < this.modValue('cluster') && this.balls.length < POWER.maxBalls; i++) {
-      const [dirX, dirY] = ballDirection(src);
-      this.addTwin(src, dirX, dirY, (i % 2 === 0 ? 1 : -1) * POWER.splitAngle);
-    }
+    this.explode('charge', balls);
   }
 
   private fireLaser(): void {
@@ -1127,7 +1146,7 @@ export class Game {
     const multiplier = this.multiplier;
     const points = SCORE.normal * multiplier;
     this.score += points;
-    this.events.emit('brickDestroyed', { id: br.id, kind: br.kind, points, chain: 0, bonus: 0, multiplier, by: 'blast', x, y, ix, iy, vx: 0, vy: 0 });
+    this.events.emit('brickDestroyed', { id: br.id, kind: br.kind, points, chain: 0, bonus: 0, multiplier, by: 'explosion', x, y, ix, iy, vx: 0, vy: 0 });
     this.maybeDrop(x, y);
   }
 }
@@ -1143,11 +1162,6 @@ function ballDirection(b: Ball): [number, number] {
 
 function isBreakable(br: Brick): boolean {
   return br.alive && br.kind !== 'steel';
-}
-
-/** Squared distance from (x, y) to the nearest point of a brick. */
-function distanceSq(br: Brick, x: number, y: number): number {
-  return (clamp(x, br.x, br.x + br.w) - x) ** 2 + (clamp(y, br.y, br.y + br.h) - y) ** 2;
 }
 
 /** Points for breaking a brick, before the multiplier and chain bonus. */
