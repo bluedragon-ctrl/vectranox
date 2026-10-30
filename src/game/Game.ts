@@ -2,7 +2,7 @@ import { BALL, FIELD, PADDLE, RULES, SCORE, SIM } from '../config/game';
 import { DRAFT, MODS } from '../config/mods';
 import { PINBALL, POWER, POWER_LOOK, STAGE_EVENTS } from '../config/tuning';
 import { EventBus } from '../core/events';
-import { clamp } from '../core/math';
+import { clamp, lerp } from '../core/math';
 import { Rng } from '../core/rng';
 import { assembleRun } from '../levels/assemble';
 import type { StageDef } from '../levels/stages';
@@ -101,6 +101,9 @@ export class Game {
   private openingServe = false;
   /** Second wind mod uses spent this stage. */
   private secondWinds = 0;
+  /** Keyboard direction last tick, and seconds it has been held. */
+  private keyAxis = 0;
+  private keyHeld = 0;
   /** Reused by `paddleBox`. */
   private readonly box: Box = { minX: 0, minY: 0, maxX: 0, maxY: 0 };
 
@@ -295,6 +298,7 @@ export class Game {
     this.breakableLeft = this.bricks.filter(isBreakable).length;
     this.paddle.x = this.paddle.px = FIELD.width / 2;
     this.paddle.w = this.paddleWidth();
+    this.keyHeld = 0;
     this.stageEvents.reset();
     this.secondWinds = 0;
     this.events.emit('stageStart', { stage: index + 1, sector: stage.sector, number: stage.number, name: stage.name, bricks: this.breakableLeft });
@@ -426,7 +430,16 @@ export class Game {
     const target = this.paddleWidth() * scale;
     p.w += (target - p.w) * Math.min(1, POWER.widthRate * dt);
     if (Math.abs(target - p.w) < 0.01) p.w = target;
-    p.x = clamp(p.x + input.dx + input.axis * PADDLE.keySpeed * dt, p.w / 2, FIELD.width - p.w / 2);
+    p.x = clamp(p.x + input.dx + this.keyTravel(dt, input.axis), p.w / 2, FIELD.width - p.w / 2);
+  }
+
+  /** Keyboard travel this tick. Any change of direction restarts the ramp; letting go stops dead. */
+  private keyTravel(dt: number, axis: number): number {
+    if (axis !== this.keyAxis) this.keyHeld = 0;
+    this.keyAxis = axis;
+    const speed = lerp(PADDLE.keyStartSpeed, PADDLE.keySpeed, Math.min(1, this.keyHeld / PADDLE.keyRamp));
+    this.keyHeld += dt;
+    return axis * speed * dt;
   }
 
   private updateBalls(dt: number): void {

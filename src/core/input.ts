@@ -17,6 +17,11 @@ const ALT_KEY = 'KeyX';
 /** MouseEvent.button for the alt action. */
 const ALT_BUTTON = 2;
 
+/** Direction a key steers: -1, 1, or 0 for any other key. */
+function keyAxis(code: string): number {
+  return RIGHT_KEYS.includes(code) ? 1 : LEFT_KEYS.includes(code) ? -1 : 0;
+}
+
 /**
  * Collects mouse and keyboard input between ticks and hands it to the simulation as plain
  * per-tick data. Menu keys (start, pause) are handled in main.
@@ -36,6 +41,10 @@ export class Input {
   private alt = false;
   private mouseHeld = false;
   private held = new Set<string>();
+  /** Direction of the latest steering press. */
+  private lastAxis = 0;
+  /** Direction pressed since the last sample, so a tap between two ticks still counts. */
+  private tapAxis = 0;
 
   constructor(
     private lockTarget: HTMLElement,
@@ -62,8 +71,10 @@ export class Input {
       if (e.button === 0) this.mouseHeld = false;
     });
     window.addEventListener('keydown', (e) => {
-      if (e.code === LAUNCH_KEY || LEFT_KEYS.includes(e.code) || RIGHT_KEYS.includes(e.code)) e.preventDefault();
+      const axis = keyAxis(e.code);
+      if (e.code === LAUNCH_KEY || axis !== 0) e.preventDefault();
       this.held.add(e.code);
+      if (axis !== 0 && !e.repeat) this.lastAxis = this.tapAxis = axis;
       if (e.code === LAUNCH_KEY && !e.repeat) this.launch = true;
       if (e.code === ALT_KEY && !e.repeat) this.alt = true;
     });
@@ -90,18 +101,20 @@ export class Input {
   sample(paddleX: number): TickInput {
     const right = RIGHT_KEYS.some((k) => this.held.has(k)) ? 1 : 0;
     const left = LEFT_KEYS.some((k) => this.held.has(k)) ? 1 : 0;
+    // The latest press wins, so rolling from one key to the other doesn't stall the paddle.
+    const axis = this.tapAxis || (right && left ? this.lastAxis : right - left);
     let dx = this.dx;
     if (this.absolute && this.cursorMoved && this.cursorX !== null) dx = this.view.screenToWorldX(this.cursorX) - paddleX;
     const fire = this.held.has(LAUNCH_KEY) || this.mouseHeld;
-    const input: TickInput = { dx, axis: right - left, launch: this.launch, fire, alt: this.alt };
-    this.dx = 0;
+    const input: TickInput = { dx, axis, launch: this.launch, fire, alt: this.alt };
+    this.dx = this.tapAxis = 0;
     this.cursorMoved = this.launch = this.alt = false;
     return input;
   }
 
   /** Drops anything collected while the game was not running. */
   reset(): void {
-    this.dx = 0;
+    this.dx = this.tapAxis = 0;
     this.cursorMoved = this.launch = this.alt = false;
   }
 }

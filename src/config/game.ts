@@ -15,7 +15,10 @@ export const PADDLE = {
   width: 52,
   height: 8,
   y: 28,
-  keySpeed: 380,
+  // Held keys ramp from keyStartSpeed to keySpeed over keyRamp seconds: a tap nudges, a hold dashes.
+  keyStartSpeed: 80,
+  keySpeed: 400,
+  keyRamp: 0.12,
 } as const;
 
 export const BALL = {
