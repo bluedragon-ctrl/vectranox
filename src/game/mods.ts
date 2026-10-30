@@ -1,4 +1,5 @@
 import { MODS, RARITY_WEIGHTS, type Boosts, type Rarity, type RarityWeights } from '../config/mods';
+import { RUN } from '../config/run';
 import type { Rng } from '../core/rng';
 import type { ModKind } from './types';
 
@@ -15,9 +16,9 @@ export function describeMod(kind: ModKind, held: Readonly<Record<ModKind, number
   return MODS[kind].describe(MODS[kind].perStack * stacks, boosts);
 }
 
-/** Rarity weights of a sector's picks. */
-export function sectorWeights(sector: number): RarityWeights {
-  return RARITY_WEIGHTS[Math.min(sector, RARITY_WEIGHTS.length) - 1] ?? { common: 1, rare: 0, epic: 0 };
+/** Rarity weights of the picks before stage `depth` of the run (0-based). */
+export function depthWeights(depth: number): RarityWeights {
+  return RARITY_WEIGHTS[Math.min(Math.floor(depth / RUN.bandRooms), RARITY_WEIGHTS.length - 1)] ?? { common: 1, rare: 0, epic: 0 };
 }
 
 /**

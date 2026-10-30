@@ -12,7 +12,7 @@ import { sweepBox, sweepCircle, type SweepHit } from './collision';
 import type { GameEvents, WallSide } from './events';
 import { buildFormations, type Formation } from './formation';
 import { parseLayout } from './layout';
-import { MOD_KINDS, rollMods, sectorWeights } from './mods';
+import { depthWeights, MOD_KINDS, rollMods } from './mods';
 import { aim, closer, normalizeVelocity, pushOut, sweepWalls } from './physics';
 import { CHARGE_POWERS, GOOD_POWERS, OPPOSITE, POWER_KINDS, rollPower, TIMED_POWERS } from './powers';
 import { StageEventTracker } from './stageEvents';
@@ -323,8 +323,7 @@ export class Game {
 
   /** As `tryStage`, for any template. The room editor's Play button comes through here. */
   tryTemplate(template: StageTemplate): void {
-    const { sector, number } = this.stage;
-    this.stages[this.stageIndex] = buildStage(template, this.stageIndex, sector, number, false);
+    this.stages[this.stageIndex] = buildStage(template, this.stageIndex, false);
     this.loadStage(this.stageIndex);
   }
 
@@ -379,9 +378,7 @@ export class Game {
     this.stageEvents.reset();
     this.secondWinds = 0;
     this.events.emit('stageStart', {
-      stage: index + 1,
-      sector: stage.sector,
-      number: stage.number,
+      stage: stage.number,
       name: stage.name,
       room: stage.room,
       bricks: this.breakableLeft,
@@ -416,11 +413,10 @@ export class Game {
     this.loadStage(this.stageIndex + 1);
   }
 
-  /** Mods on offer for the next stage's sector; an elite room just cleared pays with better ones. */
+  /** Mods on offer for the next stage's depth; an elite room just cleared pays with better ones. */
   private rollOffers(count: number): ModKind[] {
-    const next = this.stages[this.stageIndex + 1] ?? this.stage;
     const { room } = this.stage;
-    const weights = room === 'boss' ? BOSS_WEIGHTS : room === 'elite' ? ELITE_WEIGHTS : sectorWeights(next.sector);
+    const weights = room === 'boss' ? BOSS_WEIGHTS : room === 'elite' ? ELITE_WEIGHTS : depthWeights(this.stageIndex + 1);
     return rollMods(this.offerRng, this.mods, weights, count);
   }
 

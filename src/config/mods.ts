@@ -10,8 +10,8 @@ export type Rarity = 'common' | 'rare' | 'epic';
 export type RarityWeights = Readonly<Record<Rarity, number>>;
 
 /**
- * Chance of each rarity per card slot, by sector (relative weights; the last row is used past
- * the end). Later sectors lean towards rare and epic cards.
+ * Chance of each rarity per card slot, for each `RUN.bandRooms` rooms of the run (relative weights;
+ * the last row is used past the end). Deeper rooms lean towards rare and epic cards.
  */
 export const RARITY_WEIGHTS: readonly RarityWeights[] = [
   { common: 70, rare: 25, epic: 5 },
@@ -19,10 +19,10 @@ export const RARITY_WEIGHTS: readonly RarityWeights[] = [
   { common: 45, rare: 37, epic: 18 },
 ];
 
-/** The pick after an elite room, in any sector. */
+/** The pick after an elite room, at any depth. */
 export const ELITE_WEIGHTS: RarityWeights = { common: 0, rare: 70, epic: 30 };
 
-/** The pick after a boss, in any sector. */
+/** The pick after a boss, at any depth. */
 export const BOSS_WEIGHTS: RarityWeights = { common: 0, rare: 30, epic: 70 };
 
 /** Card tag and colour for each rarity. */

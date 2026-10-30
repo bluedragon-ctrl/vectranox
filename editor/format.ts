@@ -3,6 +3,7 @@ import type { BossDef, FormationDef, StageTemplate } from '../src/levels/stages'
 /** A room as it goes in its file: one row per line, a formation or boss phase per line, defaults left out. */
 export function formatRoom(room: StageTemplate): string {
   const fields = [`  "name": ${JSON.stringify(room.name)}`, `  "tier": ${room.tier}`];
+  if (room.threat && room.threat !== room.tier) fields.push(`  "threat": ${room.threat}`);
   if (room.room && room.room !== 'standard') fields.push(`  "room": ${JSON.stringify(room.room)}`);
   if (room.opener) fields.push('  "opener": true');
   fields.push(list('layout', room.layout.map((row) => JSON.stringify(row))));

@@ -442,6 +442,8 @@ function renderForm(): void {
   };
   const tier = make('select', {}, ...options([1, 2, 3], room.tier));
   tier.onchange = () => current?.room && change({ ...current.room, tier: Number(tier.value) as StageTemplate['tier'] });
+  const threat = make('select', {}, ...options([1, 2, 3], room.threat ?? room.tier));
+  threat.onchange = () => current?.room && change({ ...current.room, threat: Number(threat.value) as StageTemplate['tier'] });
   const kind = make('select', {}, ...options(KINDS, room.room ?? 'standard'));
   kind.onchange = () => {
     if (!current?.room) return;
@@ -490,6 +492,7 @@ function renderForm(): void {
   formPanel.replaceChildren(
     field('Name', name),
     field('Tier', tier),
+    field('Threat', threat),
     field('Kind', kind),
     make('label', { className: 'check' }, opener, 'Always opens the run'),
     make(
