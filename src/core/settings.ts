@@ -32,7 +32,7 @@ export function loadVisualSettings(): VisualSettings {
 }
 
 export function saveVisualSettings(settings: VisualSettings): void {
-  save(KEY, settings);
+  writeJson(KEY, settings);
 }
 
 export function loadAudioSettings(): AudioSettings {
@@ -50,23 +50,27 @@ export function loadAudioSettings(): AudioSettings {
 }
 
 export function saveAudioSettings(settings: AudioSettings): void {
-  save(AUDIO_KEY, settings);
+  writeJson(AUDIO_KEY, settings);
 }
 
 function load<T>(key: string): Partial<Record<keyof T, unknown>> | null {
+  const parsed = readJson(key);
+  return typeof parsed === 'object' && parsed !== null ? (parsed as Partial<Record<keyof T, unknown>>) : null;
+}
+
+export function readJson(key: string): unknown {
   try {
     const raw = localStorage.getItem(key);
-    const parsed: unknown = raw ? JSON.parse(raw) : null;
-    return typeof parsed === 'object' && parsed !== null ? (parsed as Partial<Record<keyof T, unknown>>) : null;
+    return raw ? (JSON.parse(raw) as unknown) : null;
   } catch {
     return null;
   }
 }
 
-function save(key: string, value: unknown): void {
+export function writeJson(key: string, value: unknown): void {
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch {
-    // Storage blocked (private mode, file://): settings just don't persist.
+    // Storage blocked (private mode, file://): it just doesn't persist.
   }
 }
