@@ -5,6 +5,7 @@ import { Input, type ControlMode } from './core/input';
 import { PALETTE } from './config/game';
 import { BOSS_ROOM, ELITE, ROOM_LABEL } from './config/run';
 import { startLoop } from './core/loop';
+import { addScore, formatScore, loadLastName, loadScores, NAME_LENGTH, rankOf, type ScoreEntry } from './core/scores';
 import { loadAudioSettings, loadVisualSettings, saveAudioSettings, saveVisualSettings } from './core/settings';
 import { Game } from './game/Game';
 import type { StageTemplate } from './levels/stages';
@@ -15,6 +16,7 @@ import { ChainPopups } from './ui/ChainPopups';
 import { EventBanner } from './ui/EventBanner';
 import { EventConsole, type UiEvent } from './ui/EventConsole';
 import { ModHud } from './ui/ModHud';
+import { NameEntry } from './ui/NameEntry';
 import { Overlay, type OverlayContent } from './ui/Overlay';
 import { PowerHud } from './ui/PowerHud';
 import { RunScreen, type RunAction } from './ui/RunScreen';
@@ -23,8 +25,9 @@ import { SettingsPanel } from './ui/SettingsPanel';
 /**
  * Top-level screen state. The simulation has its own finer state (serve, play, clear, ...).
  * `between`: the pick between stages is up, with the pointer free to click it.
+ * `naming`: the run made the high scores and the name field is up; `ended` follows.
  */
-type UiState = 'title' | 'playing' | 'paused' | 'between' | 'ended';
+type UiState = 'title' | 'playing' | 'paused' | 'between' | 'naming' | 'ended';
 
 /** Seconds the final banner stays up in-game before the end screen accepts input. */
 const END_DELAY = 1.5;
@@ -41,28 +44,31 @@ function setText(node: HTMLElement, text: string): void {
   if (node.textContent !== text) node.textContent = text;
 }
 
-// Placeholder table until the score service lands (phase 6).
-const PLACEHOLDER_SCORES: [string, number][] = [
-  ['NOX   ', 50000],
-  ['VECTRA', 40000],
-  ['GRID 8', 30000],
-  ['NEON  ', 20000],
-  ['R4DIUS', 10000],
-];
-
-function renderScores(list: HTMLElement): void {
+/** Fills the table; `highlight` marks the row of the run that just ended. */
+function renderScores(list: HTMLElement, scores: readonly ScoreEntry[], highlight = -1): void {
+  if (scores.length === 0) {
+    const li = document.createElement('li');
+    li.className = 'empty';
+    li.textContent = 'NO SCORES YET';
+    list.replaceChildren(li);
+    return;
+  }
   list.replaceChildren(
-    ...PLACEHOLDER_SCORES.map(([player, pts], i) => {
+    ...scores.map((entry, i) => {
       const name = document.createElement('span');
       name.className = 'name';
-      name.textContent = player;
+      name.textContent = entry.name.padEnd(NAME_LENGTH);
       const rank = document.createElement('span');
-      rank.append(`${i + 1}. `, name);
+      rank.append(`${String(i + 1).padStart(2)}. `, name);
+      const stage = document.createElement('span');
+      stage.className = entry.won ? 'stage won' : 'stage';
+      stage.textContent = entry.won ? 'WIN' : entry.stage;
       const points = document.createElement('span');
       points.className = 'pts';
-      points.textContent = formatScore(pts);
+      points.textContent = formatScore(entry.score);
       const li = document.createElement('li');
-      li.append(rank, points);
+      li.classList.toggle('new', i === highlight);
+      li.append(rank, stage, points);
       return li;
     }),
   );
@@ -105,8 +111,13 @@ const input = new Input(canvas, renderer);
 const chainPopups = new ChainPopups(el('popups'), (x, y) => renderer.worldToClient(x, y));
 const runScreen = new RunScreen(el('run-screen'), (action) => runAction(action, 'mouse'));
 const bossBar = new BossBar(el('boss-bar'), (x, y) => renderer.worldToClient(x, y));
+const scoreList = el('score-list');
+const nameEntry = new NameEntry(el<HTMLFormElement>('name-entry'), el<HTMLInputElement>('name-field'), saveScore);
 
 let ui: UiState = 'title';
+let scores = loadScores();
+/** The place the run that just ended took on the table, or -1. */
+let endRank = -1;
 /** Waiting for the browser to grant pointer lock before play starts in mouse mode. */
 let pendingMouse = false;
 /** Waiting for pointer lock after a click during keyboard play; play goes on meanwhile. */
@@ -138,7 +149,7 @@ function releasePointer(): void {
 
 /** Start or resume. Mouse mode needs pointer lock first; play begins once the browser grants it. */
 function requestStart(mode: ControlMode): void {
-  if (ui === 'playing') return;
+  if (ui === 'playing' || ui === 'naming') return;
   if (mode === 'keyboard') {
     enterPlay('keyboard');
     return;
@@ -151,7 +162,11 @@ function requestStart(mode: ControlMode): void {
 
 function enterPlay(mode: ControlMode): void {
   const resumed = ui === 'paused' || ui === 'between';
-  if (ui === 'ended') game = newGame();
+  if (ui === 'ended') {
+    game = newGame();
+    endRank = -1;
+    renderScores(scoreList, scores);
+  }
   input.mode = mode;
   input.reset();
   pendingSwitch = false;
@@ -193,6 +208,27 @@ function runKey(code: string): boolean {
   if (index > game.offers.length) return false;
   runAction(index < game.offers.length ? { type: 'pick', index } : { type: 'lives' }, 'keyboard');
   return true;
+}
+
+/** The run is over: asks for a name if it made the table. A single room from the editor never counts. */
+function endRun(): void {
+  releasePointer();
+  endRank = playtest ? -1 : rankOf(scores, game.score);
+  if (endRank < 0) {
+    ui = 'ended';
+    return;
+  }
+  ui = 'naming';
+  nameEntry.show(loadLastName());
+}
+
+function saveScore(name: string): void {
+  if (ui !== 'naming') return;
+  const stage = `${game.stage.sector}-${game.stage.number}`;
+  scores = addScore(scores, { name, score: game.score, stage, won: game.state === 'complete' }, endRank);
+  renderScores(scoreList, scores, endRank);
+  nameEntry.hide();
+  ui = 'ended';
 }
 
 function pause(reason: string): void {
@@ -246,6 +282,13 @@ window.addEventListener('blur', () => pause('focus lost'));
 window.addEventListener(
   'keydown',
   (e) => {
+    if (ui === 'naming') {
+      // Keys go to the name field alone; gameplay input would swallow Space and the steering keys.
+      e.stopImmediatePropagation();
+      if (e.repeat || !nameEntry.ready) e.preventDefault();
+      else nameEntry.focus();
+      return;
+    }
     if (e.repeat) return;
     if (e.code === 'KeyM') {
       audioPanel.toggleMute();
@@ -279,12 +322,10 @@ function overlayContent(): OverlayContent | null {
       return { title: 'READY', sub: START_HINT, menu: true };
     case 'paused':
       return { title: 'PAUSED', sub: `${START_HINT}\n\n${CONTROLS_HINT}`, menu: true };
+    case 'naming':
+      return { title: endTitle(), sub: `SCORE ${formatScore(game.score)}\nNEW HIGH SCORE  #${endRank + 1}`, menu: true };
     case 'ended':
-      return {
-        title: game.state === 'complete' ? 'RUN COMPLETE' : 'GAME OVER',
-        sub: `SCORE ${formatScore(game.score)}\n\n${START_HINT}`,
-        menu: true,
-      };
+      return { title: endTitle(), sub: `SCORE ${formatScore(game.score)}\n\n${START_HINT}`, menu: true };
     case 'between':
     case 'playing':
       switch (game.state) {
@@ -310,8 +351,8 @@ function overlayContent(): OverlayContent | null {
   }
 }
 
-function formatScore(score: number): string {
-  return String(score).padStart(6, '0');
+function endTitle(): string {
+  return game.state === 'complete' ? 'RUN COMPLETE' : 'GAME OVER';
 }
 
 /** The stage's name, after its room kind unless it is a standard room. */
@@ -327,7 +368,7 @@ function formatChain(g: Game): string {
   return chain >= 2 ? `×${chain} +${g.chainBonus(chain) * g.multiplier}` : '—';
 }
 
-renderScores(el('score-list'));
+renderScores(scoreList, scores);
 
 const hudScore = el('hud-score');
 const hudLives = el('hud-lives');
@@ -344,8 +385,7 @@ startLoop({
     if (ui !== 'playing') return;
     game.update(dt, input.sample(game.paddle.x, game.stun > 0));
     if ((game.state === 'over' || game.state === 'complete') && game.stateTime >= END_DELAY) {
-      ui = 'ended';
-      releasePointer();
+      endRun();
     } else if (game.state === 'draft') {
       ui = 'between';
       audio.setMuffled(true);
@@ -363,7 +403,7 @@ startLoop({
     const content = overlayContent();
     overlay.show(content);
     runScreen.update(ui === 'between' ? game : null);
-    bossBar.update(ui === 'title' || ui === 'ended' ? null : game);
+    bossBar.update(ui === 'title' || ui === 'naming' || ui === 'ended' ? null : game);
     // Menus and stage banners take over the field; a stage event banner never shares it.
     if (content || ui === 'between') banner.hide();
     else banner.update(game.time);

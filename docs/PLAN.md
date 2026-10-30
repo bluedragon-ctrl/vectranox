@@ -16,7 +16,7 @@ Breakout-style roguelike with 80s synthwave vector graphics, running in desktop 
 | Layout | Canvas fills the window. Portrait (3:4) playfield on the **right**; left is a CSS "terminal" panel: run info, powers, mods, live event console. Overlays (title, pause, upgrade pick, name entry) are CSS; the title, pause and end screens carry the high scores and options. |
 | Game structure | Roguelike runs (see below). Marching formations reaching the line above the paddle cost a life. |
 | Audio | Generated SFX via WebAudio synth (oscillators and filtered noise, panned by x; brick hits climb a pentatonic scale until the paddle touches a ball). Music: user-provided `.ogg` / `.mp3` tracks dropped into `src/assets/music/`, picked up at build time, played as a shuffled playlist with crossfade. Master / music / SFX volume and mute (**M**) on the title, pause and end screens; the music muffles while paused. Audio starts on the first click or key press (browser autoplay rules). |
-| High scores | Name: 6 chars `[A-Z0-9 ]`. Phase 1: localStorage. Later: Cloudflare Worker + **D1** (not KV — KV is eventually consistent and can't sort). |
+| High scores | Name: 6 chars `[A-Z0-9 ]`. Now: top 10 in localStorage (`src/core/scores.ts`), each with where the run ended or WIN; a run that makes the table asks for a name, prefilled with the last one. Rooms played from the editor don't count. Later: Cloudflare Worker + **D1** (not KV — KV is eventually consistent and can't sort). |
 | Hosting | GitHub Pages via Actions now; same static build on a VPS later. Vite `base: './'` so paths work on both. |
 
 ## Architecture
@@ -85,7 +85,7 @@ worker/              (later) Cloudflare Worker + D1 schema
 | 5a | Run progression | Run → sectors → stages, seeded procedural assembly from templates scaled by depth, pick 1 of 3 mods or +2 lives between stages (rarity tiers). **Done:** 3 × 4 stages, 14 templates, 24 mods. Currency and shop dropped in favour of the lives card. |
 | 5b | Room types | Stage variety: moving formations (sweep, invader march, rotate, sine) and the line where they cost a life, new brick types (explosive, regenerating; multi-hit and indestructible already exist), and distinct room kinds a sector mixes (standard, formation, elite). **Done:** 16 standard, 8 formation and 6 elite templates. |
 | 5c | Boss rooms | A boss at the end of each sector: built from bricks and formations, with a core and HP bar, turrets, spawners and phantoms, phases as it takes damage, and a boss cache on kill. **Done:** 3 bosses, 4 boss bricks, room editor and validator support. |
-| 6 | Scores & settings | Local high-score table, 6-char name entry, settings, quality presets. |
+| 6 | Scores & settings | Local high-score table, 6-char name entry, settings, quality presets. **Done so far:** score table, name entry, settings. Quality presets remain. |
 | 7 | Polish | Parallax background, music-reactive visuals, attract mode. |
 | 8 | Online | Worker + D1 leaderboard, rate limiting, optional Turnstile / replay validation; VPS move. |
 

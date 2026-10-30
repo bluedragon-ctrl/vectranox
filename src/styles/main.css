@@ -334,6 +334,52 @@ body {
   display: grid;
 }
 
+/* The field on the end screen for a run that made the table. */
+#name-entry {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 12px;
+  pointer-events: auto;
+}
+
+#name-entry.hidden {
+  display: none;
+}
+
+#name-entry label {
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: 0.2em;
+  color: var(--purple);
+}
+
+#name-entry input {
+  width: 10ch;
+  padding: 4px 8px;
+  font-family: var(--mono);
+  font-size: 22px;
+  letter-spacing: 0.1em;
+  color: var(--yellow);
+  background: var(--bg);
+  border: 1px solid var(--magenta);
+  outline: none;
+}
+
+#name-entry button {
+  padding: 6px 12px;
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: 0.2em;
+  color: var(--cyan);
+  background: transparent;
+  border: 1px solid var(--cyan);
+  cursor: pointer;
+}
+
 #menu .options {
   display: flex;
   flex-direction: column;
@@ -454,6 +500,25 @@ body {
 
 #score-list .pts {
   color: var(--yellow);
+}
+
+#score-list .stage {
+  margin-left: auto;
+  margin-right: 16px;
+  color: var(--text-dim);
+}
+
+#score-list .stage.won {
+  color: var(--mint);
+}
+
+#score-list .empty {
+  color: var(--text-dim);
+}
+
+/* The run that just ended. */
+#score-list .new {
+  background: rgba(255, 42, 157, 0.22);
 }
 
 #video-toggles,
