@@ -12,6 +12,7 @@ const SYSTEM_EVENTS: ReadonlySet<string> = new Set<LogEvent>([
   'stageStart',
   'stageClear',
   'lifeLost',
+  'formationBreach',
   'gameOver',
   'runComplete',
   'draftOpen',

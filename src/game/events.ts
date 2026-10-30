@@ -1,3 +1,4 @@
+import type { RoomKind } from '../config/run';
 import type { BrickKind, HitSource, ModKind, PowerKind, StageEventKind, TimedPower } from './types';
 
 export type WallSide = 'left' | 'right' | 'top';
@@ -6,7 +7,7 @@ export type WallSide = 'left' | 'right' | 'top';
 export type GameEvents = {
   runStart: { seed: number };
   /** `stage` counts through the run (1-based); `sector` and `number` place it in its sector. */
-  stageStart: { stage: number; sector: number; number: number; name: string; bricks: number };
+  stageStart: { stage: number; sector: number; number: number; name: string; room: RoomKind; bricks: number };
   ballSpawn: { id: number; x: number; y: number };
   ballLaunch: { id: number; angle: number };
   wallHit: { id: number; side: WallSide; x: number; y: number };
@@ -33,6 +34,14 @@ export type GameEvents = {
     vx: number;
     vy: number;
   };
+  /** A regenerating brick won back a hit; `hp` is what it has now. */
+  brickHeal: { id: number; hp: number };
+  /** An explosive brick's fuse ran out at (x, y); `bricks` breakable bricks were in reach. */
+  explosion: { x: number; y: number; radius: number; bricks: number };
+  /** A marching formation hopped (`dropped`: towards the line). */
+  formationStep: { dropped: boolean };
+  /** A marching formation reached the line and costs a life; it goes back to its starting height. */
+  formationBreach: { lives: number };
   ballCaught: { id: number; offset: number };
   /**
    * The paddle ended a ball's chain of `count` bricks, which earned `total` bonus points (multiplier
@@ -61,7 +70,8 @@ export type GameEvents = {
   /** The last ball was lost but the second wind mod served a new one; `left` uses remain this stage. */
   secondWind: { left: number };
   lifeLost: { lives: number };
-  stageClear: { stage: number; score: number };
+  /** `bonus` is what an elite room paid on top; `score` includes it. */
+  stageClear: { stage: number; score: number; bonus: number };
   /** The pick between stages opened with these mod offers. */
   draftOpen: { stage: number; offers: ModKind[] };
   modPick: { kind: ModKind; stacks: number };

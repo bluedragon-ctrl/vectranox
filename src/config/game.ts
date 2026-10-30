@@ -56,6 +56,7 @@ export const SCORE = {
   hit: 10,
   normal: 50,
   toughPerHp: 50,
+  explosive: 75,
   capsule: 100,
   // Chain bonus: every brick a ball destroys after the first, before it touches the paddle again,
   // earns chainStep more than the one before, up to chainMax per brick.

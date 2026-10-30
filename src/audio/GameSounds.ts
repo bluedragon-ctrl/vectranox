@@ -94,6 +94,25 @@ export class GameSounds {
           s.tone({ freq: ping * 1.5, at: 0.02, dur: 0.2, gain: 0.05, pan: p });
         });
       }),
+      ev.on('explosion', ({ x }) => {
+        const p = pan(x);
+        // A smaller cousin of the detonator's boom.
+        this.play('explosion', (s) => {
+          s.noise({ filter: 'lowpass', freq: 1800, to: 180, dur: 0.28, gain: 0.32, pan: p });
+          s.tone({ freq: 110, to: 42, dur: 0.24, gain: 0.3, pan: p });
+        });
+      }),
+      ev.on('brickHeal', () => {
+        this.play('heal', (s) => s.tone({ type: 'triangle', freq: 520, to: 780, dur: 0.12, gain: 0.05 }));
+      }),
+      ev.on('formationStep', ({ dropped }) => {
+        // The march's beat: a low thud, deeper when the formation comes down.
+        const freq = dropped ? 62 : 82;
+        this.play('march', (s) => s.tone({ type: 'triangle', freq, to: freq * 0.8, dur: 0.1, gain: dropped ? 0.2 : 0.12 }));
+      }),
+      ev.on('formationBreach', () => {
+        this.play('breach', (s) => s.notes([660, 494, 660, 494], 0.1, { type: 'square', cutoff: 2000, dur: 0.09, gain: 0.08 }));
+      }),
       ev.on('barrierHit', ({ x }) => {
         this.play('barrier', (s) => {
           s.tone({ freq: 660, to: 990, dur: 0.16, gain: 0.16, pan: pan(x) });

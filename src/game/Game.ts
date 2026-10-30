@@ -1,16 +1,18 @@
 import { BALL, FIELD, PADDLE, RULES, SCORE, SIM } from '../config/game';
-import { DRAFT, MODS } from '../config/mods';
-import { PINBALL, POWER, POWER_LOOK, STAGE_EVENTS } from '../config/tuning';
+import { DRAFT, ELITE_WEIGHTS, MODS } from '../config/mods';
+import { ELITE } from '../config/run';
+import { BRICK_TYPES, FORMATION, PINBALL, POWER, POWER_LOOK, STAGE_EVENTS } from '../config/tuning';
 import { EventBus } from '../core/events';
 import { clamp, lerp } from '../core/math';
 import { Rng } from '../core/rng';
-import { assembleRun } from '../levels/assemble';
-import type { StageDef } from '../levels/stages';
+import { assembleRun, buildStage } from '../levels/assemble';
+import { TEMPLATES, type StageDef } from '../levels/stages';
 import { sweepBox, sweepCircle, type SweepHit } from './collision';
 import type { GameEvents, WallSide } from './events';
+import { buildFormations, type Formation } from './formation';
 import { parseLayout } from './layout';
-import { MOD_KINDS, rollMods } from './mods';
-import { aim, closer, normalizeVelocity, sweepWalls } from './physics';
+import { MOD_KINDS, rollMods, sectorWeights } from './mods';
+import { aim, closer, normalizeVelocity, pushOut, sweepWalls } from './physics';
 import { CHARGE_POWERS, GOOD_POWERS, OPPOSITE, POWER_KINDS, rollPower, TIMED_POWERS } from './powers';
 import { StageEventTracker } from './stageEvents';
 import type {
@@ -48,6 +50,14 @@ interface Box {
   maxY: number;
 }
 
+/** A broken explosive brick waiting to go off. */
+interface Fuse {
+  x: number;
+  y: number;
+  /** Tick it goes off. */
+  tick: number;
+}
+
 /**
  * Pure simulation. Must not touch three.js, the DOM or Math.random.
  * Advanced by `update` at a fixed rate; everything observable goes out through `events`.
@@ -67,8 +77,10 @@ export class Game {
   portals: Portal[] = [];
   capsules: Capsule[] = [];
   bolts: Bolt[] = [];
+  /** The moving groups of bricks in this stage; any other brick stands still. */
+  formations: Formation[] = [];
   /** The run's stages, assembled from the seed. */
-  readonly stages: readonly StageDef[];
+  readonly stages: StageDef[];
   /** Stacks held of each mod; mods last the whole run. */
   readonly mods = Object.fromEntries(MOD_KINDS.map((k) => [k, 0])) as Record<ModKind, number>;
   /** The pick's mod offers, while drafting. */
@@ -86,6 +98,8 @@ export class Game {
   tick = 0;
   /** Position in `PINBALL.multipliers`; completing the target bank moves it up, losing a life resets it. */
   multiplierStep = 0;
+  /** The serve being waited on follows a formation reaching the line. */
+  breached = false;
 
   private rng: Rng;
   /** Mod offers, so in-stage play doesn't shift them. */
@@ -101,6 +115,7 @@ export class Game {
   private openingServe = false;
   /** Second wind mod uses spent this stage. */
   private secondWinds = 0;
+  private fuses: Fuse[] = [];
   /** Keyboard direction last tick, and seconds it has been held. */
   private keyAxis = 0;
   private keyHeld = 0;
@@ -138,6 +153,14 @@ export class Game {
     return Math.round(chainBonus(chain) * (1 + this.modValue('chainlink')));
   }
 
+  /** How close marching formations are to the line, 0..1; null when this stage has no line. */
+  get linePressure(): number | null {
+    const marching = this.formations.filter((f) => f.descends);
+    if (marching.length === 0) return null;
+    const gap = Math.min(...marching.map((f) => f.lowest)) - FORMATION.line;
+    return clamp(1 - gap / FORMATION.warning, 0, 1);
+  }
+
   start(): void {
     this.events.emit('runStart', { seed: this.seed });
     this.loadStage(0);
@@ -153,20 +176,28 @@ export class Game {
     }
     for (const c of this.capsules) c.py = c.y;
     for (const bolt of this.bolts) bolt.py = bolt.y;
+    for (const br of this.bricks) {
+      br.px = br.x;
+      br.py = br.y;
+    }
 
     switch (this.state) {
       case 'serve':
         this.movePaddle(dt, input);
         this.holdBalls();
+        for (const f of this.formations) f.settle(dt);
         if (input.launch) this.launch();
         break;
       case 'play':
         this.movePaddle(dt, input);
         this.tickPowers(dt);
         this.handleButtons(dt, input);
+        this.updateFormations(dt);
         this.updateBalls(dt);
         this.updateBolts(dt);
         this.updateCapsules(dt);
+        this.burnFuses(this.tick);
+        this.healBricks();
         this.resolveStage();
         if (this.state === 'play') this.checkStageEvents(dt);
         break;
@@ -256,6 +287,18 @@ export class Game {
     this.mods[kind] = Math.min(MODS[kind].maxStacks, this.mods[kind] + 1);
   }
 
+  /**
+   * Swaps the current stage for the template of that name and restarts it. Public so the dev
+   * console can try rooms (`vnx.game.tryStage('PINWHEEL')`).
+   */
+  tryStage(name: string): void {
+    const template = TEMPLATES.find((t) => t.name === name);
+    if (!template) throw new Error(`No stage template '${name}'`);
+    const { sector, number } = this.stage;
+    this.stages[this.stageIndex] = buildStage(template, this.stageIndex, sector, number, false);
+    this.loadStage(this.stageIndex);
+  }
+
   /*
    * Between stages. The UI calls these with the player's choice; each returns whether it was
    * allowed. (Recorded with their tick, they replay like the per-tick input.)
@@ -295,13 +338,22 @@ export class Game {
     this.stageIndex = index;
     const stage = this.stage;
     ({ bricks: this.bricks, targets: this.targets, portals: this.portals } = parseLayout(stage.layout, () => this.nextId++));
+    this.formations = buildFormations(stage.formations, this.bricks, stage.formationPace);
     this.breakableLeft = this.bricks.filter(isBreakable).length;
+    this.breached = false;
     this.paddle.x = this.paddle.px = FIELD.width / 2;
     this.paddle.w = this.paddleWidth();
     this.keyHeld = 0;
     this.stageEvents.reset();
     this.secondWinds = 0;
-    this.events.emit('stageStart', { stage: index + 1, sector: stage.sector, number: stage.number, name: stage.name, bricks: this.breakableLeft });
+    this.events.emit('stageStart', {
+      stage: index + 1,
+      sector: stage.sector,
+      number: stage.number,
+      name: stage.name,
+      room: stage.room,
+      bricks: this.breakableLeft,
+    });
     this.serve();
     this.openingServe = true;
     // Stage-start mods, after the serve has cleared the powers.
@@ -332,10 +384,11 @@ export class Game {
     this.loadStage(this.stageIndex + 1);
   }
 
-  /** Mods on offer for the next stage's sector. */
+  /** Mods on offer for the next stage's sector; an elite room just cleared pays with better ones. */
   private rollOffers(count: number): ModKind[] {
     const next = this.stages[this.stageIndex + 1] ?? this.stage;
-    return rollMods(this.offerRng, this.mods, next.sector, count);
+    const weights = this.stage.room === 'elite' ? ELITE_WEIGHTS : sectorWeights(next.sector);
+    return rollMods(this.offerRng, this.mods, weights, count);
   }
 
   /** A mod's total effect at the stacks held: its `perStack` times the stacks. */
@@ -353,9 +406,11 @@ export class Game {
    */
   private serve(keepPowers = false): void {
     this.balls = [];
+    this.fuses = [];
     if (!keepPowers) this.clearPowers();
     const x = this.paddle.x;
     const y = this.restY(BALL.radius);
+    const speed = BALL.baseSpeed + this.stageIndex * BALL.stageSpeedStep + (this.stage.room === 'elite' ? ELITE.speedBonus : 0);
     const ball: Ball = {
       id: this.nextId++,
       x,
@@ -365,7 +420,7 @@ export class Game {
       vx: 0,
       vy: 0,
       r: BALL.radius,
-      speed: (BALL.baseSpeed + this.stageIndex * BALL.stageSpeedStep) * (1 - this.modValue('dampener')),
+      speed: speed * (1 - this.modValue('dampener')),
       stuck: null,
       stuckTime: 0,
       chain: 0,
@@ -396,6 +451,7 @@ export class Game {
     if (this.mods.splitter > 0) this.splitBalls();
     if (this.openingServe && this.mods.multistart > 0) this.splitBalls();
     this.openingServe = false;
+    this.breached = false;
     this.setState('play');
     const net = STAGE_EVENTS.kinds.safetyNet;
     if (this.lives <= net.lives && this.breakableLeft <= net.bricksLeft) this.tryStageEvent('safetyNet');
@@ -449,15 +505,89 @@ export class Game {
     }
   }
 
+  private updateFormations(dt: number): void {
+    if (this.formations.length === 0) return;
+    for (const f of this.formations) {
+      if (!f.update(dt)) continue;
+      this.events.emit('formationStep', { dropped: f.dropping });
+    }
+    for (const b of this.balls) {
+      if (b.stuck !== null) continue;
+      for (const f of this.formations) {
+        for (const br of f.bricks) if (br.alive) this.shoveBall(b, br);
+      }
+    }
+  }
+
+  /**
+   * Bricks move before the balls do, so one can land on a ball: the ball goes out the nearest side
+   * and counts as hitting it. It leaves faster than a brick moves, or it would be caught again.
+   */
+  private shoveBall(b: Ball, br: Brick): void {
+    const out = pushOut(b, br);
+    if (!out) return;
+    if (br.kind !== 'steel' && this.isActive('pierce')) {
+      this.ballHitsBrick(br, b, true);
+      return;
+    }
+    b.x += out.nx * (out.depth + SKIN);
+    b.y += out.ny * (out.depth + SKIN);
+    if (out.nx !== 0) b.vx = out.nx * Math.max(Math.abs(b.vx), FORMATION.shove);
+    if (out.ny !== 0) b.vy = out.ny * Math.max(Math.abs(b.vy), FORMATION.shove);
+    this.ballHitsBrick(br, b, false);
+    normalizeVelocity(b, this.ballSpeed(b));
+  }
+
+  /** Sets off the fuses due by `tick`. */
+  private burnFuses(tick: number): void {
+    const due = this.fuses.filter((f) => f.tick <= tick);
+    if (due.length === 0) return;
+    this.fuses = this.fuses.filter((f) => f.tick > tick);
+    for (const f of due) this.explode(f.x, f.y);
+  }
+
+  /** Breakable bricks in reach take damage; explosives among them light their own fuses. */
+  private explode(x: number, y: number): void {
+    const { radius, damage } = BRICK_TYPES.explosive;
+    const reach = this.bricks.filter((br) => isBreakable(br) && distanceSq(br, x, y) <= radius * radius);
+    this.events.emit('explosion', { x, y, radius, bricks: reach.length });
+    for (const br of reach) this.damageBrick(br, 'explosion', clamp(x, br.x, br.x + br.w), clamp(y, br.y, br.y + br.h), damage);
+  }
+
+  /** Regenerating bricks left alone long enough win back a hit. */
+  private healBricks(): void {
+    const delay = BRICK_TYPES.regen.delay * SIM.tickRate;
+    for (const br of this.bricks) {
+      if (br.kind !== 'regen' || !br.alive || br.hp >= br.maxHp) continue;
+      if (this.tick - Math.max(br.hitTick, br.healTick) < delay) continue;
+      br.hp++;
+      br.healTick = this.tick;
+      this.events.emit('brickHeal', { id: br.id, hp: br.hp });
+    }
+  }
+
   /** After everything moved: drop broken bricks, then check for a cleared stage or a lost life. */
   private resolveStage(): void {
-    if (this.bricks.some((br) => !br.alive)) this.bricks = this.bricks.filter((br) => br.alive);
-
     if (this.breakableLeft === 0) {
+      // Whatever is still burning has nothing left to break, but it should still be seen.
+      this.burnFuses(Infinity);
+      this.bricks = this.bricks.filter((br) => br.alive);
+      const bonus = this.stage.room === 'elite' ? ELITE.clearBonus : 0;
+      this.score += bonus;
       this.balls = [];
       this.clearPowers();
       this.setState('clear');
-      this.events.emit('stageClear', { stage: this.stageIndex + 1, score: this.score });
+      this.events.emit('stageClear', { stage: this.stageIndex + 1, score: this.score, bonus });
+      return;
+    }
+    if (this.bricks.some((br) => !br.alive)) this.bricks = this.bricks.filter((br) => br.alive);
+
+    // Ahead of the lost balls: this life is gone either way, and the formation must still turn back.
+    if (this.formations.some((f) => f.breached)) {
+      for (const f of this.formations) f.pushBack();
+      this.events.emit('formationBreach', { lives: this.lives - 1 });
+      this.breached = true;
+      this.loseLife();
       return;
     }
 
@@ -821,7 +951,9 @@ export class Game {
       let target: Brick | null = null;
       for (const br of this.bricks) {
         if (!br.alive) continue;
-        const h = sweepBox(bolt.x, bolt.y, 0, dy, br.x, br.y, br.x + br.w, br.y + br.h);
+        // A moving brick can land on a bolt, which no sweep would catch.
+        const inside = bolt.x > br.x && bolt.x < br.x + br.w && bolt.y > br.y && bolt.y < br.y + br.h;
+        const h = inside ? { t: 0, nx: 0, ny: -1 } : sweepBox(bolt.x, bolt.y, 0, dy, br.x, br.y, br.x + br.w, br.y + br.h);
         if (closer(h, hit)) {
           hit = h;
           target = br;
@@ -978,11 +1110,12 @@ export class Game {
     const multiplier = this.multiplier;
     const bonus = this.chainBonus(chain) * multiplier;
     if (ball) ball.chainPoints += bonus;
-    const points = (br.kind === 'tough' ? br.maxHp * SCORE.toughPerHp : SCORE.normal) * multiplier + bonus;
+    const points = brickPoints(br) * multiplier + bonus;
     this.score += points;
     const vx = ball?.vx ?? 0;
     const vy = ball?.vy ?? 0;
     this.events.emit('brickDestroyed', { id: br.id, kind: br.kind, points, chain, bonus, multiplier, by, x, y, ix, iy, vx, vy });
+    if (br.kind === 'explosive') this.fuses.push({ x, y, tick: this.tick + Math.round(BRICK_TYPES.explosive.fuse * SIM.tickRate) });
     this.maybeDrop(x, y);
   }
 
@@ -1010,6 +1143,17 @@ function ballDirection(b: Ball): [number, number] {
 
 function isBreakable(br: Brick): boolean {
   return br.alive && br.kind !== 'steel';
+}
+
+/** Squared distance from (x, y) to the nearest point of a brick. */
+function distanceSq(br: Brick, x: number, y: number): number {
+  return (clamp(x, br.x, br.x + br.w) - x) ** 2 + (clamp(y, br.y, br.y + br.h) - y) ** 2;
+}
+
+/** Points for breaking a brick, before the multiplier and chain bonus. */
+function brickPoints(br: Brick): number {
+  if (br.kind === 'explosive') return SCORE.explosive;
+  return br.kind === 'normal' ? SCORE.normal : br.maxHp * SCORE.toughPerHp;
 }
 
 /** Bonus for the `chain`-th brick of a chain; the first brick earns none. */

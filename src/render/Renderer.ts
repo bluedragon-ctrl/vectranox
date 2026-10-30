@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { FIELD, PALETTE } from '../config/game';
-import { POWER, POWER_LOOK } from '../config/tuning';
+import { FORMATION, POWER, POWER_LOOK } from '../config/tuning';
 import { lerp } from '../core/math';
 import type { VisualSettings } from '../core/settings';
 import type { Game } from '../game/Game';
@@ -17,7 +17,7 @@ import { PADDLE_FRAGMENT } from './materials/paddle';
 import { PORTAL_FRAGMENT, TARGET_FRAGMENT } from './materials/pinball';
 import { BARRIER_FRAGMENT, BLAST_FRAGMENT, BOLT_FRAGMENT, CAPSULE_FRAGMENT, CHARGE_FRAGMENT } from './materials/power';
 import { glyphMask } from './glyphs';
-import { BRICK_GAP, brickTint, CAPSULE_COLORS, COLORS, PORTAL_COLORS, POWER_COLORS, TARGET_COLOR } from './palette';
+import { BRICK_GAP, brickTint, CAPSULE_COLORS, COLORS, EXPLOSION_COLOR, PORTAL_COLORS, POWER_COLORS, TARGET_COLOR } from './palette';
 import { QuadBatch } from './QuadBatch';
 
 /** Screen-space padding (px) between the playfield frame and its area. */
@@ -38,6 +38,10 @@ const POWER_FADE = 1;
 const FLASH_TICKS = 12;
 /** Hit flash strength for bricks struck by a pulse or blast, which light up many at once. */
 const AREA_FLASH = 0.35;
+/** Ticks a regenerating brick stays lit after winning back a hit, and how bright. */
+const HEAL_FLASH = { ticks: 30, strength: 0.25 } as const;
+/** Formation line brightness: at rest, and added as a formation closes in on it. */
+const LINE_GLOW = { rest: 0.35, near: 0.9 } as const;
 /** Held charges show as dots under the paddle: dot diameter, spacing, and drop below the paddle's bottom edge. */
 const CHARGE_DOT = { size: 2.6, step: 4, drop: 3.5 } as const;
 /** Horizon height as a fraction of the window, from the bottom. */
@@ -46,7 +50,7 @@ const HORIZON = 0.42;
 const SUN = { gapFill: 0.8, minRadius: 0.06, maxRadius: 0.27 } as const;
 /** World units the playfield can move under screen shake (offset, plus roll at its corners). */
 const SHAKE_MARGIN = 12;
-const BRICK_KIND = { normal: 0, tough: 1, steel: 2 } as const;
+const BRICK_KIND = { normal: 0, tough: 1, steel: 2, explosive: 3, regen: 4 } as const;
 const POWER_KINDS = Object.keys(POWER_LOOK) as PowerKind[];
 const CAPSULE_LOOK = Object.fromEntries(
   POWER_KINDS.map((k) => [k, { color: CAPSULE_COLORS[k], mask: glyphMask(POWER_LOOK[k].glyph), bad: POWER_LOOK[k].bad ? 1 : 0 }]),
@@ -102,6 +106,7 @@ export class Renderer {
       uField: { value: new THREE.Vector2(FIELD.width, FIELD.height) },
       uHits: { value: Array.from({ length: 8 }, () => new THREE.Vector4()) },
       uDanger: { value: 0 },
+      uLine: { value: new THREE.Vector2(FORMATION.line, 0) },
       uFrame: { value: COLORS.cyan },
       uGuide: { value: COLORS.purple },
       uDeath: { value: COLORS.magenta },
@@ -290,10 +295,10 @@ export class Renderer {
     this.interpolateBalls(game, alpha);
     this.trails.update(game.balls, this.ballPositions, this.fx.now);
 
-    this.drawField();
+    this.drawField(game);
     this.drawPortals(game);
     this.drawTargets(game);
-    this.drawBricks(game);
+    this.drawBricks(game, alpha);
     this.drawBarrier(game);
     this.drawCapsules(game, alpha);
     this.drawBolts(game, alpha);
@@ -326,34 +331,37 @@ export class Renderer {
     }
   }
 
-  private drawField(): void {
+  private drawField(game: Game): void {
     const u = this.field.uniforms;
     (u.uHits!.value as THREE.Vector4[]).forEach((v, i) => {
       const hit = this.fx.wallHits[i];
       v.set(hit?.x ?? 0, hit?.y ?? 0, hit?.strength ?? 0, 0);
     });
     u.uDanger!.value = this.fx.danger;
+    const pressure = game.linePressure;
+    (u.uLine!.value as THREE.Vector2).y = pressure === null ? 0 : LINE_GLOW.rest + LINE_GLOW.near * pressure;
     this.field.begin();
     this.field.push(FIELD.width / 2, FIELD.height / 2, FIELD.width, FIELD.height, this.color.setRGB(1, 1, 1));
     this.field.commit();
   }
 
-  private drawBricks(game: Game): void {
+  private drawBricks(game: Game, alpha: number): void {
     const b = this.bricks;
     b.begin();
     for (const br of game.bricks) {
       if (!br.alive) continue;
       const flash = Math.max(0, 1 - (game.tick - br.hitTick) / FLASH_TICKS) * this.fx.brickFlash * (this.fx.areaHits.has(br.id) ? AREA_FLASH : 1);
+      const heal = Math.max(0, 1 - (game.tick - br.healTick) / HEAL_FLASH.ticks) * this.fx.brickFlash * HEAL_FLASH.strength;
       b.push(
-        br.x + br.w / 2,
-        br.y + br.h / 2,
+        lerp(br.px, br.x, alpha) + br.w / 2,
+        lerp(br.py, br.y, alpha) + br.h / 2,
         br.w - BRICK_GAP,
         br.h - BRICK_GAP,
         brickTint(br, this.color),
-        br.kind === 'tough' ? br.hp : 1,
+        br.kind === 'tough' || br.kind === 'regen' ? br.hp : 1,
         BRICK_KIND[br.kind],
         br.maxHp,
-        flash * flash,
+        Math.max(flash * flash, heal),
       );
     }
     b.commit();
@@ -453,6 +461,7 @@ export class Renderer {
     if (strength > 0) {
       for (const c of centres) this.blast.push(c.x, c.y, radius * 2, radius * 2, POWER_COLORS.detonator, 1, strength);
     }
+    for (const e of this.fx.explosions) this.blast.push(e.x, e.y, e.radius * 2, e.radius * 2, EXPLOSION_COLOR, 1, e.strength);
     this.blast.commit();
   }
 

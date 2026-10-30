@@ -30,8 +30,9 @@ In dev builds the running game is available in the browser console as `vnx.game`
 `vnx.game.applyPower('laser')` grants a power-up (any kind from `POWER.kinds`, e.g. `'detonator'` for charges) and
 `vnx.game.fireStageEvent('overload')` runs a stage event (any kind from `STAGE_EVENTS.kinds`).
 Both live in `src/config/tuning.ts`, together with drop chances, weights, durations and the event triggers.
-`vnx.game.applyMod('shrapnel')` adds a mod stack (any kind from `MODS`). Mods, their rarity and the
-lives card live in `src/config/mods.ts`; run length and depth scaling in `src/config/run.ts`.
+`vnx.game.applyMod('heavy')` adds a mod stack (any kind from `MODS`). Mods, their rarity and the
+lives card live in `src/config/mods.ts`; run length, room mix and depth scaling in `src/config/run.ts`.
+`vnx.game.tryStage('PINWHEEL')` swaps the current stage for any template from `src/levels/stages.ts`.
 
 ## Music
 

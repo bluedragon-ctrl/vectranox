@@ -1,4 +1,5 @@
 import { DRAFT, MODS, RARITY_LOOK } from '../config/mods';
+import { ROOM_LABEL } from '../config/run';
 import { POWER } from '../config/tuning';
 import type { Game } from '../game/Game';
 import { describeMod } from '../game/mods';
@@ -82,9 +83,10 @@ export class RunScreen {
 
     const next = game.stages[game.stageIndex + 1];
     const h1 = document.createElement('h1');
-    h1.textContent = 'CHOOSE';
+    h1.textContent = game.stage.room === 'elite' ? 'ELITE CACHE' : 'CHOOSE';
     const p = document.createElement('p');
-    p.textContent = next ? `NEXT  STAGE ${next.sector}-${next.number}` : '';
+    const room = next ? ROOM_LABEL[next.room] : '';
+    p.textContent = next ? `NEXT  STAGE ${next.sector}-${next.number}${room && `  ${room}`}` : '';
     const list = document.createElement('div');
     list.className = 'cards';
     list.append(...cards.map((spec, i) => this.card(spec, i + 1)));
