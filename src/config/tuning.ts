@@ -22,7 +22,7 @@ export const POWER = {
   maxCapsules: 3,
   kinds: {
     multi: { duration: 0, weight: 14 },
-    laser: { duration: 10, weight: 10 },
+    laser: { duration: 5, weight: 10 },
     expand: { duration: 15, weight: 12 },
     narrow: { duration: 10, weight: 8 },
     slow: { duration: 12, weight: 10 },
@@ -116,7 +116,7 @@ export const STAGE_EVENTS = {
      */
     pulse: { chance: 1, maxPerStage: 2, idleTime: 10, maxBricks: 8, damage: 1 },
     /** Last few bricks survive `idleTime` without a kill: the paddle gets the laser. */
-    hunter: { chance: 1, maxPerStage: 1, bricksLeft: 3, idleTime: 12, duration: 8 },
+    hunter: { chance: 1, maxPerStage: 1, bricksLeft: 3, idleTime: 12, duration: 5 },
     /** Serving on the last life late in a stage raises the barrier. */
     safetyNet: { chance: 0.5, maxPerStage: 1, lives: 1, bricksLeft: 15, duration: 15 },
     /** Few bricks left: the paddle gets free detonator charges. */

@@ -252,7 +252,7 @@ export const MODS = {
     rarity: 'epic',
     maxStacks: 1,
     /** Seconds of laser at the start of each stage (the capsule gives `POWER.kinds.laser.duration`). */
-    perStack: 10,
+    perStack: 5,
     describe: (v, held) => `START EACH STAGE WITH ${secs((v + held.longbeam) * (1 + held.extender))} S OF LASER`,
   },
   cluster: {
