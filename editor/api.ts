@@ -43,6 +43,8 @@ export interface RoomChange {
 export interface SaveResult {
   pr: OpenPr;
   created: boolean;
+  /** The rooms were saved, but something after that went wrong. */
+  warning?: string;
 }
 
 /** A failure the editor should show as it is. */
@@ -98,12 +100,15 @@ function plan(rooms: readonly RoomFile[], changes: readonly RoomChange[]): { wri
   const writes = new Map<string, StageTemplate>();
   const removes = new Set<string>();
   const result = new Map(rooms.map(({ file, room }) => [file, room]));
-  for (const { file, room } of changes) {
+  // Every old file goes first, so a room can take the name another one is giving up.
+  for (const { file } of changes) {
     if (file) {
       roomPath(file);
       removes.add(file);
       result.delete(file);
     }
+  }
+  for (const { room } of changes) {
     if (room) {
       const target = roomFile(room.name);
       if (result.has(target)) throw new SaveError(`A room called ${room.name} already exists.`);
@@ -145,9 +150,9 @@ function roomList(names: readonly string[]): string {
   return names.length > 3 ? `${shown} +${names.length - 3} more` : shown;
 }
 
-/** The title and body of a PR, from everything it changes against main. */
+/** The title and body of a PR, from everything it changes since it left main. */
 async function describe(commit: string): Promise<{ title: string; body: string }> {
-  const diff = await git('diff', '--no-renames', '--name-status', `origin/${MAIN}`, commit, '--', ROOMS_DIR);
+  const diff = await git('diff', '--no-renames', '--name-status', `origin/${MAIN}...${commit}`, '--', ROOMS_DIR);
   const entries = diff.split('\n').filter(Boolean).map((line) => {
     const [status = '', path = ''] = line.split('\t');
     return { status, name: displayName(path) };
@@ -190,13 +195,25 @@ async function save(changes: readonly RoomChange[]): Promise<SaveResult> {
   const branch = pr?.branch ?? branchName(names[0] ?? 'rooms');
   await git('push', 'origin', `${commit}:refs/heads/${branch}`);
 
-  const { title, body } = await describe(commit);
   if (pr) {
-    await run('gh', ['pr', 'edit', String(pr.number), '--title', title, '--body', body]);
-    return { pr, created: false };
+    // The rooms are in the PR by now, so a failure here only leaves its description behind.
+    try {
+      const { title, body } = await describe(commit);
+      await run('gh', ['pr', 'edit', String(pr.number), '--title', title, '--body', body]);
+      return { pr, created: false };
+    } catch (err) {
+      return { pr, created: false, warning: `The PR description was not updated: ${err instanceof Error ? err.message : String(err)}` };
+    }
   }
-  const url = await run('gh', ['pr', 'create', '--base', MAIN, '--head', branch, '--title', title, '--body', body]);
-  return { pr: { number: Number(url.split('/').pop()), url, branch }, created: true };
+  try {
+    const { title, body } = await describe(commit);
+    const url = await run('gh', ['pr', 'create', '--base', MAIN, '--head', branch, '--title', title, '--body', body]);
+    return { pr: { number: Number(url.split('/').pop()), url, branch }, created: true };
+  } catch (err) {
+    // No PR means nothing was saved, so don't leave its branch behind.
+    await git('push', 'origin', '--delete', branch).catch(() => undefined);
+    throw err;
+  }
 }
 
 function readBody(req: IncomingMessage): Promise<string> {

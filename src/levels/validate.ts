@@ -3,7 +3,7 @@ import { RUN, ROOM_LABEL } from '../config/run';
 import { BOSS, FORMATION } from '../config/tuning';
 import { within } from '../game/formation';
 import { BRICK_CODES } from '../game/layout';
-import type { FormationDef, StageTemplate } from './stages';
+import type { BossDef, FormationDef, StageTemplate } from './stages';
 
 /** Rows of bricks that fit above the formation line. */
 export const MAX_ROWS = Math.floor((FIELD.height - BRICK.top - FORMATION.line) / BRICK.height);
@@ -99,6 +99,19 @@ function checkCore(room: StageTemplate): Problem[] {
   const problems = area === core.length ? [] : [error('The core cells must fill a rectangle.')];
   if (!coreReachable(room)) problems.push(error('No ball can reach the core, so the room can never be won: open the steel or add a portal.'));
   return problems;
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
+const isPair = (value: unknown): boolean => Array.isArray(value) && value.length === 2 && value.every((n) => typeof n === 'number');
+const isPhase = (value: unknown): boolean =>
+  isRecord(value) && typeof value.at === 'number' && Object.values(value).every((v) => typeof v === 'number' || typeof v === 'string');
+
+/** Whether parsed JSON has a boss block's shape; `checkRoom` then judges its values. */
+export function isBossDef(value: unknown): value is BossDef {
+  if (!isRecord(value)) return false;
+  const { hp, phases, vault } = value;
+  if (typeof hp !== 'number' || !Array.isArray(phases) || !phases.every(isPhase)) return false;
+  return vault === undefined || (isRecord(vault) && isPair(vault.rows) && isPair(vault.cols));
 }
 
 function checkBoss(room: StageTemplate): Problem[] {
