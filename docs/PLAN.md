@@ -13,9 +13,9 @@ Breakout-style roguelike with 80s synthwave vector graphics, running in desktop 
 | Look | Synthwave palette (magenta / cyan / purple over dark grid). 2.5D: gameplay is flat, bricks have light depth, camera near-flat. Glass is **stylized** (fresnel rim, inner highlight, slight background distortion), not physical transmission. |
 | Physics | Custom arcade collision: swept circle vs. AABB, fixed 120 Hz step, paddle hit position sets bounce angle. |
 | Controls | Mouse (pointer lock) and keyboard, selectable. |
-| Layout | Canvas fills the window. Portrait (3:4) playfield on the **right**; left is a CSS "terminal" panel: menu, high scores, run info, live event console. Overlays (title, pause, upgrade pick, name entry) are CSS. |
+| Layout | Canvas fills the window. Portrait (3:4) playfield on the **right**; left is a CSS "terminal" panel: run info, powers, mods, live event console. Overlays (title, pause, upgrade pick, name entry) are CSS; the title, pause and end screens carry the high scores and options. |
 | Game structure | Roguelike runs (see below). Formations reaching the paddle line cost a life. |
-| Audio | Generated SFX via WebAudio synth (oscillators and filtered noise, panned by x; brick hits climb a pentatonic scale until the paddle touches a ball). Music: user-provided `.ogg` / `.mp3` tracks dropped into `src/assets/music/`, picked up at build time, played as a shuffled playlist with crossfade. Master / music / SFX volume and mute (**M**) in the left panel; the music muffles while paused. Audio starts on the first click or key press (browser autoplay rules). |
+| Audio | Generated SFX via WebAudio synth (oscillators and filtered noise, panned by x; brick hits climb a pentatonic scale until the paddle touches a ball). Music: user-provided `.ogg` / `.mp3` tracks dropped into `src/assets/music/`, picked up at build time, played as a shuffled playlist with crossfade. Master / music / SFX volume and mute (**M**) on the title, pause and end screens; the music muffles while paused. Audio starts on the first click or key press (browser autoplay rules). |
 | High scores | Name: 6 chars `[A-Z0-9 ]`. Phase 1: localStorage. Later: Cloudflare Worker + **D1** (not KV — KV is eventually consistent and can't sort). |
 | Hosting | GitHub Pages via Actions now; same static build on a VPS later. Vite `base: './'` so paths work on both. |
 

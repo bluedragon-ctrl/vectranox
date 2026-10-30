@@ -10,7 +10,7 @@ const LEVELS: { key: Level; label: string }[] = [
 ];
 
 /**
- * Audio settings in the left panel: a segmented slider per volume (click or drag along it, or
+ * Audio settings in the menu: a segmented slider per volume (click or drag along it, or
  * use the mouse wheel), a mute toggle, and the current music track, which skips when clicked.
  */
 export class AudioPanel {

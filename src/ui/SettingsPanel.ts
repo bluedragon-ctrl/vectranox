@@ -5,7 +5,7 @@ const OPTIONS: { key: keyof VisualSettings; label: string }[] = [
   { key: 'reduceFx', label: 'REDUCE FLASH/SHAKE' },
 ];
 
-/** On/off toggles for the video settings in the left panel. */
+/** On/off toggles for the video settings in the menu. */
 export class SettingsPanel {
   constructor(
     root: HTMLElement,

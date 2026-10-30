@@ -264,6 +264,33 @@ body {
   display: none;
 }
 
+/* High scores and options on the title, pause and end screens. Clicks outside it still reach the field. */
+#overlay.with-menu {
+  width: min(92%, 640px);
+  background: rgba(7, 2, 26, 0.86);
+}
+
+#menu {
+  display: none;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px 32px;
+  margin-top: 16px;
+  padding-top: 14px;
+  text-align: left;
+  border-top: 1px solid var(--panel-border);
+  pointer-events: auto;
+}
+
+#overlay.with-menu #menu {
+  display: grid;
+}
+
+#menu .options {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
 .logo {
   font-family: var(--display);
   font-weight: 800;
@@ -282,14 +309,39 @@ body {
     0 0 18px rgba(255, 42, 157, 0.6);
 }
 
-/* The run's score, under the logo: the number the player chases. */
+/* The run at a glance, under the logo: the score, with lives above it and the chain and multiplier below. */
+#hud {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.hud-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 16px;
+  color: var(--text-dim);
+}
+
+.hud-row b {
+  font-weight: normal;
+  color: var(--yellow);
+}
+
+/* Two pairs on a row: the first stays left, the second goes right. */
+.hud-row b:not(:last-child) {
+  margin-right: auto;
+}
+
+/* The number the player chases. */
 .score-main {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--panel-border);
 }
 
 .score-main span {

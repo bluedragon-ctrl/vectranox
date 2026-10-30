@@ -19,16 +19,13 @@
       <aside id="panel">
         <header class="logo">VECTRA<span>NOX</span></header>
 
-        <div class="score-main"><span>SCORE</span><b id="hud-score">000000</b></div>
-
-        <section class="block" id="hud">
-          <h2>// RUN</h2>
-          <dl>
-            <dt>LIVES</dt><dd id="hud-lives">3</dd>
-            <dt>STAGE</dt><dd id="hud-sector">1-1</dd>
-            <dt>CHAIN</dt><dd id="hud-chain">—</dd>
-            <dt>MULT</dt><dd id="hud-mult">×1</dd>
-          </dl>
+        <section id="hud">
+          <div class="hud-row"><span>LIVES</span><b id="hud-lives">3</b></div>
+          <div class="score-main"><span>SCORE</span><b id="hud-score">000000</b></div>
+          <div class="hud-row">
+            <span>CHAIN</span><b id="hud-chain">—</b>
+            <span>MULT</span><b id="hud-mult">×1</b>
+          </div>
         </section>
 
         <section class="block" id="powers">
@@ -41,29 +38,12 @@
           <div id="mod-list"></div>
         </section>
 
-        <section class="block" id="scores">
-          <h2>// HIGH SCORES</h2>
-          <ol id="score-list"></ol>
-        </section>
-
         <section class="block" id="sys">
           <h2>// SYS</h2>
           <dl>
             <dt>FPS</dt><dd id="sys-fps">--</dd>
-            <dt>TICK</dt><dd id="sys-tick">0</dd>
             <dt>BALLS</dt><dd id="sys-balls">0</dd>
-            <dt>STATE</dt><dd id="sys-state">--</dd>
           </dl>
-        </section>
-
-        <section class="block" id="video">
-          <h2>// VIDEO</h2>
-          <div id="video-toggles"></div>
-        </section>
-
-        <section class="block" id="audio">
-          <h2>// AUDIO</h2>
-          <div id="audio-controls"></div>
         </section>
 
         <section class="block grow" id="console-block">
@@ -81,6 +61,22 @@
         <div id="overlay" class="hidden">
           <h1 id="overlay-title"></h1>
           <p id="overlay-sub"></p>
+          <div id="menu">
+            <section class="block" id="scores">
+              <h2>// HIGH SCORES</h2>
+              <ol id="score-list"></ol>
+            </section>
+            <div class="options">
+              <section class="block" id="video">
+                <h2>// VIDEO</h2>
+                <div id="video-toggles"></div>
+              </section>
+              <section class="block" id="audio">
+                <h2>// AUDIO</h2>
+                <div id="audio-controls"></div>
+              </section>
+            </div>
+          </div>
         </div>
       </main>
     </div>
