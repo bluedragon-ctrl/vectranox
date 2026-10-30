@@ -9,7 +9,7 @@ export function closer(h: SweepHit | null, best: SweepHit | null): h is SweepHit
 }
 
 /** Left, right and top walls as planes. The bottom is open. */
-export function sweepWalls(b: Ball, dx: number, dy: number): (SweepHit & { side: WallSide }) | null {
+export function sweepWalls(b: Pick<Ball, 'x' | 'y' | 'r'>, dx: number, dy: number): (SweepHit & { side: WallSide }) | null {
   let best: (SweepHit & { side: WallSide }) | null = null;
   if (dx < 0) {
     const t = (b.r - b.x) / dx;
@@ -44,13 +44,13 @@ export function pushOut(b: Ball, box: { x: number; y: number; w: number; h: numb
 }
 
 /** Sends a ball off at `angle` from vertical (positive is right). */
-export function aim(b: Ball, angle: number, speed: number): void {
+export function aim(b: Pick<Ball, 'vx' | 'vy'>, angle: number, speed: number): void {
   b.vx = Math.sin(angle) * speed;
   b.vy = Math.cos(angle) * speed;
 }
 
 /** Rescales velocity to `speed` and keeps it from going near-horizontal. */
-export function normalizeVelocity(b: Ball, speed: number): void {
+export function normalizeVelocity(b: Pick<Ball, 'vx' | 'vy'>, speed: number): void {
   const len = Math.hypot(b.vx, b.vy) || 1;
   let vx = (b.vx / len) * speed;
   let vy = (b.vy / len) * speed;

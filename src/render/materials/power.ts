@@ -97,6 +97,27 @@ void main() {
 `;
 
 /**
+ * Boss shot: a dark red diamond with a hot rim and a red glow. No white anywhere, as bright
+ * centres are what balls and capsules have. The instance rectangle is its full size.
+ */
+export const SHOT_FRAGMENT = /* glsl */ `
+varying vec2 vLocal;
+varying vec2 vHalf;
+varying vec4 vColor;
+
+${SDF}
+
+void main() {
+  float d = (abs(vLocal.x) + abs(vLocal.y) - vHalf.x) * 0.707;
+  float body = fill(d);
+  vec3 tint = vColor.rgb;
+  vec4 col = vec4(mix(tint * 0.22, tint * 1.5, smoothstep(-2.4, -0.3, d)), 1.0) * body;
+  col.rgb += tint * exp(-max(d, 0.0) * 0.6) * 0.6 * (1.0 - body);
+  gl_FragColor = col;
+}
+`;
+
+/**
  * Barrier: a segmented energy line across the bottom of the field. Brightens where a ball
  * bounced off it. params: x = strength (fades out at the end), y = last hit x (world), z = hit strength.
  */

@@ -17,7 +17,10 @@ export class EventBanner {
   ) {}
 
   show(kind: StageEventKind, now: number): void {
-    const look = STAGE_EVENT_LOOK[kind];
+    this.announce(STAGE_EVENT_LOOK[kind], now);
+  }
+
+  announce(look: { label: string; sub: string; color: number }, now: number): void {
     this.title.textContent = look.label;
     this.sub.textContent = look.sub;
     this.root.style.setProperty('--c', cssColor(look.color));

@@ -22,6 +22,9 @@ export const RARITY_WEIGHTS: readonly RarityWeights[] = [
 /** The pick after an elite room, in any sector. */
 export const ELITE_WEIGHTS: RarityWeights = { common: 0, rare: 70, epic: 30 };
 
+/** The pick after a boss, in any sector. */
+export const BOSS_WEIGHTS: RarityWeights = { common: 0, rare: 30, epic: 70 };
+
 /** Card tag and colour for each rarity. */
 export const RARITY_LOOK = {
   common: { label: 'COMMON', color: PALETTE.cyan },

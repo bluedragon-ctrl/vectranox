@@ -1,6 +1,6 @@
 import { BRICK, FIELD } from '../config/game';
 import { RUN, ROOM_LABEL } from '../config/run';
-import { FORMATION } from '../config/tuning';
+import { BOSS, FORMATION } from '../config/tuning';
 import { within } from '../game/formation';
 import { BRICK_CODES } from '../game/layout';
 import type { FormationDef, StageTemplate } from './stages';
@@ -63,6 +63,74 @@ function checkLayout(room: StageTemplate): Problem[] {
   return problems;
 }
 
+/**
+ * Whether a ball can get from the bottom of the field to the core: through anything breakable and
+ * through portals, but not through steel, unless that steel is orbiting and so leaves gaps.
+ */
+function coreReachable(room: StageTemplate): boolean {
+  const defs = room.formations ?? [];
+  const at = (row: number, col: number): string | undefined => (col >= 0 && col < BRICK.cols ? (room.layout[row]?.charAt(col) ?? (row >= 0 && row < MAX_ROWS ? '.' : undefined)) : undefined);
+  const wall = (row: number, col: number): boolean => at(row, col) === '#' && defs[formationAt(defs, row, col)]?.motion !== 'rotate';
+  const ends = cells(room).filter((c) => c.ch >= 'A' && c.ch <= 'Z');
+
+  const seen = new Set<string>();
+  const queue = Array.from({ length: BRICK.cols }, (_, col) => ({ row: MAX_ROWS - 1, col }));
+  while (queue.length > 0) {
+    const cell = queue.pop();
+    if (!cell) break;
+    const { row, col } = cell;
+    const key = `${row},${col}`;
+    const ch = at(row, col);
+    if (ch === undefined || seen.has(key) || wall(row, col)) continue;
+    seen.add(key);
+    if (ch === 'c') return true;
+    queue.push({ row: row - 1, col }, { row: row + 1, col }, { row, col: col - 1 }, { row, col: col + 1 });
+    for (const end of ends) if (end.ch === ch) queue.push({ row: end.row, col: end.col });
+  }
+  return false;
+}
+
+function checkCore(room: StageTemplate): Problem[] {
+  const core = cells(room).filter((c) => c.ch === 'c');
+  if (core.length === 0) return [error('A boss room needs a core (c).')];
+  const rows = core.map((c) => c.row);
+  const cols = core.map((c) => c.col);
+  const area = (Math.max(...rows) - Math.min(...rows) + 1) * (Math.max(...cols) - Math.min(...cols) + 1);
+  const problems = area === core.length ? [] : [error('The core cells must fill a rectangle.')];
+  if (!coreReachable(room)) problems.push(error('No ball can reach the core, so the room can never be won: open the steel or add a portal.'));
+  return problems;
+}
+
+function checkBoss(room: StageTemplate): Problem[] {
+  const present = new Set(cells(room).map((c) => BRICK_CODES[c.ch]?.kind));
+  if (room.room !== 'boss') {
+    const bossOnly = (['core', 'turret', 'spawner', 'phantom'] as const).filter((kind) => present.has(kind));
+    return bossOnly.length > 0 ? [error(`Only boss rooms can have these: ${bossOnly.join(', ')}.`)] : [];
+  }
+
+  const { boss } = room;
+  if (!boss) return [error('A boss room needs a boss block.')];
+  const problems = checkCore(room);
+  if (!(boss.hp > 0)) problems.push(error('The boss needs hp above 0.'));
+  const { phases, vault } = boss;
+  if (phases.length === 0 || phases[0]?.at !== 1) problems.push(error('The first boss phase must have at: 1.'));
+  phases.forEach((phase, i) => {
+    const before = phases[i - 1];
+    if (phase.at <= 0 || (before && phase.at >= before.at)) problems.push(error(`Boss phase ${i + 1}: at must be above 0 and below the phase before.`));
+    for (const kind of ['turret', 'spawner', 'phantom'] as const) {
+      const interval = phase[kind];
+      if (interval !== undefined && !(interval > BOSS.windup)) problems.push(error(`Boss phase ${i + 1}: ${kind} must be longer than the ${BOSS.windup} s wind-up.`));
+      if (interval !== undefined && !present.has(kind)) problems.push(warning(`Boss phase ${i + 1} uses a ${kind}, but the room has none.`));
+    }
+  });
+  if (vault) {
+    problems.push(...checkRange('Vault', 'rows', vault.rows, MAX_ROWS), ...checkRange('Vault', 'columns', vault.cols, BRICK.cols));
+    const inside = (c: { row: number; col: number }): boolean => within(c.row, vault.rows) && within(c.col, vault.cols);
+    if (!cells(room).some((c) => c.ch >= 'A' && c.ch <= 'Z' && !inside(c))) problems.push(error('A vault needs a portal outside it to throw balls out through.'));
+  }
+  return problems;
+}
+
 function checkRange(label: string, axis: string, range: readonly [number, number] | undefined, size: number): Problem[] {
   if (!range) return [];
   const [from, to] = range;
@@ -108,7 +176,7 @@ export function checkRoom(room: StageTemplate): Problem[] {
   if (!/^[A-Z0-9][A-Z0-9 '-]*$/.test(room.name)) problems.push(error('Name needs capitals, digits and spaces.'));
   if (![1, 2, 3].includes(room.tier)) problems.push(error(`Tier must be 1, 2 or 3, is ${String(room.tier)}.`));
   if (room.room && !(room.room in ROOM_LABEL)) problems.push(error(`Unknown room kind '${String(room.room)}'.`));
-  problems.push(...checkLayout(room));
+  problems.push(...checkLayout(room), ...checkBoss(room));
   const defs = room.formations ?? [];
   if (room.room === 'formation' && defs.length === 0) problems.push(warning('A formation room with nothing moving.'));
   defs.forEach((def, i) => problems.push(...checkFormation(room, def, i)));

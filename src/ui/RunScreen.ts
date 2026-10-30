@@ -83,7 +83,7 @@ export class RunScreen {
 
     const next = game.stages[game.stageIndex + 1];
     const h1 = document.createElement('h1');
-    h1.textContent = game.stage.room === 'elite' ? 'ELITE CACHE' : 'CHOOSE';
+    h1.textContent = game.stage.room === 'boss' ? 'BOSS CACHE' : game.stage.room === 'elite' ? 'ELITE CACHE' : 'CHOOSE';
     const p = document.createElement('p');
     const room = next ? ROOM_LABEL[next.room] : '';
     p.textContent = next ? `NEXT  STAGE ${next.sector}-${next.number}${room && `  ${room}`}` : '';

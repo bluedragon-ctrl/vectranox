@@ -161,6 +161,31 @@ export const BRICK_TYPES = {
 } as const;
 
 /**
+ * Boss rooms: what every boss shares. What each boss does when is in its room file (see `BossDef`).
+ *
+ * Emitters flash for `windup` seconds before they act. A phase break lasts `phaseBreak` seconds: the
+ * core takes no damage and nothing fires. Damage can't run past a phase's threshold, so one good
+ * shot into a vault can't end the fight. Lasers do `laserDamage` per bolt to the core; everything
+ * else does a whole hit. Portals in a boss room catch a ball from `portalCapture`, as they are
+ * the only way into a vault.
+ *
+ * `shot`: speed, hit radius, and the angle between a fan's shots. `stun`: seconds the paddle can't
+ * move after a shot reaches it. `faller`: speed of a spawner's bricks and how many can be falling
+ * at once. `shadow`: seconds a shadow ball lasts, how many at once, and how far from straight down
+ * it can leave.
+ */
+export const BOSS = {
+  windup: 0.5,
+  phaseBreak: 1.5,
+  laserDamage: 0.15,
+  portalCapture: 9,
+  shot: { speed: 150, radius: 3, fan: (20 * Math.PI) / 180 },
+  stun: 0.7,
+  faller: { speed: 14, max: 3 },
+  shadow: { life: 6, max: 4, spread: (35 * Math.PI) / 180 },
+} as const;
+
+/**
  * Formations: groups of bricks that move while the ball is in play (see `StageTemplate.formations`).
  *
  * A marching formation's breakable bricks reaching `line` cost a life and send it back to its
@@ -177,6 +202,8 @@ export const BRICK_TYPES = {
  * - rotate: orbits the middle of the formation at `rate` radians/s. Bricks stay level, so spacing
  *   them at least 24 units apart (every second row) keeps them from overlapping.
  * - sine: columns bob `height` up and down over `period` seconds, each `wave` radians behind the last.
+ * - hold: stays put. Formations claim bricks by rectangle, so this keeps the middle of a rotating
+ *   ring out of it.
  */
 export const FORMATION = {
   line: 72,
@@ -189,5 +216,6 @@ export const FORMATION = {
     march: { step: 8, beat: 0.42, drop: 12, hopSpeed: 140, fury: 2.2 },
     rotate: { rate: 0.5 },
     sine: { height: 14, period: 3.4, wave: 0.6 },
+    hold: {},
   },
 } as const;

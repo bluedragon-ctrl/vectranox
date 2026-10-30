@@ -3,6 +3,9 @@ import { PALETTE } from '../config/game';
 import { POWER_LOOK } from '../config/tuning';
 import type { BrickKind, PowerKind } from '../game/types';
 
+/** A boss's shots and a stunned paddle, linear. */
+export const SHOT_COLOR = new THREE.Color(0xe0000f);
+
 /** Visual gap between neighbouring bricks (world units); bricks draw this much smaller than their cell. */
 export const BRICK_GAP = 1.5;
 
@@ -11,6 +14,7 @@ const ROW_COLORS = [PALETTE.magenta, 0xe03cff, PALETTE.purple, 0x6c5cff, PALETTE
 const STEEL_COLOR = 0x9a92c4;
 const EXPLOSIVE_COLOR = 0xff5a1f;
 const REGEN_COLOR = 0x2dffb4;
+const EMITTER_COLORS = { turret: PALETTE.red, spawner: PALETTE.cyan, phantom: PALETTE.purple } as const;
 /**
  * Brightest a glass or gold tint may be (linear luminance). Yellow and cyan are far brighter than
  * magenta or purple at full strength and would flood the bloom, so they are dimmed to this.
@@ -27,6 +31,9 @@ interface BrickLook {
 export function brickTint(br: BrickLook, out: THREE.Color): THREE.Color {
   if (br.kind === 'steel') return out.setHex(STEEL_COLOR);
   if (br.kind === 'explosive') return capBrightness(out.setHex(EXPLOSIVE_COLOR));
+  if (br.kind === 'turret' || br.kind === 'spawner' || br.kind === 'phantom') return capBrightness(out.setHex(EMITTER_COLORS[br.kind]));
+  // The core runs from gold to hot red as it takes damage.
+  if (br.kind === 'core') return capBrightness(out.setHex(PALETTE.yellow).lerp(SHOT_COLOR, 1 - br.hp / br.maxHp));
   if (br.kind === 'tough' || br.kind === 'regen') {
     const hex = br.kind === 'tough' ? PALETTE.yellow : REGEN_COLOR;
     return capBrightness(out.setHex(hex)).multiplyScalar(0.55 + 0.45 * (br.hp / br.maxHp));

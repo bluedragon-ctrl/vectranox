@@ -115,6 +115,55 @@ body {
   }
 }
 
+/* Boss health: placed over the top of the field by BossBar, name above a thin bar. */
+#boss-bar {
+  position: fixed;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  pointer-events: none;
+  opacity: 0.9;
+}
+
+#boss-bar.hidden {
+  display: none;
+}
+
+#boss-bar span {
+  font-family: var(--display);
+  font-size: clamp(10px, 0.8vw, 13px);
+  letter-spacing: 0.14em;
+  color: var(--yellow);
+}
+
+#boss-bar div {
+  position: relative;
+  flex: 1;
+  height: 6px;
+  background: rgba(7, 2, 26, 0.8);
+  border: 1px solid color-mix(in srgb, var(--yellow) 45%, transparent);
+}
+
+#boss-bar i {
+  display: block;
+  height: 100%;
+  background: var(--yellow);
+  transition: width 0.12s ease-out;
+}
+
+#boss-bar.shielded i {
+  background: var(--text);
+}
+
+/* A phase's threshold. */
+#boss-bar b {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 1px;
+  background: var(--text);
+}
+
 /* Chain bonus badge: just outside the playfield's bottom-right corner, under the banners. */
 #popups {
   position: fixed;

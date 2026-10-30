@@ -1,0 +1,23 @@
+{
+  "name": "NOX",
+  "tier": 3,
+  "room": "boss",
+  "layout": [
+    "..#.#.#.#.#..",
+    "..t.2ccc2.t..",
+    "..#.2ccc2.#..",
+    "..s33g3g33s..",
+    "..1#1#1#1#1.."
+  ],
+  "formations": [
+    { "motion": "march" }
+  ],
+  "boss": {
+    "hp": 24,
+    "phases": [
+      { "at": 1, "fire": "straight", "turret": 2.2, "spawner": 14, "pace": 0.5 },
+      { "at": 0.66, "fire": "fan", "turret": 2.4, "spawner": 14, "phantom": 7, "pace": 0.5 },
+      { "at": 0.33, "fire": "aimed", "turret": 1.4, "spawner": 10, "phantom": 5, "pace": 0.7 }
+    ]
+  }
+}

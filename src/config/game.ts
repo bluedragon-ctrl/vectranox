@@ -67,6 +67,8 @@ export const SCORE = {
 export const INPUT = {
   // Paddle travel per mouse pixel, relative to the on-screen field scale.
   mouseSensitivity: 1,
+  // Units/s the paddle glides back to a visible cursor that moved on during a stun.
+  stunCatchUp: 420,
 } as const;
 
 export const PALETTE = {
