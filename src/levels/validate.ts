@@ -1,5 +1,5 @@
 import { BRICK, FIELD } from '../config/game';
-import { RUN, ROOM_LABEL } from '../config/run';
+import { ROOM_LABEL } from '../config/run';
 import { BOSS, FORMATION } from '../config/tuning';
 import { within } from '../game/formation';
 import { BRICK_CODES } from '../game/layout';
@@ -188,6 +188,7 @@ export function checkRoom(room: StageTemplate): Problem[] {
   const problems: Problem[] = [];
   if (!/^[A-Z0-9][A-Z0-9 '-]*$/.test(room.name)) problems.push(error('Name needs capitals, digits and spaces.'));
   if (![1, 2, 3].includes(room.tier)) problems.push(error(`Tier must be 1, 2 or 3, is ${String(room.tier)}.`));
+  if (room.threat !== undefined && ![1, 2, 3].includes(room.threat)) problems.push(error(`Threat must be 1, 2 or 3, is ${String(room.threat)}.`));
   if (room.room && !(room.room in ROOM_LABEL)) problems.push(error(`Unknown room kind '${String(room.room)}'.`));
   problems.push(...checkLayout(room), ...checkBoss(room));
   const defs = room.formations ?? [];
@@ -196,7 +197,7 @@ export function checkRoom(room: StageTemplate): Problem[] {
   return problems;
 }
 
-/** What is wrong with the rooms as a set: every slot of a run must have one to fill it. */
+/** What is wrong with the rooms as a set: every kind a run can roll must have a room. */
 export function checkRun(rooms: readonly StageTemplate[]): Problem[] {
   const problems: Problem[] = [];
   const files = new Map<string, string[]>();
@@ -208,15 +209,8 @@ export function checkRun(rooms: readonly StageTemplate[]): Problem[] {
   const openers = rooms.filter((r) => r.opener).map((r) => r.name);
   if (openers.length > 1) problems.push(error(`Only one room can open the run: ${openers.join(', ')}.`));
 
-  const missing = new Set<string>();
-  RUN.rooms.forEach((slots, i) => {
-    const sector = i + 1;
-    for (const kind of slots) {
-      if (!rooms.some((r) => r.tier <= sector && !r.opener && (r.room ?? 'standard') === kind)) {
-        missing.add(`No ${kind} room for sector ${sector}.`);
-      }
-    }
-  });
-  problems.push(...[...missing].map(error));
+  for (const kind of Object.keys(ROOM_LABEL)) {
+    if (!rooms.some((r) => !r.opener && (r.room ?? 'standard') === kind)) problems.push(error(`No ${kind} room.`));
+  }
   return problems;
 }

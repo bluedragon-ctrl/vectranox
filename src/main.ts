@@ -3,7 +3,7 @@ import { AudioEngine } from './audio/AudioEngine';
 import { GameSounds } from './audio/GameSounds';
 import { Input, type ControlMode } from './core/input';
 import { PALETTE } from './config/game';
-import { BOSS_ROOM, ELITE, ROOM_LABEL } from './config/run';
+import { BOSS_ROOM, ELITE, ROOM_LABEL, threatPips } from './config/run';
 import { startLoop } from './core/loop';
 import { addScore, formatScore, loadLastName, loadScores, NAME_LENGTH, rankOf, type ScoreEntry } from './core/scores';
 import { loadAudioSettings, loadVisualSettings, saveAudioSettings, saveVisualSettings } from './core/settings';
@@ -224,8 +224,7 @@ function endRun(): void {
 
 function saveScore(name: string): void {
   if (ui !== 'naming') return;
-  const stage = `${game.stage.sector}-${game.stage.number}`;
-  scores = addScore(scores, { name, score: game.score, stage, won: game.state === 'complete' }, endRank);
+  scores = addScore(scores, { name, score: game.score, stage: String(game.stage.number), won: game.state === 'complete' }, endRank);
   renderScores(scoreList, scores, endRank);
   nameEntry.hide();
   ui = 'ended';
@@ -332,7 +331,7 @@ function overlayContent(): OverlayContent | null {
         case 'serve':
           if (game.breached) return { title: 'LINE BREACHED', sub: 'FORMATION PUSHED BACK\nCLICK / SPACE TO LAUNCH' };
           return {
-            title: `STAGE ${game.stage.sector}-${game.stage.number}`,
+            title: `ROOM ${game.stage.number}  ${threatPips(game.stage.threat)}`,
             sub: `${stageLabel(game)}\nCLICK / SPACE TO LAUNCH`,
           };
         case 'clear':

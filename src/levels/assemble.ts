@@ -8,41 +8,64 @@ const LAYOUT_SALT = 0x5f3759df;
 
 /**
  * The run's stages, from its seed alone: the same seed always gives the same stages, however the
- * run is played. Each sector fills its `RUN.rooms` slots; templates don't repeat while unused ones
- * are left for the slot.
+ * run is played. Each room rolls its kind (see `RUN`), then a template of that kind; templates
+ * don't repeat while unused ones are left. Bosses come in tier order, the highest one last.
  */
 export function assembleRun(seed: number): StageDef[] {
   const rng = new Rng(seed ^ LAYOUT_SALT);
   const used = new Set<StageTemplate>();
   const stages: StageDef[] = [];
-  for (let sector = 1; sector <= RUN.sectors; sector++) {
-    for (let number = 1; number <= RUN.stagesPerSector; number++) {
-      const room = RUN.rooms[sector - 1]?.[number - 1] ?? 'standard';
-      const template = pickTemplate(rng, used, sector, room, stages.length === 0);
-      used.add(template);
-      stages.push(buildStage(template, stages.length, sector, number, rng.next() < RUN.depth.mirrorChance, rng));
-    }
+  const bosses = TEMPLATES.filter((t) => t.room === 'boss').sort((a, b) => a.tier - b.tier);
+  const finalBoss = bosses.pop();
+  if (!finalBoss) throw new Error('No boss stage template');
+  for (let depth = 0; depth < RUN.rooms; depth++) {
+    const room = rollRoom(rng, stages, bosses.length > 0);
+    const opener = depth === 0 ? TEMPLATES.find((t) => t.opener) : undefined;
+    const boss = room === 'boss' ? (depth === RUN.rooms - 1 ? finalBoss : bosses.shift()) : undefined;
+    const template = opener ?? boss ?? pickTemplate(rng, used, depth, room);
+    used.add(template);
+    stages.push(buildStage(template, depth, rng.next() < RUN.depth.mirrorChance, rng));
   }
   return stages;
 }
 
-function pickTemplate(rng: Rng, used: ReadonlySet<StageTemplate>, sector: number, room: RoomKind, first: boolean): StageTemplate {
-  const opener = TEMPLATES.find((t) => t.opener);
-  if (first && opener) return opener;
-  const eligible = TEMPLATES.filter((t) => t.tier <= sector && !t.opener && (t.room ?? 'standard') === room);
-  let pool = eligible.filter((t) => !used.has(t));
-  if (pool.length === 0) pool = eligible;
-  if (room === 'elite' || room === 'boss') {
-    const top = pool.filter((t) => t.tier === sector);
-    if (top.length > 0) pool = top;
-  }
-  const pick = pool[Math.floor(rng.next() * pool.length)];
-  if (!pick) throw new Error(`No ${room} stage template for sector ${sector}`);
-  return pick;
+/** The kind of the room after `stages`. */
+function rollRoom(rng: Rng, stages: readonly StageDef[], bossesLeft: boolean): RoomKind {
+  const depth = stages.length;
+  if (depth === 0) return 'standard';
+  if (depth === RUN.rooms - 1) return 'boss';
+  const beforeFinal = depth === RUN.rooms - 2;
+  if (bossesLeft && !beforeFinal && rng.next() < chanceSince(RUN.bossChance, stages, 'boss')) return 'boss';
+  if (stages[depth - 1]?.room !== 'boss' && rng.next() < chanceSince(RUN.eliteChance, stages, 'elite')) return 'elite';
+  return rng.next() < RUN.formationChance ? 'formation' : 'standard';
+}
+
+/** The entry of `chances` for the number of rooms since the last room of that kind. */
+function chanceSince(chances: readonly number[], stages: readonly StageDef[], room: RoomKind): number {
+  const since = stages.length - 1 - stages.map((s) => s.room).lastIndexOf(room);
+  return chances[Math.min(since, chances.length - 1)] ?? 0;
+}
+
+function pickTemplate(rng: Rng, used: ReadonlySet<StageTemplate>, depth: number, room: RoomKind): StageTemplate {
+  const eligible = TEMPLATES.filter((t) => !t.opener && (t.room ?? 'standard') === room);
+  const unused = eligible.filter((t) => !used.has(t));
+  const pool = unused.length > 0 ? unused : eligible;
+  const weights = RUN.tierWeights[Math.min(Math.floor(depth / RUN.bandRooms), RUN.tierWeights.length - 1)];
+  const weight = (t: StageTemplate): number => weights?.[t.tier - 1] ?? 0;
+  const total = pool.reduce((sum, t) => sum + weight(t), 0);
+  // Nothing left of the tiers this deep: any will do.
+  if (total === 0) return pool[Math.floor(rng.next() * pool.length)] ?? noTemplate(room);
+  let roll = rng.next() * total;
+  const pick = pool.find((t) => (roll -= weight(t)) < 0);
+  return pick ?? noTemplate(room);
+}
+
+function noTemplate(room: RoomKind): never {
+  throw new Error(`No ${room} stage template`);
 }
 
 /** A template as stage `depth` of the run (0-based). `rng` rolls the depth scaling; without it there is none. */
-export function buildStage(template: StageTemplate, depth: number, sector: number, number: number, mirror: boolean, rng?: Rng): StageDef {
+export function buildStage(template: StageTemplate, depth: number, mirror: boolean, rng?: Rng): StageDef {
   const formations = template.formations ?? [];
   const boss = template.boss ?? null;
   // A boss's vault is given in cells, so bosses always come as drawn.
@@ -54,8 +77,8 @@ export function buildStage(template: StageTemplate, depth: number, sector: numbe
     formations: flipped ? formations.map((f) => (f.cols ? { ...f, cols: mirrorCols(f.cols) } : f)) : formations,
     formationPace: 1 + RUN.depth.formationPerStage * depth,
     boss,
-    sector,
-    number,
+    threat: template.threat ?? template.tier,
+    number: depth + 1,
   };
 }
 

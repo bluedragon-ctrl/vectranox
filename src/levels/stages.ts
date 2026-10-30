@@ -10,13 +10,15 @@ import type { FORMATION } from '../config/tuning';
  * Boss rooms only: `c` core, a filled rectangle of cells that makes one big brick · `t` turret ·
  * `s` spawner · `g` phantom (see `BOSS`).
  *
- * `room` is the kind of room it fills (standard unless given); `tier` is the first sector a template
- * can appear in; elites and bosses prefer templates of their sector's tier. The `opener` always
- * starts the run. Pinball pieces don't move, so keep them out of a formation's way.
+ * `room` is the kind of room it fills (standard unless given); `tier` says how deep in a run it
+ * tends to appear (see `RUN.tierWeights`), and for bosses their order. `threat` is the 1 to 3 pips
+ * announcing how hard it plays, the tier unless given. The `opener` always starts the run.
+ * Pinball pieces don't move, so keep them out of a formation's way.
  */
 export interface StageTemplate {
   name: string;
   tier: 1 | 2 | 3;
+  threat?: 1 | 2 | 3;
   room?: RoomKind;
   opener?: boolean;
   layout: readonly string[];
@@ -72,9 +74,9 @@ export interface StageDef {
   formationPace: number;
   /** Set in boss rooms. */
   boss: BossDef | null;
-  /** 1-based. */
-  sector: number;
-  /** 1-based position in the sector. */
+  /** Pips announcing the room. */
+  threat: number;
+  /** 1-based position in the run. */
   number: number;
 }
 

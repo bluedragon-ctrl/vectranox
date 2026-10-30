@@ -4,7 +4,7 @@ import { readJson, writeJson } from './settings';
 export interface ScoreEntry {
   name: string;
   score: number;
-  /** Where the run ended, as `sector-number`. */
+  /** The room the run ended in (`sector-number` on scores from before sectors went). */
   stage: string;
   /** Cleared the whole run. */
   won: boolean;

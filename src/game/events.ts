@@ -7,8 +7,8 @@ export type WallSide = 'left' | 'right' | 'top';
 /** Every event the simulation can emit. Payloads must be plain data. */
 export type GameEvents = {
   runStart: { seed: number };
-  /** `stage` counts through the run (1-based); `sector` and `number` place it in its sector. */
-  stageStart: { stage: number; sector: number; number: number; name: string; room: RoomKind; bricks: number };
+  /** `stage` counts through the run (1-based). */
+  stageStart: { stage: number; name: string; room: RoomKind; bricks: number };
   ballSpawn: { id: number; x: number; y: number };
   ballLaunch: { id: number; angle: number };
   wallHit: { id: number; side: WallSide; x: number; y: number };

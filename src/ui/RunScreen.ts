@@ -1,5 +1,5 @@
 import { DRAFT, MODS, RARITY_LOOK } from '../config/mods';
-import { ROOM_LABEL } from '../config/run';
+import { ROOM_LABEL, threatPips } from '../config/run';
 import { POWER, POWER_LOOK } from '../config/tuning';
 import type { Game } from '../game/Game';
 import { describeMod } from '../game/mods';
@@ -85,7 +85,7 @@ export class RunScreen {
     h1.textContent = game.stage.room === 'boss' ? 'BOSS CACHE' : game.stage.room === 'elite' ? 'ELITE CACHE' : 'CHOOSE';
     const p = document.createElement('p');
     const room = next ? ROOM_LABEL[next.room] : '';
-    p.textContent = next ? `NEXT  STAGE ${next.sector}-${next.number}${room && `  ${room}`}` : '';
+    p.textContent = next ? `NEXT  ROOM ${next.number}${room && `  ${room}`}  ${threatPips(next.threat)}` : '';
     const list = document.createElement('div');
     list.className = 'cards';
     list.append(...cards.map((spec, i) => this.card(spec, i + 1)));
