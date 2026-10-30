@@ -67,6 +67,9 @@ export const CAPSULE_COLORS = Object.fromEntries(
   (Object.keys(POWER_COLORS) as PowerKind[]).map((k) => [k, capBrightness(POWER_COLORS[k].clone())]),
 ) as Record<PowerKind, THREE.Color>;
 
+/** What a piercing ball turns towards, linear. Not the power's colour: that is the ball's own cyan. */
+export const PIERCE_BALL_COLOR = new THREE.Color(PALETTE.white);
+
 /** Explosive brick's blast ring, linear. */
 export const EXPLOSION_COLOR = new THREE.Color(EXPLOSIVE_COLOR);
 

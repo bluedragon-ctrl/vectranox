@@ -17,7 +17,7 @@ import { PADDLE_FRAGMENT } from './materials/paddle';
 import { PORTAL_FRAGMENT, TARGET_FRAGMENT } from './materials/pinball';
 import { BARRIER_FRAGMENT, BLAST_FRAGMENT, BOLT_FRAGMENT, CAPSULE_FRAGMENT, CHARGE_FRAGMENT, SHOT_FRAGMENT } from './materials/power';
 import { glyphMask } from './glyphs';
-import { BRICK_GAP, brickTint, CAPSULE_COLORS, COLORS, PORTAL_COLORS, POWER_COLORS, SHOT_COLOR, TARGET_COLOR } from './palette';
+import { BRICK_GAP, brickTint, CAPSULE_COLORS, COLORS, PIERCE_BALL_COLOR, PORTAL_COLORS, POWER_COLORS, SHOT_COLOR, TARGET_COLOR } from './palette';
 import { QuadBatch } from './QuadBatch';
 
 /** Screen-space padding (px) between the playfield frame and its area. */
@@ -402,7 +402,7 @@ export class Renderer {
     const level = powerLevel(game, 'barrier');
     if (level > 0) {
       const hit = this.fx.barrierHit;
-      this.barrier.push(FIELD.width / 2, POWER.barrierY, FIELD.width, 1.2, COLORS.yellow, 1, level, hit.x, hit.strength);
+      this.barrier.push(FIELD.width / 2, POWER.barrierY, FIELD.width, 1.2, POWER_COLORS.barrier, 1, level, hit.x, hit.strength);
     }
     this.barrier.commit();
   }
@@ -481,7 +481,7 @@ export class Renderer {
   private drawBalls(game: Game, alpha: number): void {
     const pierce = powerLevel(game, 'pierce');
     const armed = game.charges.detonator > 0 ? game.blastBalls() : [];
-    this.color.copy(COLORS.cyan).lerp(POWER_COLORS.pierce, pierce * 0.7);
+    this.color.copy(COLORS.cyan).lerp(PIERCE_BALL_COLOR, pierce * 0.7);
     this.armedColor.copy(this.color).lerp(POWER_COLORS.detonator, 0.75);
     this.balls.begin();
     this.ballPositions.forEach((pos, i) => {
