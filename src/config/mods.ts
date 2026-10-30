@@ -1,4 +1,5 @@
 import { PALETTE } from './game';
+import { POWER } from './tuning';
 
 /*
  * Mods: the cards picked between stages. Everything about them lives here: name, rarity, how
@@ -10,8 +11,8 @@ export type Rarity = 'common' | 'rare' | 'epic';
 export type RarityWeights = Readonly<Record<Rarity, number>>;
 
 /**
- * Chance of each rarity per card slot, by sector (relative weights; the last row is used past
- * the end). Later sectors lean towards rare and epic cards.
+ * Chance of each rarity per card slot, for each `RUN.bandRooms` rooms of the run (relative weights;
+ * the last row is used past the end). Deeper rooms lean towards rare and epic cards.
  */
 export const RARITY_WEIGHTS: readonly RarityWeights[] = [
   { common: 70, rare: 25, epic: 5 },
@@ -19,8 +20,11 @@ export const RARITY_WEIGHTS: readonly RarityWeights[] = [
   { common: 45, rare: 37, epic: 18 },
 ];
 
-/** The pick after an elite room, in any sector. */
+/** The pick after an elite room, at any depth. */
 export const ELITE_WEIGHTS: RarityWeights = { common: 0, rare: 70, epic: 30 };
+
+/** The pick after a boss, at any depth. */
+export const BOSS_WEIGHTS: RarityWeights = { common: 0, rare: 30, epic: 70 };
 
 /** Card tag and colour for each rarity. */
 export const RARITY_LOOK = {
@@ -59,7 +63,7 @@ const pct = (v: number) => `${Math.round(v * 100)}%`;
 /** 8.399999 → "8.4". */
 const secs = (v: number) => `${Math.round(v * 10) / 10}`;
 /** Balls each ball becomes on a split. */
-const splitInto = (held: Boosts) => 3 + held.extraball;
+const splitInto = (held: Boosts) => POWER.splitInto + held.extraball;
 
 /** Every mod. The key is the mod's id (used by the dev console: `vnx.game.applyMod('wide')`). */
 export const MODS = {
@@ -77,7 +81,7 @@ export const MODS = {
     rarity: 'common',
     maxStacks: 3,
     /** Capsule drop chance per destroyed brick, added (base: `POWER.dropChance`). */
-    perStack: 0.03,
+    perStack: 0.05,
     describe: (v) => `CAPSULE DROP CHANCE +${pct(v)}`,
   },
   magnet: {
@@ -127,7 +131,7 @@ export const MODS = {
     maxStacks: 2,
     /**
      * More balls from every split (multi-ball capsule, multi start, splitter, overload event): each
-     * ball splits into 3 plus this many.
+     * ball splits into `POWER.splitInto` plus this many.
      */
     perStack: 1,
     describe: (v, held) => `MULTI-BALL SPLITS EACH BALL INTO ${splitInto({ ...held, extraball: v })}`,
@@ -145,7 +149,7 @@ export const MODS = {
     rarity: 'common',
     maxStacks: 3,
     /** Seconds of barrier at the start of each stage. */
-    perStack: 7,
+    perStack: 5,
     describe: (v, held) => `START EACH STAGE WITH ${secs(v * (1 + held.extender))} S OF BARRIER`,
   },
 
@@ -239,7 +243,7 @@ export const MODS = {
     name: 'SPLITTER',
     rarity: 'epic',
     maxStacks: 1,
-    /** On/off: every serve launch splits the ball in three. */
+    /** On/off: every serve launch splits the ball, as if a multi-ball capsule was caught. */
     perStack: 1,
     describe: (_, held) => `EVERY SERVE SPLITS THE BALL INTO ${splitInto(held)}`,
   },
@@ -248,7 +252,7 @@ export const MODS = {
     rarity: 'epic',
     maxStacks: 1,
     /** Seconds of laser at the start of each stage (the capsule gives `POWER.kinds.laser.duration`). */
-    perStack: 10,
+    perStack: 5,
     describe: (v, held) => `START EACH STAGE WITH ${secs((v + held.longbeam) * (1 + held.extender))} S OF LASER`,
   },
   cluster: {

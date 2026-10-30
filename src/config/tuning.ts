@@ -22,14 +22,14 @@ export const POWER = {
   maxCapsules: 3,
   kinds: {
     multi: { duration: 0, weight: 14 },
-    laser: { duration: 10, weight: 10 },
+    laser: { duration: 5, weight: 10 },
     expand: { duration: 15, weight: 12 },
     narrow: { duration: 10, weight: 8 },
     slow: { duration: 12, weight: 10 },
     fast: { duration: 10, weight: 8 },
     catch: { duration: 15, weight: 9 },
     pierce: { duration: 8, weight: 6 },
-    barrier: { duration: 12, weight: 7 },
+    barrier: { duration: 8, weight: 7 },
     life: { duration: 0, weight: 3 },
     detonator: { duration: 0, weight: 6 },
   },
@@ -39,6 +39,8 @@ export const POWER = {
   fallSpeed: 70,
   maxBalls: 12,
   maxLives: 9,
+  /** Balls each ball becomes on a split, before the extra ball mod. */
+  splitInto: 2,
   /** Angle between split balls. */
   splitAngle: (22 * Math.PI) / 180,
   expandScale: 1.5,
@@ -71,19 +73,27 @@ export const POWER = {
   },
 } as const;
 
+/** Power colours by family: negative powers are always red, the rest go by what they act on. */
+const POWER_FAMILY = {
+  ball: PALETTE.cyan,
+  paddle: PALETTE.magenta,
+  life: PALETTE.yellow,
+  bad: PALETTE.red,
+} as const;
+
 /** How each power shows up: capsule letter, colour, and whether it is a negative one. */
 export const POWER_LOOK = {
-  multi: { label: 'MULTI', glyph: 'M', color: PALETTE.cyan, bad: false },
-  laser: { label: 'LASER', glyph: 'L', color: PALETTE.magenta, bad: false },
-  expand: { label: 'EXPAND', glyph: 'E', color: PALETTE.blue, bad: false },
-  narrow: { label: 'NARROW', glyph: 'N', color: PALETTE.red, bad: true },
-  slow: { label: 'SLOW', glyph: 'S', color: 0x2dffb4, bad: false },
-  fast: { label: 'FAST', glyph: 'F', color: PALETTE.red, bad: true },
-  catch: { label: 'CATCH', glyph: 'C', color: PALETTE.purple, bad: false },
-  pierce: { label: 'PIERCE', glyph: 'P', color: PALETTE.white, bad: false },
-  barrier: { label: 'BARRIER', glyph: 'B', color: PALETTE.yellow, bad: false },
-  life: { label: 'LIFE', glyph: '+', color: 0xff7ad9, bad: false },
-  detonator: { label: 'DETONATOR', glyph: 'X', color: PALETTE.orange, bad: false },
+  multi: { label: 'MULTI', glyph: 'M', color: POWER_FAMILY.ball, bad: false },
+  laser: { label: 'LASER', glyph: 'L', color: POWER_FAMILY.paddle, bad: false },
+  expand: { label: 'EXPAND', glyph: 'E', color: POWER_FAMILY.paddle, bad: false },
+  narrow: { label: 'NARROW', glyph: 'N', color: POWER_FAMILY.bad, bad: true },
+  slow: { label: 'SLOW', glyph: 'S', color: POWER_FAMILY.ball, bad: false },
+  fast: { label: 'FAST', glyph: 'F', color: POWER_FAMILY.bad, bad: true },
+  catch: { label: 'CATCH', glyph: 'C', color: POWER_FAMILY.paddle, bad: false },
+  pierce: { label: 'PIERCE', glyph: 'P', color: POWER_FAMILY.ball, bad: false },
+  barrier: { label: 'BARRIER', glyph: 'B', color: POWER_FAMILY.ball, bad: false },
+  life: { label: 'LIFE', glyph: '+', color: POWER_FAMILY.life, bad: false },
+  detonator: { label: 'DETONATOR', glyph: 'X', color: POWER_FAMILY.paddle, bad: false },
 } as const satisfies Record<keyof typeof POWER.kinds, { label: string; glyph: string; color: number; bad: boolean }>;
 
 /**
@@ -98,7 +108,7 @@ export const STAGE_EVENTS = {
   kinds: {
     /** A brick spits out a capsule (never a negative one) once few bricks are left. */
     supplyDrop: { chance: 0.75, maxPerStage: 1, bricksLeft: 8 },
-    /** Every ball splits in three when the stage is almost done. */
+    /** Every ball splits (see `POWER.splitInto`) when the stage is almost done. */
     overload: { chance: 1, maxPerStage: 1, bricksLeft: 4 },
     /**
      * No breakable brick hit for `idleTime`: a pulse rises from the paddle and the lowest `maxBricks`
@@ -106,7 +116,7 @@ export const STAGE_EVENTS = {
      */
     pulse: { chance: 1, maxPerStage: 2, idleTime: 10, maxBricks: 8, damage: 1 },
     /** Last few bricks survive `idleTime` without a kill: the paddle gets the laser. */
-    hunter: { chance: 1, maxPerStage: 1, bricksLeft: 3, idleTime: 12, duration: 8 },
+    hunter: { chance: 1, maxPerStage: 1, bricksLeft: 3, idleTime: 12, duration: 5 },
     /** Serving on the last life late in a stage raises the barrier. */
     safetyNet: { chance: 0.5, maxPerStage: 1, lives: 1, bricksLeft: 15, duration: 15 },
     /** Few bricks left: the paddle gets free detonator charges. */
@@ -122,8 +132,8 @@ export const STAGE_EVENT_LOOK = {
   overload: { label: 'OVERLOAD', sub: 'BALLS SPLIT', color: PALETTE.cyan },
   pulse: { label: 'PULSE', sub: 'GRID SHOCKED', color: PALETTE.purple },
   hunter: { label: 'HUNTER', sub: 'LASER ONLINE', color: PALETTE.magenta },
-  safetyNet: { label: 'SAFETY NET', sub: 'BARRIER UP', color: PALETTE.yellow },
-  demolition: { label: 'DEMOLITION', sub: 'CHARGES ARMED', color: PALETTE.orange },
+  safetyNet: { label: 'SAFETY NET', sub: 'BARRIER UP', color: POWER_LOOK.barrier.color },
+  demolition: { label: 'DEMOLITION', sub: 'CHARGES ARMED', color: POWER_LOOK.detonator.color },
 } as const satisfies Record<keyof typeof STAGE_EVENTS.kinds, { label: string; sub: string; color: number }>;
 
 /**
@@ -161,6 +171,31 @@ export const BRICK_TYPES = {
 } as const;
 
 /**
+ * Boss rooms: what every boss shares. What each boss does when is in its room file (see `BossDef`).
+ *
+ * Emitters flash for `windup` seconds before they act. A phase break lasts `phaseBreak` seconds: the
+ * core takes no damage and nothing fires. Damage can't run past a phase's threshold, so one good
+ * shot into a vault can't end the fight. Lasers do `laserDamage` per bolt to the core; everything
+ * else does a whole hit. Portals in a boss room catch a ball from `portalCapture`, as they are
+ * the only way into a vault.
+ *
+ * `shot`: speed, hit radius, and the angle between a fan's shots. `stun`: seconds the paddle can't
+ * move after a shot reaches it. `faller`: speed of a spawner's bricks and how many can be falling
+ * at once. `shadow`: seconds a shadow ball lasts, how many at once, and how far from straight down
+ * it can leave.
+ */
+export const BOSS = {
+  windup: 0.5,
+  phaseBreak: 1.5,
+  laserDamage: 0.15,
+  portalCapture: 9,
+  shot: { speed: 150, radius: 3, fan: (20 * Math.PI) / 180 },
+  stun: 0.7,
+  faller: { speed: 14, max: 3 },
+  shadow: { life: 6, max: 4, spread: (35 * Math.PI) / 180 },
+} as const;
+
+/**
  * Formations: groups of bricks that move while the ball is in play (see `StageTemplate.formations`).
  *
  * A marching formation's breakable bricks reaching `line` cost a life and send it back to its
@@ -177,6 +212,8 @@ export const BRICK_TYPES = {
  * - rotate: orbits the middle of the formation at `rate` radians/s. Bricks stay level, so spacing
  *   them at least 24 units apart (every second row) keeps them from overlapping.
  * - sine: columns bob `height` up and down over `period` seconds, each `wave` radians behind the last.
+ * - hold: stays put. Formations claim bricks by rectangle, so this keeps the middle of a rotating
+ *   ring out of it.
  */
 export const FORMATION = {
   line: 72,
@@ -189,5 +226,6 @@ export const FORMATION = {
     march: { step: 8, beat: 0.42, drop: 12, hopSpeed: 140, fury: 2.2 },
     rotate: { rate: 0.5 },
     sine: { height: 14, period: 3.4, wave: 0.6 },
+    hold: {},
   },
 } as const;

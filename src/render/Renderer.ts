@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { FIELD, PALETTE } from '../config/game';
-import { FORMATION, POWER, POWER_LOOK } from '../config/tuning';
+import { BOSS, FORMATION, POWER, POWER_LOOK } from '../config/tuning';
 import { lerp } from '../core/math';
 import type { VisualSettings } from '../core/settings';
 import type { Game } from '../game/Game';
@@ -15,9 +15,9 @@ import { BRICK_FRAGMENT } from './materials/brick';
 import { FULLSCREEN_VERTEX } from './materials/common';
 import { PADDLE_FRAGMENT } from './materials/paddle';
 import { PORTAL_FRAGMENT, TARGET_FRAGMENT } from './materials/pinball';
-import { BARRIER_FRAGMENT, BLAST_FRAGMENT, BOLT_FRAGMENT, CAPSULE_FRAGMENT, CHARGE_FRAGMENT } from './materials/power';
+import { BARRIER_FRAGMENT, BLAST_FRAGMENT, BOLT_FRAGMENT, CAPSULE_FRAGMENT, CHARGE_FRAGMENT, SHOT_FRAGMENT } from './materials/power';
 import { glyphMask } from './glyphs';
-import { BRICK_GAP, brickTint, CAPSULE_COLORS, COLORS, PORTAL_COLORS, POWER_COLORS, TARGET_COLOR } from './palette';
+import { BRICK_GAP, brickTint, CAPSULE_COLORS, COLORS, PIERCE_BALL_COLOR, PORTAL_COLORS, POWER_COLORS, SHOT_COLOR, TARGET_COLOR } from './palette';
 import { QuadBatch } from './QuadBatch';
 
 /** Screen-space padding (px) between the playfield frame and its area. */
@@ -26,6 +26,7 @@ const MAX_BRICKS = 256;
 const MAX_BALLS = 32;
 const MAX_CAPSULES = 8;
 const MAX_BOLTS = 64;
+const MAX_SHOTS = 64;
 const MAX_TARGETS = 64;
 const MAX_PORTALS = 16;
 /** Portal accretion disks turn at this rate (radians/s). A slow spin, so it keeps going under reduce-FX. */
@@ -50,7 +51,9 @@ const HORIZON = 0.42;
 const SUN = { gapFill: 0.8, minRadius: 0.06, maxRadius: 0.27 } as const;
 /** World units the playfield can move under screen shake (offset, plus roll at its corners). */
 const SHAKE_MARGIN = 12;
-const BRICK_KIND = { normal: 0, steel: 1, explosive: 2, regen: 3 } as const;
+const BRICK_KIND = { normal: 0, steel: 1, explosive: 2, regen: 3, core: 4, turret: 5, spawner: 6, phantom: 7 } as const;
+/** Shadow balls fade out over their last second, and never quite match a real ball's brightness. */
+const SHADOW_LOOK = { fade: 1, alpha: 0.7 } as const;
 const POWER_KINDS = Object.keys(POWER_LOOK) as PowerKind[];
 const CAPSULE_LOOK = Object.fromEntries(
   POWER_KINDS.map((k) => [k, { color: CAPSULE_COLORS[k], mask: glyphMask(POWER_LOOK[k].glyph), bad: POWER_LOOK[k].bad ? 1 : 0 }]),
@@ -121,6 +124,7 @@ export class Renderer {
       uBackdrop: { value: this.backdropTarget.texture },
       uResolution: this.resolution,
       uPxPerUnit: { value: 1 },
+      uTime: { value: 0 },
     },
   });
   private paddle = new QuadBatch({
@@ -138,6 +142,7 @@ export class Renderer {
   private barrier = new QuadBatch({ max: 1, pad: 6, fragmentShader: BARRIER_FRAGMENT, renderOrder: 15 });
   private capsules = new QuadBatch({ max: MAX_CAPSULES, pad: 4, fragmentShader: CAPSULE_FRAGMENT, renderOrder: 22 });
   private bolts = new QuadBatch({ max: MAX_BOLTS, pad: 4, fragmentShader: BOLT_FRAGMENT, renderOrder: 24 });
+  private shots = new QuadBatch({ max: MAX_SHOTS, pad: 4, fragmentShader: SHOT_FRAGMENT, renderOrder: 23 });
   private blast = new QuadBatch({ max: MAX_BALLS, pad: 4, fragmentShader: BLAST_FRAGMENT, renderOrder: 26 });
   private targets = new QuadBatch({ max: MAX_TARGETS, pad: 6, fragmentShader: TARGET_FRAGMENT, renderOrder: 11 });
   private portals = new QuadBatch({ max: MAX_PORTALS, pad: 6, fragmentShader: PORTAL_FRAGMENT, renderOrder: 9 });
@@ -186,6 +191,7 @@ export class Renderer {
       this.barrier.mesh,
       this.trails.batch.mesh,
       this.capsules.mesh,
+      this.shots.mesh,
       this.bolts.mesh,
       this.paddle.mesh,
       this.chargeDots.mesh,
@@ -301,10 +307,11 @@ export class Renderer {
     this.drawBricks(game, alpha);
     this.drawBarrier(game);
     this.drawCapsules(game, alpha);
+    this.drawShots(game, alpha);
     this.drawBolts(game, alpha);
     this.drawPaddle(game, alpha);
     this.drawBlast();
-    this.drawBalls(game);
+    this.drawBalls(game, alpha);
     this.trails.draw(this.fx.now);
     this.fx.particles.draw();
 
@@ -347,6 +354,7 @@ export class Renderer {
 
   private drawBricks(game: Game, alpha: number): void {
     const b = this.bricks;
+    b.uniforms.uTime!.value = this.portalTime;
     b.begin();
     for (const br of game.bricks) {
       if (!br.alive) continue;
@@ -362,6 +370,7 @@ export class Renderer {
         BRICK_KIND[br.kind],
         br.maxHp,
         Math.max(flash * flash, heal),
+        br.kind === 'core' ? (game.fight?.heat ?? 0) : br.charge,
       );
     }
     b.commit();
@@ -393,7 +402,7 @@ export class Renderer {
     const level = powerLevel(game, 'barrier');
     if (level > 0) {
       const hit = this.fx.barrierHit;
-      this.barrier.push(FIELD.width / 2, POWER.barrierY, FIELD.width, 1.2, COLORS.yellow, 1, level, hit.x, hit.strength);
+      this.barrier.push(FIELD.width / 2, POWER.barrierY, FIELD.width, 1.2, POWER_COLORS.barrier, 1, level, hit.x, hit.strength);
     }
     this.barrier.commit();
   }
@@ -406,6 +415,13 @@ export class Renderer {
       this.capsules.push(c.x, y, POWER.capsuleWidth, POWER.capsuleHeight, look.color, 1, look.mask, look.bad);
     }
     this.capsules.commit();
+  }
+
+  private drawShots(game: Game, alpha: number): void {
+    const size = BOSS.shot.radius * 3.6;
+    this.shots.begin();
+    for (const s of game.shots) this.shots.push(lerp(s.px, s.x, alpha), lerp(s.py, s.y, alpha), size, size, SHOT_COLOR);
+    this.shots.commit();
   }
 
   private drawBolts(game: Game, alpha: number): void {
@@ -427,7 +443,7 @@ export class Renderer {
       p.y,
       p.w,
       p.h,
-      COLORS.cyan,
+      game.stun > 0 ? SHOT_COLOR : COLORS.cyan,
       1,
       this.fx.paddlePulse,
       this.fx.paddleHitOffset,
@@ -462,10 +478,10 @@ export class Renderer {
   }
 
   /** Piercing balls burn hotter; with detonator charges held, the balls that would blow are tinted. */
-  private drawBalls(game: Game): void {
+  private drawBalls(game: Game, alpha: number): void {
     const pierce = powerLevel(game, 'pierce');
     const armed = game.charges.detonator > 0 ? game.blastBalls() : [];
-    this.color.copy(COLORS.cyan).lerp(POWER_COLORS.pierce, pierce * 0.7);
+    this.color.copy(COLORS.cyan).lerp(PIERCE_BALL_COLOR, pierce * 0.7);
     this.armedColor.copy(this.color).lerp(POWER_COLORS.detonator, 0.75);
     this.balls.begin();
     this.ballPositions.forEach((pos, i) => {
@@ -473,6 +489,10 @@ export class Renderer {
       if (!ball) return;
       this.balls.push(pos.x, pos.y, ball.r * 2, ball.r * 2, armed.includes(ball) ? this.armedColor : this.color, 1, pierce);
     });
+    for (const s of game.shadows) {
+      const fade = SHADOW_LOOK.alpha * Math.min(1, s.life / SHADOW_LOOK.fade);
+      this.balls.push(lerp(s.px, s.x, alpha), lerp(s.py, s.y, alpha), s.r * 2, s.r * 2, COLORS.purple, fade);
+    }
     this.balls.commit();
   }
 }

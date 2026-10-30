@@ -146,7 +146,7 @@ export class GameFx {
           pushX = ((x - centre.x) / d) * BLAST_PUSH;
           pushY = ((y - centre.y) / d) * BLAST_PUSH;
         }
-        // The brick breaks into pieces radiating from the impact: glass shards and glints, or for an
+        // The brick breaks into pieces radiating from the impact: glass shards and glints, or for
         // any other kind a few metal pieces and nothing else.
         const metal = kind !== 'normal';
         for (const s of fractureRect(x, y, w, h, ix, iy, metal ? 3 : 2)) {
@@ -159,6 +159,19 @@ export class GameFx {
         if (!metal) this.particles.glints(ix, iy, { count: 5, color, speed: [120, 260] });
         // An area hit breaks many bricks in one tick; its own kick stands in for theirs.
         if (!isArea(by)) this.shake.add(0.1);
+      }),
+      ev.on('paddleStun', () => {
+        this.shake.add(0.2);
+        this.paddlePulse = 1;
+        this.paddleHitOffset = 0;
+      }),
+      ev.on('bossPhase', () => {
+        this.shake.add(0.3);
+        this.pulse(COLORS.yellow, 0.12, 0.4);
+      }),
+      ev.on('bossDown', () => {
+        this.shake.add(0.7);
+        this.pulse(COLORS.yellow, 0.3, 0.9);
       }),
       ev.on('stageEvent', ({ kind }) => {
         if (kind !== 'pulse') return;

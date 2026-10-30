@@ -1,4 +1,5 @@
-import { INPUT } from '../config/game';
+import { INPUT, SIM } from '../config/game';
+import { clamp } from './math';
 import type { TickInput } from '../game/types';
 
 export type ControlMode = 'mouse' | 'keyboard';
@@ -29,7 +30,8 @@ function keyAxis(code: string): number {
  * Keys and mouse buttons work in either mode, so players can switch mid-game. Mouse mode
  * uses relative motion under pointer lock. Where the browser refuses the lock (embedded
  * previews, iframes), the paddle follows the visible cursor, but only on ticks the cursor
- * moved, so a resting mouse does not fight the keys.
+ * moved, so a resting mouse does not fight the keys. A cursor that moved on while the paddle
+ * was stunned is caught up with at `INPUT.stunCatchUp`, so the paddle glides back instead of jumping.
  */
 export class Input {
   mode: ControlMode = 'mouse';
@@ -37,6 +39,8 @@ export class Input {
   private dx = 0;
   private cursorX: number | null = null;
   private cursorMoved = false;
+  /** The cursor moved during a stun and the paddle hasn't reached it yet. */
+  private catchUp = false;
   private launch = false;
   private alt = false;
   private mouseHeld = false;
@@ -96,15 +100,16 @@ export class Input {
 
   /**
    * Input for the next tick; consumes accumulated mouse motion and the launch and alt presses.
-   * The launch button doubles as fire: `launch` is the press, `fire` is held.
+   * The launch button doubles as fire: `launch` is the press, `fire` is held. `stunned`: the paddle
+   * can't move this tick.
    */
-  sample(paddleX: number): TickInput {
+  sample(paddleX: number, stunned = false): TickInput {
     const right = RIGHT_KEYS.some((k) => this.held.has(k)) ? 1 : 0;
     const left = LEFT_KEYS.some((k) => this.held.has(k)) ? 1 : 0;
     // The latest press wins, so rolling from one key to the other doesn't stall the paddle.
     const axis = this.tapAxis || (right && left ? this.lastAxis : right - left);
     let dx = this.dx;
-    if (this.absolute && this.cursorMoved && this.cursorX !== null) dx = this.view.screenToWorldX(this.cursorX) - paddleX;
+    if (this.absolute && this.cursorX !== null) dx = this.cursorTravel(this.view.screenToWorldX(this.cursorX) - paddleX, stunned, dx);
     const fire = this.held.has(LAUNCH_KEY) || this.mouseHeld;
     const input: TickInput = { dx, axis, launch: this.launch, fire, alt: this.alt };
     this.dx = this.tapAxis = 0;
@@ -112,9 +117,21 @@ export class Input {
     return input;
   }
 
+  /** Paddle travel this tick when it follows the cursor, `toCursor` away; `rest` when it doesn't. */
+  private cursorTravel(toCursor: number, stunned: boolean, rest: number): number {
+    if (stunned) {
+      this.catchUp ||= this.cursorMoved;
+      return rest;
+    }
+    if (!this.catchUp) return this.cursorMoved ? toCursor : rest;
+    const step = INPUT.stunCatchUp / SIM.tickRate;
+    this.catchUp = Math.abs(toCursor) > step;
+    return clamp(toCursor, -step, step);
+  }
+
   /** Drops anything collected while the game was not running. */
   reset(): void {
     this.dx = this.tapAxis = 0;
-    this.cursorMoved = this.launch = this.alt = false;
+    this.cursorMoved = this.catchUp = this.launch = this.alt = false;
   }
 }

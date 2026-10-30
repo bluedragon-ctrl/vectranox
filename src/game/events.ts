@@ -1,4 +1,5 @@
 import type { RoomKind } from '../config/run';
+import type { FirePattern } from '../levels/stages';
 import type { BrickKind, ExplosionSource, HitSource, ModKind, PowerKind, StageEventKind, TimedPower } from './types';
 
 export type WallSide = 'left' | 'right' | 'top';
@@ -6,8 +7,8 @@ export type WallSide = 'left' | 'right' | 'top';
 /** Every event the simulation can emit. Payloads must be plain data. */
 export type GameEvents = {
   runStart: { seed: number };
-  /** `stage` counts through the run (1-based); `sector` and `number` place it in its sector. */
-  stageStart: { stage: number; sector: number; number: number; name: string; room: RoomKind; bricks: number };
+  /** `stage` counts through the run (1-based). */
+  stageStart: { stage: number; name: string; room: RoomKind; bricks: number };
   ballSpawn: { id: number; x: number; y: number };
   ballLaunch: { id: number; angle: number };
   wallHit: { id: number; side: WallSide; x: number; y: number };
@@ -42,6 +43,18 @@ export type GameEvents = {
   formationStep: { dropped: boolean };
   /** A marching formation reached the line and costs a life; it goes back to its starting height. */
   formationBreach: { lives: number };
+  /** The core reached a phase's threshold; `phase` is 1-based, of `phases`. */
+  bossPhase: { phase: number; phases: number; hp: number };
+  /** The core was destroyed; everything else in the room shatters with it. */
+  bossDown: { x: number; y: number };
+  /** A turret fired `count` shots from (x, y). */
+  shotFired: { x: number; y: number; pattern: FirePattern; count: number };
+  /** A shot reached the paddle, which can't move for a moment. */
+  paddleStun: { x: number; seconds: number };
+  /** A spawner sent a falling brick. */
+  brickSpawn: { id: number; x: number; y: number };
+  /** A phantom released a shadow ball. */
+  shadowSpawn: { id: number; x: number; y: number };
   ballCaught: { id: number; offset: number };
   /**
    * The paddle ended a ball's chain of `count` bricks, which earned `total` bonus points (multiplier

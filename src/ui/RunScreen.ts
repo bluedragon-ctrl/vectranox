@@ -1,6 +1,6 @@
 import { DRAFT, MODS, RARITY_LOOK } from '../config/mods';
-import { ROOM_LABEL } from '../config/run';
-import { POWER } from '../config/tuning';
+import { ROOM_LABEL, threatPips } from '../config/run';
+import { POWER, POWER_LOOK } from '../config/tuning';
 import type { Game } from '../game/Game';
 import { describeMod } from '../game/mods';
 import { cssColor } from './dom';
@@ -9,7 +9,6 @@ export type RunAction = { type: 'pick'; index: number } | { type: 'lives' };
 
 /** Milliseconds the screen ignores input after it opens, so clicks and keys meant for the stage don't choose. */
 const ARM_MS = 500;
-const LIFE_COLOR = 0xff7ad9;
 
 interface CardSpec {
   name: string;
@@ -74,7 +73,7 @@ export class RunScreen {
     cards.push({
       name: `+${DRAFT.lives} LIVES`,
       desc: game.canPickLives ? 'NO MOD THIS TIME' : 'LIVES FULL',
-      color: LIFE_COLOR,
+      color: POWER_LOOK.life.color,
       tag: 'REPAIR',
       note: `${game.lives} → ${Math.min(POWER.maxLives, game.lives + DRAFT.lives)}`,
       disabled: !game.canPickLives,
@@ -83,10 +82,10 @@ export class RunScreen {
 
     const next = game.stages[game.stageIndex + 1];
     const h1 = document.createElement('h1');
-    h1.textContent = game.stage.room === 'elite' ? 'ELITE CACHE' : 'CHOOSE';
+    h1.textContent = game.stage.room === 'boss' ? 'BOSS CACHE' : game.stage.room === 'elite' ? 'ELITE CACHE' : 'CHOOSE';
     const p = document.createElement('p');
     const room = next ? ROOM_LABEL[next.room] : '';
-    p.textContent = next ? `NEXT  STAGE ${next.sector}-${next.number}${room && `  ${room}`}` : '';
+    p.textContent = next ? `NEXT  ROOM ${next.number}${room && `  ${room}`}  ${threatPips(next.threat)}` : '';
     const list = document.createElement('div');
     list.className = 'cards';
     list.append(...cards.map((spec, i) => this.card(spec, i + 1)));

@@ -5,16 +5,20 @@ import { SDF } from './common';
  * shadow and a halo. Normal bricks are stylised glass (fresnel rim, inner highlight, refracted
  * backdrop). The rest are opaque: regenerating ones mint plates, steel ones grey riveted plates,
  * explosive ones hazard-striped casings with a hot core.
+ * A boss's emitters are dark casings with a mark that lights as they wind up. Its core is the one
+ * brick that animates: a reactor casing with an energy bar that pulses faster with each phase.
  *
  * Instance data: colour rgb = tint, alpha = hits left (regenerating bricks show a lit slot per hit).
- * params: x = kind (0 normal, 1 steel, 2 explosive, 3 regenerating), y = hits a regenerating brick
- * started with, z = hit flash.
+ * params: x = kind (0 normal, 1 steel, 2 explosive, 3 regenerating, 4 core, 5 turret, 6 spawner,
+ * 7 phantom), y = hits a regenerating brick started with, z = hit flash,
+ * w = an emitter's wind-up, or the core's heat, 0..1.
  * The instance rectangle is the brick's visual footprint; `uPad` leaves room for halo and shadow.
  */
 export const BRICK_FRAGMENT = /* glsl */ `
 uniform sampler2D uBackdrop;
 uniform vec2 uResolution;
 uniform float uPxPerUnit;
+uniform float uTime;
 varying vec2 vLocal;
 varying vec2 vHalf;
 varying vec4 vColor;
@@ -43,7 +47,10 @@ void main() {
   float flash = vParams.z;
   bool steel = kind > 0.5 && kind < 1.5;
   bool explosive = kind > 1.5 && kind < 2.5;
-  bool regen = kind > 2.5;
+  bool regen = kind > 2.5 && kind < 3.5;
+  bool core = kind > 3.5 && kind < 4.5;
+  bool emitter = kind > 4.5;
+  float pulse = 0.0;
 
   // Top face sits above the side face; together they fill the footprint.
   vec2 hb = vec2(vHalf.x, vHalf.y - DEPTH * 0.5);
@@ -98,6 +105,32 @@ void main() {
     top = mix(top, mix(tint, vec3(1.0), 0.6), fill(core));
     top += vec3(spec) * 0.35 + tint * fres * 0.7;
     side = tint * 0.25;
+  } else if (core) {
+    // A reactor: a ribbed casing round a dark chamber, and a bar of energy in the chamber that
+    // breathes and runs outwards. The heat only changes how fast, so it reads at a glance.
+    float rate = 2.2 + 5.0 * vParams.w;
+    pulse = 0.5 + 0.5 * sin(uTime * rate);
+    float chamber = sdRoundBox(pt, hb - vec2(3.2, 2.6), 1.2);
+    float ribs = step(0.5, fract(pt.x / 4.0)) * (1.0 - fill(chamber));
+    top = tint * (0.3 + 0.28 * diff) * (1.0 - 0.4 * ribs);
+    top += vec3(spec) * 0.5 + mix(tint, vec3(1.0), 0.4) * fres * 0.9;
+    top = mix(top, tint * 0.05, fill(chamber));
+    vec2 q = pt / vec2(hb.x * 0.62, hb.y * 0.34);
+    float energy = exp(-dot(q, q)) * (0.8 + 0.2 * sin(abs(pt.x) * 0.9 - uTime * rate * 1.6));
+    top += mix(tint, vec3(1.0), energy) * energy * (0.55 + 0.75 * pulse) * fill(chamber);
+    side = tint * 0.3;
+  } else if (emitter) {
+    // A dark casing with a mark that says what it does: a down arrow fires, a chevron sends bricks,
+    // a ring releases shadow balls. Dim until it winds up.
+    float charge = vParams.w;
+    float panel = sdRoundBox(pt, vec2(hb.x - 1.4, hb.y - 1.2), 0.6);
+    top = tint * (0.14 + 0.12 * diff) * (1.0 - 0.4 * stroke(panel, 0.3));
+    float mark = abs(length(pt) - 2.5) - 0.7;
+    if (kind < 5.5) mark = max(abs(pt.x) * 0.85 - pt.y * 0.6 - 1.2, pt.y - 3.0);
+    else if (kind < 6.5) mark = max(abs(pt.y - abs(pt.x) * 0.7 + 1.6) - 0.8, abs(pt.x) - 4.6);
+    top = mix(top, mix(tint, vec3(1.0), 0.15 + 0.7 * charge) * (0.55 + 0.75 * charge), fill(mark));
+    top += tint * charge * 0.3 + vec3(spec) * 0.35 + tint * fres * 0.7;
+    side = tint * 0.25;
   } else if (regen) {
     // Plate, not glass: opaque polished metal, dark at the bottom under a strong bevel, with a soft
     // inner glow. The lit slots carry the damage, so the plate itself stays clean.
@@ -137,7 +170,7 @@ void main() {
   col = over(vec4(side, 1.0) * fill(dSil), col);
   col = over(vec4(top, 1.0) * fill(dTop), col);
   float outside = 1.0 - fill(dSil);
-  float halo = exp(-max(dSil, 0.0) * 0.6) * (steel || regen ? 0.08 : 0.2) + flash * exp(-max(dSil, 0.0) * 0.25) * 0.6;
+  float halo = exp(-max(dSil, 0.0) * 0.6) * (steel || regen ? 0.08 : core ? 0.12 + 0.22 * pulse : 0.2) + flash * exp(-max(dSil, 0.0) * 0.25) * 0.6;
   col.rgb += edgeColor * halo * outside;
   gl_FragColor = col;
 }

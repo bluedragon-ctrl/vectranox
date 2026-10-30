@@ -1,8 +1,8 @@
 import { BRICK } from '../src/config/game';
 import { ROOM_LABEL, type RoomKind } from '../src/config/run';
 import { FORMATION } from '../src/config/tuning';
-import type { FormationDef, StageTemplate } from '../src/levels/stages';
-import { checkRoom, checkRun, MAX_ROWS, roomFile, type Problem } from '../src/levels/validate';
+import type { BossDef, FormationDef, StageTemplate } from '../src/levels/stages';
+import { checkRoom, checkRun, isBossDef, MAX_ROWS, roomFile, type Problem } from '../src/levels/validate';
 import type { RoomChange, RoomsState, SaveResult } from './api';
 import { cellAt, drawField, fitField, FORMATION_COLORS, type Cell } from './field';
 import { formatRoom } from './format';
@@ -19,6 +19,8 @@ interface Entry {
 }
 
 type Tool = string;
+type Range = readonly [number, number];
+type Vault = NonNullable<BossDef['vault']>;
 
 const DRAFTS_KEY = 'vectranox.editor.drafts';
 const ERASE = '.';
@@ -27,6 +29,7 @@ const AREA = 'area';
 const EMPTY_ROW = '.'.repeat(BRICK.cols);
 const KINDS = Object.keys(ROOM_LABEL) as RoomKind[];
 const MOTIONS = Object.keys(FORMATION.motions) as FormationDef['motion'][];
+const NEW_BOSS: BossDef = { hp: 16, phases: [{ at: 1, fire: 'straight', turret: 2.5 }] };
 
 const TOOLS: readonly { tool: Tool; label: string; title: string }[] = [
   { tool: '1', label: '1', title: 'Normal, 1 hit' },
@@ -35,6 +38,10 @@ const TOOLS: readonly { tool: Tool; label: string; title: string }[] = [
   { tool: '#', label: '#', title: 'Steel' },
   { tool: '*', label: '*', title: 'Explosive' },
   { tool: 'r', label: 'r', title: 'Regenerating' },
+  { tool: 'c', label: 'c', title: 'Boss core: its cells make one brick, so fill a rectangle' },
+  { tool: 't', label: 't', title: 'Boss turret' },
+  { tool: 's', label: 's', title: 'Boss spawner: sends bricks down to the line' },
+  { tool: 'g', label: 'g', title: 'Boss phantom: releases shadow balls' },
   { tool: 'o', label: 'o', title: 'Pinball target' },
   { tool: PORTAL, label: 'Portal', title: 'Portal end (p); pairs up with the next one placed' },
   { tool: ERASE, label: 'Erase', title: 'Erase (e), or drag with the right button' },
@@ -53,6 +60,7 @@ function make<K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTML
   return node;
 }
 
+const panels = byId('panels');
 const canvas = byId<HTMLCanvasElement>('field');
 const roomList = byId('room-list');
 const filter = byId<HTMLInputElement>('filter');
@@ -169,10 +177,18 @@ function clean(def: FormationDef): FormationDef {
   return { motion, ...(rows ? { rows } : {}), ...(cols ? { cols } : {}), ...(reverse ? { reverse } : {}) };
 }
 
-function shiftRange(range: readonly [number, number] | undefined, by: number, size: number): readonly [number, number] | undefined {
-  if (!range) return range;
+function shiftRange(range: Range, by: number, size: number): Range {
   const [from, to] = range;
   return from + by >= 0 && to + by < size ? [from + by, to + by] : range;
+}
+
+function mirrorRange([from, to]: Range): Range {
+  return [BRICK.cols - 1 - to, BRICK.cols - 1 - from];
+}
+
+/** The fields to spread over a room to move its vault along with its cells, if it has one. */
+function movedVault({ boss }: StageTemplate, move: (vault: Vault) => Vault): Pick<StageTemplate, 'boss'> {
+  return boss?.vault ? { boss: { ...boss, vault: move(boss.vault) } } : {};
 }
 
 /** Moves everything by a cell, wrapping round; formations go along. */
@@ -182,9 +198,10 @@ function shift(rows: number, cols: number): void {
   const grid = gridOf(room);
   const moved = grid.map((_, row) => grid[(row - rows + MAX_ROWS) % MAX_ROWS]?.map((_c, col, line) => line[(col - cols + BRICK.cols) % BRICK.cols] ?? '.') ?? []);
   const formations = room.formations?.map((def) =>
-    clean({ ...def, rows: shiftRange(def.rows, rows, MAX_ROWS), cols: shiftRange(def.cols, cols, BRICK.cols) }),
+    clean({ ...def, rows: def.rows && shiftRange(def.rows, rows, MAX_ROWS), cols: def.cols && shiftRange(def.cols, cols, BRICK.cols) }),
   );
-  change({ ...room, layout: layoutOf(moved), ...(formations ? { formations } : {}) });
+  const vault = movedVault(room, (v) => ({ rows: shiftRange(v.rows, rows, MAX_ROWS), cols: shiftRange(v.cols, cols, BRICK.cols) }));
+  change({ ...room, layout: layoutOf(moved), ...(formations ? { formations } : {}), ...vault });
   renderForm();
 }
 
@@ -192,11 +209,9 @@ function shift(rows: number, cols: number): void {
 function flip(): void {
   const room = current?.room;
   if (!room) return;
-  const formations = room.formations?.map((def) => {
-    const { cols } = def;
-    return cols ? { ...def, cols: [BRICK.cols - 1 - cols[1], BRICK.cols - 1 - cols[0]] as const } : def;
-  });
-  change({ ...room, layout: room.layout.map((row) => [...row].reverse().join('')), ...(formations ? { formations } : {}) });
+  const formations = room.formations?.map((def) => (def.cols ? { ...def, cols: mirrorRange(def.cols) } : def));
+  const vault = movedVault(room, (v) => ({ ...v, cols: mirrorRange(v.cols) }));
+  change({ ...room, layout: room.layout.map((row) => [...row].reverse().join('')), ...(formations ? { formations } : {}), ...vault });
   renderForm();
 }
 
@@ -427,11 +442,15 @@ function renderForm(): void {
   };
   const tier = make('select', {}, ...options([1, 2, 3], room.tier));
   tier.onchange = () => current?.room && change({ ...current.room, tier: Number(tier.value) as StageTemplate['tier'] });
+  const threat = make('select', {}, ...options([1, 2, 3], room.threat ?? room.tier));
+  threat.onchange = () => current?.room && change({ ...current.room, threat: Number(threat.value) as StageTemplate['tier'] });
   const kind = make('select', {}, ...options(KINDS, room.room ?? 'standard'));
   kind.onchange = () => {
     if (!current?.room) return;
-    const { room: _old, ...rest } = current.room;
-    change(kind.value === 'standard' ? rest : { ...rest, room: kind.value as RoomKind });
+    const { room: _old, boss, ...rest } = current.room;
+    const next = kind.value === 'standard' ? rest : { ...rest, room: kind.value as RoomKind };
+    change(kind.value === 'boss' ? { ...next, boss: boss ?? NEW_BOSS } : next);
+    renderForm();
   };
   const opener = make('input', { type: 'checkbox', checked: room.opener === true });
   opener.onchange = () => {
@@ -450,12 +469,32 @@ function renderForm(): void {
     renderForm();
   };
 
+  // Hand-edited: a fight is tuned as numbers, and the checks below say what is wrong with them.
+  const bossBlock = make('textarea', { rows: 10, spellcheck: false, value: JSON.stringify(room.boss ?? NEW_BOSS, null, 1) });
+  bossBlock.onchange = () => {
+    if (!current?.room) return;
+    let boss: unknown;
+    try {
+      boss = JSON.parse(bossBlock.value);
+    } catch {
+      showMessage('The boss block is not valid JSON.', true);
+      return;
+    }
+    if (!isBossDef(boss)) {
+      showMessage('The boss block needs a numeric hp, phases each with a numeric at, and any vault with rows and cols.', true);
+      return;
+    }
+    change({ ...current.room, boss });
+    showMessage('');
+  };
+
   revertButton = make('button', { onclick: revert, disabled: !current.base || !isChanged(current) }, 'Revert');
   formPanel.replaceChildren(
     field('Name', name),
     field('Tier', tier),
+    field('Threat', threat),
     field('Kind', kind),
-    make('label', { className: 'check' }, opener, 'Always opens the run'),
+    make('label', { className: 'check' }, opener, 'Can open the run'),
     make(
       'div',
       { className: 'row actions' },
@@ -466,6 +505,7 @@ function renderForm(): void {
     make('h2', {}, 'FORMATIONS'),
     ...(room.formations ?? []).map(formationCard),
     add,
+    ...(room.room === 'boss' ? [make('h2', {}, 'BOSS'), bossBlock] : []),
   );
 }
 
@@ -491,6 +531,7 @@ function refresh(): void {
   const count = entries.filter(isChanged).length;
   const errors = saveProblems();
   if (revertButton) revertButton.disabled = !current?.base || !isChanged(current);
+  panels.inert = saving;
   playButton.disabled = !current?.room || checkRoom(current.room).some((p) => p.level === 'error');
   saveButton.disabled = saving || count === 0 || errors.length > 0;
   saveButton.textContent = saving ? 'Saving…' : count > 0 ? `Save ${count} room${count === 1 ? '' : 's'} to PR` : 'Save';
@@ -551,10 +592,11 @@ canvas.addEventListener('pointerleave', () => {
 
 window.addEventListener('keydown', (e) => {
   const target = e.target as HTMLElement;
-  if (target.tagName === 'INPUT' || target.tagName === 'SELECT') return;
+  if (saving || target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.tagName === 'TEXTAREA') return;
   if (e.ctrlKey || e.metaKey) {
-    if (e.key === 'z') step(e.shiftKey ? 'redo' : 'undo');
-    else if (e.key === 'y') step('redo');
+    const letter = e.key.toLowerCase();
+    if (letter === 'z') step(e.shiftKey ? 'redo' : 'undo');
+    else if (letter === 'y') step('redo');
     else return;
     e.preventDefault();
     return;
@@ -588,6 +630,10 @@ function showMessage(text: string | Node, bad = false): void {
   message.classList.toggle('bad', bad);
 }
 
+function errorText(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 async function api<T>(init?: RequestInit): Promise<T> {
   const res = await fetch('/api/rooms', init);
   const data = (await res.json()) as T & { error?: string };
@@ -600,14 +646,21 @@ async function save(): Promise<void> {
   showMessage('Saving…');
   refresh();
   try {
-    const { pr, created } = await api<SaveResult>({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(changes()) });
+    const { pr, created, warning } = await api<SaveResult>({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(changes()) });
+    const open = current?.room?.name;
+    entries = entries.filter((e) => e.base);
     for (const entry of entries) entry.room = entry.base;
     saveDrafts();
-    await load(current?.room?.name);
+    let note = warning ?? '';
+    try {
+      await load(open);
+    } catch (err) {
+      note = `Saved, but reload the page: ${errorText(err)}`;
+    }
     const link = make('a', { href: pr.url, target: '_blank', rel: 'noreferrer' }, `PR #${pr.number}`);
-    showMessage(make('span', {}, created ? 'Opened ' : 'Updated ', link));
+    showMessage(make('span', {}, created ? 'Opened ' : 'Updated ', link, note && `. ${note}`), note !== '');
   } catch (err) {
-    showMessage(err instanceof Error ? err.message : String(err), true);
+    showMessage(errorText(err), true);
   } finally {
     saving = false;
     refresh();
@@ -620,7 +673,7 @@ async function load(open?: string): Promise<void> {
   commit = state.commit;
   entries = state.rooms.map(({ file, room }) => ({ file, base: room, room, since: commit, undo: [], redo: [] }));
   for (const { file, room, since } of loadDrafts()) {
-    const entry = entries.find((e) => e.file === file);
+    const entry = file ? entries.find((e) => e.file === file) : undefined;
     if (entry) Object.assign(entry, { room, since });
     else if (room) entries.push({ file: null, base: null, room, since, undo: [], redo: [] });
   }
@@ -636,4 +689,4 @@ async function load(open?: string): Promise<void> {
 
 renderTools();
 fitField(canvas);
-load().catch((err: unknown) => showMessage(err instanceof Error ? err.message : String(err), true));
+load().catch((err: unknown) => showMessage(errorText(err), true));

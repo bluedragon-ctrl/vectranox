@@ -128,6 +128,34 @@ export class GameSounds {
       ev.on('formationBreach', () => {
         this.play('breach', (s) => s.notes([660, 494, 660, 494], 0.1, { type: 'square', cutoff: 2000, dur: 0.09, gain: 0.08 }));
       }),
+      ev.on('shotFired', ({ x }) => {
+        this.play('shot', (s) => s.tone({ type: 'square', freq: 520, to: 180, cutoff: 1800, dur: 0.1, gain: 0.07, pan: pan(x) }));
+      }),
+      ev.on('paddleStun', ({ x }) => {
+        this.combo = 0;
+        this.play('stun', (s) => {
+          s.tone({ type: 'sawtooth', freq: 240, to: 90, cutoff: 1400, dur: 0.22, gain: 0.2, pan: pan(x) });
+          s.noise({ filter: 'bandpass', freq: 900, q: 2, dur: 0.16, gain: 0.2, pan: pan(x) });
+        });
+      }),
+      ev.on('brickSpawn', ({ x }) => {
+        this.play('spawn', (s) => s.tone({ type: 'triangle', freq: 150, to: 95, dur: 0.14, gain: 0.16, pan: pan(x) }));
+      }),
+      ev.on('shadowSpawn', ({ x }) => {
+        this.play('shadow', (s) => s.tone({ freq: 700, to: 340, dur: 0.2, gain: 0.05, pan: pan(x) }));
+      }),
+      ev.on('bossPhase', () => {
+        this.play('phase', (s) => {
+          s.notes([note(-5, C5), note(-2, C5), note(1, C5)], 0.09, { type: 'sawtooth', cutoff: 1800, dur: 0.18, gain: 0.1 });
+          s.noise({ filter: 'lowpass', freq: 1200, to: 200, dur: 0.4, gain: 0.2 });
+        });
+      }),
+      ev.on('bossDown', () => {
+        this.play('bossDown', (s) => {
+          s.noise({ filter: 'lowpass', freq: 3000, to: 90, dur: 1, gain: 0.55 });
+          s.tone({ freq: 150, to: 28, dur: 0.9, gain: 0.55 });
+        });
+      }),
       ev.on('barrierHit', ({ x }) => {
         this.play('barrier', (s) => {
           s.tone({ freq: 660, to: 990, dur: 0.16, gain: 0.16, pan: pan(x) });
