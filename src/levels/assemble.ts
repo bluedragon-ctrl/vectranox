@@ -1,5 +1,5 @@
 import { BRICK } from '../config/game';
-import { RUN, type RoomKind } from '../config/run';
+import { ROOM_TIME, RUN, type RoomKind } from '../config/run';
 import { Rng } from '../core/rng';
 import { TEMPLATES, type StageDef, type StageTemplate } from './stages';
 
@@ -72,14 +72,16 @@ export function buildStage(template: StageTemplate, depth: number, mirror: boole
   const boss = template.boss ?? null;
   // A boss's vault is given in cells, so bosses always come as drawn.
   const flipped = mirror && !boss;
+  const room = template.room ?? 'standard';
   return {
     name: template.name,
-    room: template.room ?? 'standard',
+    room,
     layout: scaleLayout(template.layout, depth, flipped, rng),
     formations: flipped ? formations.map((f) => (f.cols ? { ...f, cols: mirrorCols(f.cols) } : f)) : formations,
     formationPace: 1 + RUN.depth.formationPerStage * depth,
     boss,
     threat: template.threat ?? template.tier,
+    timeLimit: template.timeLimit ?? ROOM_TIME[room],
     number: depth + 1,
   };
 }

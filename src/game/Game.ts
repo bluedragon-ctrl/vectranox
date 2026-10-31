@@ -1,6 +1,6 @@
 import { BALL, BRICK, FIELD, PADDLE, RULES, SCORE, SIM } from '../config/game';
-import { DRAFT, MODS, PRICES } from '../config/mods';
-import { BOSS_ROOM, ELITE, ROOM_CREDITS } from '../config/run';
+import { ANCHOR_DROP, DRAFT, MODS, PRICES } from '../config/mods';
+import { BOSS_ROOM, ELITE, ROOM_CREDITS, TIME_BONUS } from '../config/run';
 import { BOSS, BRICK_TYPES, FORMATION, PINBALL, POWER, POWER_LOOK, STAGE_EVENTS } from '../config/tuning';
 import { EventBus } from '../core/events';
 import { clamp, lerp } from '../core/math';
@@ -117,10 +117,14 @@ export class Game {
   score = 0;
   lives: number = RULES.lives;
   tick = 0;
-  /** Position in `PINBALL.multipliers`; completing the target bank moves it up, losing a life resets it. */
+  /** Position in `PINBALL.multipliers`; a target bank or a flawless room moves it up, `loseMultiplier` down. */
   multiplierStep = 0;
+  /** No life lost and no second wind used in this room yet; clearing it so moves the multiplier up. */
+  flawless = true;
   /** The serve being waited on follows a formation reaching the line. */
   breached = false;
+  /** Seconds of play left on this room's time limit; the time bonus needs some left at the clear. */
+  timeLeft = 0;
 
   private rng: Rng;
   /** Mod offers, so in-stage play doesn't shift them. */
@@ -166,7 +170,7 @@ export class Game {
   get multiplier(): number {
     const steps = PINBALL.multipliers;
     const base = steps[Math.min(this.multiplierStep, steps.length - 1)] ?? 1;
-    // The amplifier mod only adds once a target bank has lit the multiplier.
+    // The amplifier mod only adds once the multiplier is lit.
     return this.multiplierStep > 0 ? base + this.modValue('amplifier') : base;
   }
 
@@ -219,6 +223,7 @@ export class Game {
         if (input.launch) this.launch();
         break;
       case 'play':
+        this.tickRoomTime(dt);
         this.movePaddle(dt, input);
         this.tickPowers(dt);
         this.handleButtons(dt, input);
@@ -401,6 +406,8 @@ export class Game {
     this.keyHeld = 0;
     this.stageEvents.reset();
     this.secondWinds = 0;
+    this.flawless = true;
+    this.timeLeft = stage.timeLimit;
     this.events.emit('stageStart', {
       stage: stage.number,
       name: stage.name,
@@ -415,9 +422,10 @@ export class Game {
     if (this.mods.laserstart > 0) this.applyPower('laser', this.modValue('laserstart'));
   }
 
-  /** Credits clearing this room pays; none for the last, with no pick after it. */
+  /** Credits clearing this room pays, time bonus included; none for the last, with no pick after it. */
   get roomCredits(): number {
-    return this.stageIndex + 1 >= this.stages.length ? 0 : ROOM_CREDITS[this.stage.room] + this.modValue('salvage');
+    if (this.stageIndex + 1 >= this.stages.length) return 0;
+    return ROOM_CREDITS[this.stage.room] + this.modValue('salvage') + (this.timeLeft > 0 ? TIME_BONUS.credits : 0);
   }
 
   /** Stage cleared: the run ends after the last one; otherwise it pays and the pick opens. */
@@ -514,6 +522,13 @@ export class Game {
   private launchBall(b: Ball, angle: number): void {
     aim(b, angle, this.ballSpeed(b));
     this.events.emit('ballLaunch', { id: b.id, angle: (angle * 180) / Math.PI });
+  }
+
+  /** Runs the room's clock down; running out loses the time bonus and nothing else. */
+  private tickRoomTime(dt: number): void {
+    if (this.timeLeft === 0) return;
+    this.timeLeft = Math.max(0, this.timeLeft - dt);
+    if (this.timeLeft === 0) this.events.emit('timeUp', { stage: this.stageIndex + 1 });
   }
 
   /** Runs every play tick, after the stage was resolved. Triggers for the ongoing events. */
@@ -880,12 +895,14 @@ export class Game {
       this.bricks = this.bricks.filter((br) => br.alive);
       const { room } = this.stage;
       const bonus = room === 'boss' ? BOSS_ROOM.clearBonus : room === 'elite' ? ELITE.clearBonus : 0;
-      this.score += bonus;
+      const timeBonus = this.timeLeft > 0 ? TIME_BONUS.score : 0;
+      this.score += bonus + timeBonus;
+      if (this.flawless) this.raiseMultiplier();
       this.balls = [];
       this.clearThreats();
       this.clearPowers();
       this.setState('clear');
-      this.events.emit('stageClear', { stage: this.stageIndex + 1, score: this.score, bonus });
+      this.events.emit('stageClear', { stage: this.stageIndex + 1, score: this.score, bonus, timeBonus, flawless: this.flawless, multiplier: this.multiplier });
       return;
     }
     if (this.bricks.some((br) => !br.alive)) this.bricks = this.bricks.filter((br) => br.alive);
@@ -907,6 +924,7 @@ export class Game {
     if (this.balls.length === 0) {
       if (this.secondWinds < this.modValue('secondwind')) {
         this.secondWinds++;
+        this.loseMultiplier();
         this.events.emit('secondWind', { left: this.modValue('secondwind') - this.secondWinds });
         this.serve(true);
       } else this.loseLife();
@@ -915,7 +933,7 @@ export class Game {
 
   private loseLife(): void {
     this.lives--;
-    this.multiplierStep = this.mods.anchor > 0 ? Math.max(0, this.multiplierStep - 1) : 0;
+    this.loseMultiplier();
     this.events.emit('lifeLost', { lives: this.lives });
     if (this.lives > 0) {
       this.serve();
@@ -1065,9 +1083,19 @@ export class Game {
       t.lit = false;
       t.hitTick = this.tick;
     }
-    this.multiplierStep = Math.min(this.multiplierStep + 1, PINBALL.multipliers.length - 1);
+    this.raiseMultiplier();
     this.score += PINBALL.bankBonus;
     this.events.emit('targetBank', { multiplier: this.multiplier, bonus: PINBALL.bankBonus });
+  }
+
+  private raiseMultiplier(): void {
+    this.multiplierStep = Math.min(this.multiplierStep + 1, PINBALL.multipliers.length - 1);
+  }
+
+  /** A lost life or a second wind: the room stops being flawless, and without anchor the whole multiplier goes. */
+  private loseMultiplier(): void {
+    this.flawless = false;
+    this.multiplierStep = Math.max(0, this.multiplierStep - (ANCHOR_DROP[this.mods.anchor - 1] ?? Infinity));
   }
 
   /** The paddle grown by `r` on every side. Returns a shared object, valid until the next call. */

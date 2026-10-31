@@ -431,6 +431,11 @@ body {
   margin-right: auto;
 }
 
+/* The room's time limit ran out: the bonus is gone. */
+#hud-time.out {
+  color: var(--text-dim);
+}
+
 /* The number the player chases. */
 .score-main {
   display: flex;

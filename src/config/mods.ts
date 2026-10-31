@@ -22,6 +22,9 @@ export const EPIC_CHANCE = {
   boss: 1,
 } as const;
 
+/** Multiplier steps a lost multiplier drops with 1, 2, 3... stacks of the anchor mod, instead of all of them. */
+export const ANCHOR_DROP = [3, 2, 1] as const;
+
 /** Card tag and colour for each rarity. */
 export const RARITY_LOOK = {
   common: { label: 'COMMON', color: PALETTE.cyan },
@@ -179,11 +182,11 @@ export const MODS = {
     rarity: 'rare',
     maxStacks: 2,
     /**
-     * Times per stage that losing the last ball serves a new one instead of costing a life
-     * (powers and the multiplier are kept).
+     * Times per stage that losing the last ball serves a new one instead of costing a life.
+     * Powers are kept; the multiplier goes as for a lost life, and the room is no longer flawless.
      */
     perStack: 1,
-    describe: (v) => `${v === 1 ? 'ONCE' : `${v} TIMES`} A STAGE, A LOST BALL COSTS NO LIFE`,
+    describe: (v) => `${v === 1 ? 'ONCE' : `${v} TIMES`} A STAGE, A LOST BALL COSTS NO LIFE, ONLY THE MULTIPLIER`,
   },
   laserpierce: {
     name: 'PIERCING LASER',
@@ -197,9 +200,20 @@ export const MODS = {
     name: 'AMPLIFIER',
     rarity: 'rare',
     maxStacks: 3,
-    /** Added to the score multiplier while a target bank has it above ×1 (×2 → ×3, ×3 → ×4, ...). */
+    /** Added to the score multiplier while it is above ×1 (×2 → ×3, ×3 → ×4, ...). */
     perStack: 1,
     describe: (v) => `LIT MULTIPLIER +${v} (×2 BECOMES ×${2 + v})`,
+  },
+  anchor: {
+    name: 'ANCHOR',
+    rarity: 'rare',
+    maxStacks: ANCHOR_DROP.length,
+    /** Index into `ANCHOR_DROP`, plus 1. */
+    perStack: 1,
+    describe: (v) => {
+      const steps = ANCHOR_DROP[v - 1];
+      return `LOSING THE MULTIPLIER ONLY DROPS IT ${steps} STEP${steps === 1 ? '' : 'S'}`;
+    },
   },
   portalsplit: {
     name: 'WORMHOLE ECHO',
@@ -226,14 +240,6 @@ export const MODS = {
     /** Extra hits each ball hit deals. */
     perStack: 1,
     describe: (v) => `BALL HITS DEAL ${1 + v}× DAMAGE`,
-  },
-  anchor: {
-    name: 'ANCHOR',
-    rarity: 'epic',
-    maxStacks: 1,
-    /** On/off: losing a life drops the multiplier one step instead of resetting it. */
-    perStack: 1,
-    describe: () => 'A LOST LIFE ONLY DROPS THE MULTIPLIER ONE STEP',
   },
   splitter: {
     name: 'SPLITTER',

@@ -3,7 +3,7 @@ import { AudioEngine } from './audio/AudioEngine';
 import { GameSounds } from './audio/GameSounds';
 import { Input, type ControlMode } from './core/input';
 import { PALETTE } from './config/game';
-import { BOSS_ROOM, ELITE, ROOM_LABEL, threatPips } from './config/run';
+import { BOSS_ROOM, ELITE, ROOM_LABEL, threatPips, TIME_BONUS } from './config/run';
 import { startLoop } from './core/loop';
 import { addScore, formatScore, loadLastName, loadScores, NAME_LENGTH, rankOf, type ScoreEntry } from './core/scores';
 import { loadAudioSettings, loadVisualSettings, saveAudioSettings, saveVisualSettings } from './core/settings';
@@ -358,11 +358,19 @@ function endTitle(): string {
   return game.state === 'complete' ? 'RUN COMPLETE' : 'GAME OVER';
 }
 
-/** What the room just cleared paid: an elite or boss bonus, then its credits. */
+/** What the room just cleared paid: an elite or boss bonus, the time bonus, the flawless multiplier, then its credits. */
 function clearSub(g: Game): string {
   const bonus = g.stage.room === 'boss' ? `BOSS BONUS +${BOSS_ROOM.clearBonus}` : g.stage.room === 'elite' ? `ELITE BONUS +${ELITE.clearBonus}` : '';
+  const time = g.timeLeft > 0 ? `TIME BONUS +${TIME_BONUS.score}` : '';
+  const flawless = g.flawless ? `FLAWLESS  MULTIPLIER ×${g.multiplier}` : '';
   const pay = g.roomCredits;
-  return [bonus, pay > 0 ? `+${pay} CREDIT${pay === 1 ? '' : 'S'}` : ''].filter(Boolean).join('\n');
+  return [bonus, time, flawless, pay > 0 ? `+${pay} CREDIT${pay === 1 ? '' : 'S'}` : ''].filter(Boolean).join('\n');
+}
+
+/** Whole seconds as M:SS, rounded up so it only reads 0:00 once the time is really gone. */
+function formatTime(seconds: number): string {
+  const whole = Math.ceil(seconds);
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`;
 }
 
 /** This room out of the run's total. */
@@ -387,6 +395,7 @@ renderScores(scoreList, scores);
 
 const hudScore = el('hud-score');
 const hudRoom = el('hud-room');
+const hudTime = el('hud-time');
 const hudLives = el('hud-lives');
 const hudCredits = el('hud-credits');
 const hudChain = el('hud-chain');
@@ -428,6 +437,8 @@ startLoop({
     if (frameTime > 0) fps += (1 / frameTime - fps) * 0.05;
     setText(hudScore, formatScore(game.score));
     setText(hudRoom, roomCount(game));
+    setText(hudTime, formatTime(game.timeLeft));
+    hudTime.classList.toggle('out', game.timeLeft === 0);
     setText(hudLives, String(game.lives));
     setText(hudCredits, String(game.credits));
     setText(hudChain, formatChain(game));

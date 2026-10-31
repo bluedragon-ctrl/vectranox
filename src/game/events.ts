@@ -78,11 +78,17 @@ export type GameEvents = {
   /** A stage event fired; `bricks` is how many breakable bricks were left. */
   stageEvent: { kind: StageEventKind; bricks: number };
   ballLost: { id: number };
-  /** The last ball was lost but the second wind mod served a new one; `left` uses remain this stage. */
+  /** The last ball was lost but the second wind mod served a new one, at the cost of the multiplier; `left` uses remain this stage. */
   secondWind: { left: number };
   lifeLost: { lives: number };
-  /** `bonus` is what an elite room paid on top; `score` includes it. */
-  stageClear: { stage: number; score: number; bonus: number };
+  /** The room's time limit ran out; it can still be cleared, without the time bonus. */
+  timeUp: { stage: number };
+  /**
+   * `bonus` is what an elite room paid on top and `timeBonus` what beating the limit did; `score`
+   * includes both. `flawless`: no life or second wind was spent in the room, which moved the score
+   * `multiplier` up.
+   */
+  stageClear: { stage: number; score: number; bonus: number; timeBonus: number; flawless: boolean; multiplier: number };
   /** The pick between stages opened with these mod offers and `credits` to spend. */
   draftOpen: { stage: number; offers: ModKind[]; credits: number };
   /** A mod was bought, `credits` left. */
