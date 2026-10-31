@@ -1,10 +1,11 @@
+import type { PowerKind, TimedPower } from '../game/types';
 import { PALETTE } from './game';
-import { POWER } from './tuning';
 
 /*
  * Mods: the cards bought between stages. Everything about them lives here: name, rarity, how
  * far they stack, the effect of one stack and the card text. Edit freely; the simulation only
- * reads this (each mod's effect is applied in game/Game.ts where noted).
+ * reads this. Mods that grant or lengthen powers say so here (`grant`, `addSeconds`,
+ * `stretchGood`), the rest are applied in game/Game.ts where noted.
  */
 
 export type Rarity = 'common' | 'rare' | 'epic';
@@ -40,29 +41,34 @@ export interface ModDef {
   maxStacks: number;
   /** Effect of one stack; stacks add up. The unit is given per mod. */
   perStack: number;
+  /** Grants `power` on `on`, as a capsule would; the amount is the mod's total effect (seconds, or charges). */
+  grant?: { on: GrantTrigger; power: PowerKind };
+  /** The total effect is seconds added to every grant of this power, before `stretchGood`. */
+  addSeconds?: TimedPower;
+  /** The total effect is a fraction added to the time of every good timed power. */
+  stretchGood?: true;
   /**
    * Card text for a total effect (`perStack` × stacks), so the text always matches the numbers.
-   * `held` has the totals of the mods already held, for cards whose numbers they change.
+   * `held` gives the numbers the mods held change, with this card's stacks counted.
    */
-  describe: (total: number, held: Boosts) => string;
+  describe: (total: number, held: HeldEffects) => string;
 }
 
-/** Totals of the mods that change other mods' numbers (as applied in game/Game.ts). */
-export interface Boosts {
-  /** Good timed powers last this fraction longer, so do the stage-start ones. */
-  extender: number;
-  /** Seconds added to every laser grant, before the extender. */
-  longbeam: number;
-  /** Extra balls per ball from every split. */
-  extraball: number;
+/** When a mod's `grant` happens: a stage opens, a ball is served, the stage's first ball is, balls split. */
+export type GrantTrigger = 'stageStart' | 'launch' | 'firstLaunch' | 'split';
+
+/** Numbers on cards that depend on other mods, worked out as the game does (see game/mods.ts). */
+export interface HeldEffects {
+  /** What a grant of `base` seconds of `kind` lasts. */
+  powerSeconds: (kind: TimedPower, base: number) => number;
+  /** Balls each ball becomes on a split. */
+  splitInto: number;
 }
 
 /** 0.15 → "15%". */
 const pct = (v: number) => `${Math.round(v * 100)}%`;
 /** 8.399999 → "8.4". */
 const secs = (v: number) => `${Math.round(v * 10) / 10}`;
-/** Balls each ball becomes on a split. */
-const splitInto = (held: Boosts) => POWER.splitInto + held.extraball;
 
 /** Every mod. The key is the mod's id (used by the dev console: `vnx.game.applyMod('wide')`). */
 export const MODS = {
@@ -97,6 +103,7 @@ export const MODS = {
     maxStacks: 3,
     /** Duration of good timed powers, fraction added. */
     perStack: 0.2,
+    stretchGood: true,
     describe: (v) => `GOOD POWERS LAST ${pct(v)} LONGER`,
   },
   dampener: {
@@ -114,7 +121,8 @@ export const MODS = {
     maxStacks: 3,
     /** Seconds added to every laser grant (capsule, laser start, hunter event), before the extender. */
     perStack: 3,
-    describe: (v, held) => `LASER LASTS ${secs(v * (1 + held.extender))} S LONGER`,
+    addSeconds: 'laser',
+    describe: (_, held) => `LASER LASTS ${secs(held.powerSeconds('laser', 0))} S LONGER`,
   },
   multistart: {
     name: 'MULTI START',
@@ -122,7 +130,8 @@ export const MODS = {
     maxStacks: 1,
     /** On/off: the first launch of each stage splits the ball, as if a multi-ball capsule was caught. */
     perStack: 1,
-    describe: (_, held) => `EACH STAGE'S FIRST LAUNCH SPLITS THE BALL INTO ${splitInto(held)}`,
+    grant: { on: 'firstLaunch', power: 'multi' },
+    describe: (_, held) => `EACH STAGE'S FIRST LAUNCH SPLITS THE BALL INTO ${held.splitInto}`,
   },
   extraball: {
     name: 'EXTRA BALL',
@@ -133,7 +142,7 @@ export const MODS = {
      * ball splits into `POWER.splitInto` plus this many.
      */
     perStack: 1,
-    describe: (v, held) => `MULTI-BALL SPLITS EACH BALL INTO ${splitInto({ ...held, extraball: v })}`,
+    describe: (_, held) => `MULTI-BALL SPLITS EACH BALL INTO ${held.splitInto}`,
   },
   armory: {
     name: 'ARMORY',
@@ -141,6 +150,7 @@ export const MODS = {
     maxStacks: 3,
     /** Bricks each stage's first ball explodes on (see `POWER.detonator`). */
     perStack: 1,
+    grant: { on: 'stageStart', power: 'detonator' },
     describe: (v) => `EACH STAGE'S FIRST BALL EXPLODES ON ITS NEXT ${v === 1 ? 'BRICK' : `${v} BRICKS`}`,
   },
   failsafe: {
@@ -149,7 +159,8 @@ export const MODS = {
     maxStacks: 3,
     /** Seconds of barrier at the start of each stage. */
     perStack: 5,
-    describe: (v, held) => `START EACH STAGE WITH ${secs(v * (1 + held.extender))} S OF BARRIER`,
+    grant: { on: 'stageStart', power: 'barrier' },
+    describe: (v, held) => `START EACH STAGE WITH ${secs(held.powerSeconds('barrier', v))} S OF BARRIER`,
   },
   dilation: {
     name: 'TIME DILATION',
@@ -274,7 +285,8 @@ export const MODS = {
     maxStacks: 1,
     /** On/off: every serve launch splits the ball, as if a multi-ball capsule was caught. */
     perStack: 1,
-    describe: (_, held) => `EVERY SERVE SPLITS THE BALL INTO ${splitInto(held)}`,
+    grant: { on: 'launch', power: 'multi' },
+    describe: (_, held) => `EVERY SERVE SPLITS THE BALL INTO ${held.splitInto}`,
   },
   laserstart: {
     name: 'LASER START',
@@ -282,7 +294,8 @@ export const MODS = {
     maxStacks: 1,
     /** Seconds of laser at the start of each stage (the capsule gives `POWER.kinds.laser.duration`). */
     perStack: 5,
-    describe: (v, held) => `START EACH STAGE WITH ${secs((v + held.longbeam) * (1 + held.extender))} S OF LASER`,
+    grant: { on: 'stageStart', power: 'laser' },
+    describe: (v, held) => `START EACH STAGE WITH ${secs(held.powerSeconds('laser', v))} S OF LASER`,
   },
   cluster: {
     name: 'CLUSTER CHARGE',
@@ -301,7 +314,8 @@ export const MODS = {
      * event). A longer barrier already up is left alone.
      */
     perStack: 5,
-    describe: (v, held) => `EVERY MULTI-BALL SPLIT RAISES ${secs(v * (1 + held.extender))} S OF BARRIER`,
+    grant: { on: 'split', power: 'barrier' },
+    describe: (v, held) => `EVERY MULTI-BALL SPLIT RAISES ${secs(held.powerSeconds('barrier', v))} S OF BARRIER`,
   },
   salvage: {
     name: 'SALVAGE',

@@ -13,7 +13,8 @@ import { PALETTE } from './game';
  * weight to 0 to switch a kind off). No capsule drops while `maxCapsules` are already falling.
  *
  * Durations are in seconds; 0 means the power is instant. Picking a timed power again restarts
- * its timer; opposites (expand/narrow, slow/fast) cancel each other.
+ * its timer, unless more time than that is left; `opposite` powers cancel each other. Capsules,
+ * mods and stage events all grant powers the same way (`Game.applyPower`).
  */
 export const POWER = {
   /** Chance (0..1) that a destroyed brick drops a capsule. */
@@ -22,15 +23,16 @@ export const POWER = {
   kinds: {
     multi: { duration: 0, weight: 14 },
     laser: { duration: 5, weight: 10 },
-    expand: { duration: 15, weight: 12 },
-    narrow: { duration: 10, weight: 8 },
-    slow: { duration: 12, weight: 10 },
-    fast: { duration: 10, weight: 8 },
+    expand: { duration: 15, weight: 12, opposite: 'narrow' },
+    narrow: { duration: 10, weight: 8, opposite: 'expand' },
+    slow: { duration: 12, weight: 10, opposite: 'fast' },
+    fast: { duration: 10, weight: 8, opposite: 'slow' },
     catch: { duration: 15, weight: 9 },
     pierce: { duration: 8, weight: 6 },
     barrier: { duration: 8, weight: 7 },
     life: { duration: 0, weight: 3 },
-    detonator: { duration: 0, weight: 6 },
+    /** `charges`: bricks each ball explodes on. */
+    detonator: { duration: 0, weight: 6, charges: 1 },
   },
 
   capsuleWidth: 22,
@@ -119,24 +121,26 @@ export const POWER_LOOK = {
  * Hit or miss, the trigger is then spent until it re-arms: brick-count triggers re-arm on the
  * next destroyed brick, `pulse` on the next breakable brick hit, `safetyNet` on the next serve.
  * No event fires more than `maxPerStage` times in one stage. Times are in seconds of play.
+ *
+ * `power` is the power an event grants, as a capsule would, for `duration` seconds if given.
  */
 export const STAGE_EVENTS = {
   kinds: {
     /** A brick spits out a capsule (never a negative one) once few bricks are left. */
     supplyDrop: { chance: 0.75, maxPerStage: 1, bricksLeft: 8 },
     /** Every ball splits (see `POWER.splitInto`) when the stage is almost done. */
-    overload: { chance: 1, maxPerStage: 1, bricksLeft: 4 },
+    overload: { chance: 1, maxPerStage: 1, bricksLeft: 4, power: 'multi' },
     /**
      * No breakable brick hit for `idleTime`: a pulse rises from the paddle and the lowest `maxBricks`
      * breakable bricks take `damage` hits each (steel shrugs it off).
      */
     pulse: { chance: 1, maxPerStage: 2, idleTime: 10, maxBricks: 8, damage: 1 },
     /** Last few bricks survive `idleTime` without a kill: the paddle gets the laser. */
-    hunter: { chance: 1, maxPerStage: 1, bricksLeft: 3, idleTime: 12, duration: 5 },
+    hunter: { chance: 1, maxPerStage: 1, bricksLeft: 3, idleTime: 12, power: 'laser', duration: 5 },
     /** Serving on the last life late in a stage raises the barrier. */
-    safetyNet: { chance: 0.5, maxPerStage: 1, lives: 1, bricksLeft: 15, duration: 15 },
+    safetyNet: { chance: 0.5, maxPerStage: 1, lives: 1, bricksLeft: 15, power: 'barrier', duration: 15 },
     /** Few bricks left: every ball is charged, as by a detonator capsule. */
-    demolition: { chance: 0.5, maxPerStage: 1, bricksLeft: 6 },
+    demolition: { chance: 0.5, maxPerStage: 1, bricksLeft: 6, power: 'detonator' },
   },
   /** How long the in-game banner stays up. */
   bannerTime: 1.8,

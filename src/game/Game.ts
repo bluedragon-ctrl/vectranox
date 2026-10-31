@@ -1,7 +1,7 @@
 import { BALL, BRICK, FIELD, PADDLE, RULES, SCORE, SIM } from '../config/game';
-import { ANCHOR_DROP, DRAFT, MODS, PRICES } from '../config/mods';
+import { ANCHOR_DROP, DRAFT, MODS, PRICES, type GrantTrigger } from '../config/mods';
 import { BOSS_ROOM, ELITE, ROOM_CREDITS, TIME_BONUS } from '../config/run';
-import { BOSS, BRICK_TYPES, FOCUS, FORMATION, PINBALL, POWER, POWER_LOOK, STAGE_EVENTS } from '../config/tuning';
+import { BOSS, BRICK_TYPES, FOCUS, FORMATION, PINBALL, POWER, STAGE_EVENTS } from '../config/tuning';
 import { EventBus } from '../core/events';
 import { clamp, lerp } from '../core/math';
 import { Rng } from '../core/rng';
@@ -12,9 +12,9 @@ import { sweepBox, sweepCircle, type SweepHit } from './collision';
 import type { GameEvents, WallSide } from './events';
 import { buildFormations, type Formation } from './formation';
 import { parseLayout } from './layout';
-import { epicChance, MOD_KINDS, rollMods } from './mods';
+import { epicChance, MOD_GRANTS, MOD_KINDS, powerSeconds, rollMods, splitInto } from './mods';
 import { aim, closer, normalizeVelocity, pushOut, sweepWalls } from './physics';
-import { GOOD_POWERS, OPPOSITE, POWER_KINDS, rollPower, TIMED_POWERS } from './powers';
+import { GOOD_POWERS, POWER_KINDS, rollPower, TIMED_POWERS } from './powers';
 import { StageEventTracker } from './stageEvents';
 import type {
   Ball,
@@ -28,9 +28,11 @@ import type {
   ModKind,
   Paddle,
   Portal,
+  PowerDef,
   PowerKind,
   ShadowBall,
   Shot,
+  StageEventDef,
   StageEventKind,
   Target,
   TickInput,
@@ -276,10 +278,11 @@ export class Game {
   }
 
   /**
-   * Applies a power as if its capsule was caught. Public so the dev console can grant powers
-   * (`vnx.game.applyPower('laser')`).
+   * Applies a power as if its capsule was caught. `amount` is what mods and stage events grant
+   * instead of the capsule's: seconds, or charges for the detonator. Public so the dev console can
+   * grant powers (`vnx.game.applyPower('laser')`).
    */
-  applyPower(kind: PowerKind, duration: number = POWER.kinds[kind].duration): void {
+  applyPower(kind: PowerKind, amount?: number): void {
     switch (kind) {
       case 'multi':
         this.splitBalls();
@@ -288,13 +291,12 @@ export class Game {
         this.lives = Math.min(POWER.maxLives, this.lives + 1);
         return;
       case 'detonator':
-        this.chargeBalls(1);
+        this.chargeBalls(amount ?? POWER.kinds.detonator.charges);
         return;
     }
-    const opposite = OPPOSITE[kind];
+    const { duration, opposite }: PowerDef = POWER.kinds[kind];
     if (opposite && this.isActive(opposite)) this.endPower(opposite);
-    if (kind === 'laser') duration += this.modValue('longbeam');
-    this.timers[kind] = POWER_LOOK[kind].bad ? duration : duration * (1 + this.modValue('extender'));
+    this.timers[kind] = Math.max(this.timers[kind], powerSeconds(kind, amount ?? duration, this.mods));
     if (kind === 'slow' || kind === 'fast') this.rescaleBalls();
   }
 
@@ -305,6 +307,8 @@ export class Game {
   fireStageEvent(kind: StageEventKind): void {
     this.stageEvents.fired(kind);
     this.events.emit('stageEvent', { kind, bricks: this.breakableLeft });
+    const { power, duration }: StageEventDef = STAGE_EVENTS.kinds[kind];
+    if (power) this.applyPower(power, duration);
     switch (kind) {
       case 'supplyDrop': {
         const bricks = this.bricks.filter(isBreakable);
@@ -312,20 +316,8 @@ export class Game {
         if (br) this.dropCapsule(rollPower(this.rng, GOOD_POWERS), br.x + br.w / 2, br.y + br.h / 2);
         break;
       }
-      case 'overload':
-        this.splitBalls();
-        break;
       case 'pulse':
         this.pulseBricks(STAGE_EVENTS.kinds.pulse.maxBricks, STAGE_EVENTS.kinds.pulse.damage);
-        break;
-      case 'hunter':
-        this.applyPower('laser', STAGE_EVENTS.kinds.hunter.duration);
-        break;
-      case 'safetyNet':
-        this.applyPower('barrier', STAGE_EVENTS.kinds.safetyNet.duration);
-        break;
-      case 'demolition':
-        this.chargeBalls(1);
         break;
     }
   }
@@ -520,10 +512,8 @@ export class Game {
     });
     this.serve();
     this.openingServe = true;
-    // Stage-start mods, after the serve has cleared the powers.
-    if (this.mods.armory > 0) this.chargeBalls(this.modValue('armory'));
-    if (this.mods.failsafe > 0) this.applyPower('barrier', this.modValue('failsafe'));
-    if (this.mods.laserstart > 0) this.applyPower('laser', this.modValue('laserstart'));
+    // After the serve has cleared the powers.
+    this.grantMods('stageStart');
   }
 
   /** Credits clearing this room pays, time bonus included; none for the last, with no pick after it. */
@@ -559,6 +549,11 @@ export class Game {
   /** A mod's total effect at the stacks held: its `perStack` times the stacks. */
   private modValue(kind: ModKind): number {
     return MODS[kind].perStack * this.mods[kind];
+  }
+
+  /** Grants what the mods held give on `on`. */
+  private grantMods(on: GrantTrigger): void {
+    for (const g of MOD_GRANTS) if (g.on === on && this.mods[g.kind] > 0) this.applyPower(g.power, this.modValue(g.kind));
   }
 
   private paddleWidth(): number {
@@ -615,8 +610,8 @@ export class Game {
 
   private launch(): void {
     for (const b of this.balls) this.launchBall(b, this.rng.range(-BALL.serveJitter, BALL.serveJitter));
-    if (this.mods.splitter > 0) this.splitBalls();
-    if (this.openingServe && this.mods.multistart > 0) this.splitBalls();
+    this.grantMods('launch');
+    if (this.openingServe) this.grantMods('firstLaunch');
     this.openingServe = false;
     this.breached = false;
     this.setState('play');
@@ -1417,10 +1412,8 @@ export class Game {
    * Up to the ball limit.
    */
   private splitBalls(): void {
-    // Split guard mod: applying a power restarts its timer, so skip it if that would cut the barrier short.
-    const guard = this.modValue('splitguard');
-    if (guard * (1 + this.modValue('extender')) > this.timers.barrier) this.applyPower('barrier', guard);
-    const twins = POWER.splitInto - 1 + this.modValue('extraball');
+    this.grantMods('split');
+    const twins = splitInto(this.mods) - 1;
     for (const src of this.balls.slice()) {
       const [dirX, dirY] = ballDirection(src);
       const side = this.rng.next() < 0.5 ? 1 : -1;
