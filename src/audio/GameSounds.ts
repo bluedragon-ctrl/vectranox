@@ -193,10 +193,10 @@ export class GameSounds {
           this.play('power', (s) => s.notes(steps.map((n) => note(n, C5)), 0.06, { type: 'square', cutoff: 2600, dur: 0.13, gain: 0.07, pan: p }));
         }
       }),
-      ev.on('modPick', () => {
+      ev.on('modBuy', () => {
         this.play('mod', (s) => s.notes([0, 7, 12, 16].map((n) => note(n, C5)), 0.06, { type: 'square', cutoff: 2800, dur: 0.14, gain: 0.07 }));
       }),
-      ev.on('livesPick', () => {
+      ev.on('livesBuy', () => {
         this.play('lives', (s) => s.notes([0, 4, 7, 12, 16].map((n) => note(n, C5)), 0.06, { type: 'triangle', dur: 0.16, gain: 0.1 }));
       }),
       ev.on('powerEnd', () => {

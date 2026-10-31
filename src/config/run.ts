@@ -1,5 +1,5 @@
 /*
- * Run progression tuning: how a run is put together. The picks between stages are in mods.ts.
+ * Run progression tuning: how a run is put together. What the picks between stages sell is in mods.ts.
  * Like tuning.ts, everything here is meant to be tweaked by hand.
  */
 
@@ -11,8 +11,8 @@ export type RoomKind = 'standard' | 'formation' | 'elite' | 'boss';
 
 /**
  * A run is `rooms` rooms, assembled from the stage templates when the run starts (see
- * levels/assemble.ts). After every cleared room but the last the player picks a mod or extra lives
- * (see `DRAFT` in mods.ts).
+ * levels/assemble.ts). Every cleared room but the last pays credits (`ROOM_CREDITS`) and opens the
+ * pick, where they buy mods and lives (see `DRAFT` in mods.ts).
  *
  * The first room is a random opener and the last the final boss; each room between rolls its kind.
  * `bossChance` and `eliteChance` are the chance of that kind by rooms since the last one (the last
@@ -50,16 +50,24 @@ export const RUN = {
   },
 } as const;
 
+/** Credits a cleared room pays, by kind. What they buy is `PRICES` in mods.ts. */
+export const ROOM_CREDITS: Readonly<Record<RoomKind, number>> = {
+  standard: 1,
+  formation: 1,
+  elite: 2,
+  boss: 4,
+};
+
 /**
  * Elite rooms: the ball starts `speedBonus` units/s faster, clearing the room pays `clearBonus`
- * (no multiplier), and the pick after it rolls by `ELITE_WEIGHTS` in mods.ts.
+ * (no multiplier), and the pick after it has `EPIC_CHANCE.elite` in mods.ts.
  */
 export const ELITE = {
   speedBonus: 18,
   clearBonus: 1000,
 } as const;
 
-/** Boss rooms: killing the boss pays `clearBonus` (no multiplier); the pick after it rolls by `BOSS_WEIGHTS` in mods.ts. */
+/** Boss rooms: killing the boss pays `clearBonus` (no multiplier); the pick after it has `EPIC_CHANCE.boss` in mods.ts. */
 export const BOSS_ROOM = {
   clearBonus: 2500,
 } as const;

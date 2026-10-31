@@ -195,13 +195,18 @@ function choosing(): boolean {
 /** A choice on the pick screen. Once the next stage is up, play resumes with the device that chose. */
 function runAction(action: RunAction, via: ControlMode): void {
   if (ui !== 'between' || !runScreen.ready) return;
-  if (action.type === 'pick') game.pickMod(action.index);
-  else game.pickLives();
+  if (action.type === 'pick') game.buyMod(action.index);
+  else if (action.type === 'lives') game.buyLives();
+  else game.endDraft();
   if (game.state === 'serve') requestStart(via);
 }
 
-/** Number keys pick a card: the mod offers in order, then the lives card. */
+/** Number keys buy a card: the mod offers in order, then the lives card. Enter moves on. */
 function runKey(code: string): boolean {
+  if (code === 'Enter' || code === 'NumpadEnter') {
+    runAction({ type: 'continue' }, 'keyboard');
+    return true;
+  }
   const digit = /^(?:Digit|Numpad)([1-9])$/.exec(code)?.[1];
   if (!digit) return false;
   const index = Number(digit) - 1;
@@ -335,8 +340,7 @@ function overlayContent(): OverlayContent | null {
             sub: `${stageLabel(game)}\nCLICK / SPACE TO LAUNCH`,
           };
         case 'clear':
-          if (game.stage.room === 'boss') return { title: 'BOSS DESTROYED', sub: `BOSS BONUS +${BOSS_ROOM.clearBonus}` };
-          return game.stage.room === 'elite' ? { title: 'STAGE CLEAR', sub: `ELITE BONUS +${ELITE.clearBonus}` } : { title: 'STAGE CLEAR' };
+          return { title: game.stage.room === 'boss' ? 'BOSS DESTROYED' : 'STAGE CLEAR', sub: clearSub(game) };
         // The pick screen takes over.
         case 'draft':
           return null;
@@ -352,6 +356,13 @@ function overlayContent(): OverlayContent | null {
 
 function endTitle(): string {
   return game.state === 'complete' ? 'RUN COMPLETE' : 'GAME OVER';
+}
+
+/** What the room just cleared paid: an elite or boss bonus, then its credits. */
+function clearSub(g: Game): string {
+  const bonus = g.stage.room === 'boss' ? `BOSS BONUS +${BOSS_ROOM.clearBonus}` : g.stage.room === 'elite' ? `ELITE BONUS +${ELITE.clearBonus}` : '';
+  const pay = g.roomCredits;
+  return [bonus, pay > 0 ? `+${pay} CREDIT${pay === 1 ? '' : 'S'}` : ''].filter(Boolean).join('\n');
 }
 
 /** The stage's name, after its room kind unless it is a standard room. */
@@ -371,6 +382,7 @@ renderScores(scoreList, scores);
 
 const hudScore = el('hud-score');
 const hudLives = el('hud-lives');
+const hudCredits = el('hud-credits');
 const hudChain = el('hud-chain');
 const hudMult = el('hud-mult');
 const powerHud = new PowerHud(el('power-list'));
@@ -410,6 +422,7 @@ startLoop({
     if (frameTime > 0) fps += (1 / frameTime - fps) * 0.05;
     setText(hudScore, formatScore(game.score));
     setText(hudLives, String(game.lives));
+    setText(hudCredits, String(game.credits));
     setText(hudChain, formatChain(game));
     setText(hudMult, `×${game.multiplier}`);
     powerHud.update(game.timers, game.charges);

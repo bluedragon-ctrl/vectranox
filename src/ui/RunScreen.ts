@@ -1,11 +1,12 @@
-import { DRAFT, MODS, RARITY_LOOK } from '../config/mods';
+import { DRAFT, MODS, PRICES, RARITY_LOOK } from '../config/mods';
+import { PALETTE } from '../config/game';
 import { ROOM_LABEL, threatPips } from '../config/run';
 import { POWER, POWER_LOOK } from '../config/tuning';
 import type { Game } from '../game/Game';
 import { describeMod } from '../game/mods';
 import { cssColor } from './dom';
 
-export type RunAction = { type: 'pick'; index: number } | { type: 'lives' };
+export type RunAction = { type: 'pick'; index: number } | { type: 'lives' } | { type: 'continue' };
 
 /** Milliseconds the screen ignores input after it opens, so clicks and keys meant for the stage don't choose. */
 const ARM_MS = 500;
@@ -16,13 +17,16 @@ interface CardSpec {
   color: number;
   tag: string;
   note: string;
+  /** Credits it costs; `null` shows no price. */
+  price: number | null;
   disabled: boolean;
   action: RunAction;
 }
 
 /**
- * The pick between stages, over the playfield: a card per mod offer and a last card for extra
- * lives. Cards are buttons; main routes the number keys here. Rebuilt only when what it shows changes.
+ * The pick between stages, over the playfield: a card per mod offer, a card for extra lives and a
+ * last one to move on. Cards are buttons; main routes the keys here. Rebuilt only when what it
+ * shows changes.
  */
 export class RunScreen {
   private key = '';
@@ -47,9 +51,10 @@ export class RunScreen {
       this.root.replaceChildren();
       return;
     }
-    const key = `${game.stageIndex}|${game.lives}|${game.offers.join()}`;
+    const key = `${game.stageIndex}|${game.lives}|${game.credits}|${game.offers.join()}`;
     if (key === this.key) return;
-    this.shownAt = performance.now();
+    // Only opening arms it: a card bought must not hold up the next one.
+    if (this.key === '') this.shownAt = performance.now();
     this.key = key;
     this.root.classList.remove('hidden');
     this.render(game);
@@ -58,26 +63,40 @@ export class RunScreen {
   private render(game: Game): void {
     const cards = game.offers.map((kind, index): CardSpec => {
       const def = MODS[kind];
-      const stacks = game.mods[kind] + 1;
+      const bought = game.bought.has(kind);
+      const stacks = game.mods[kind] + (bought ? 0 : 1);
       return {
         name: def.name,
         // What it gives once taken, all stacks together.
         desc: describeMod(kind, game.mods, stacks),
         color: RARITY_LOOK[def.rarity].color,
         tag: RARITY_LOOK[def.rarity].label,
-        note: def.maxStacks > 1 ? `LV ${stacks}/${def.maxStacks}` : 'UNIQUE',
-        disabled: false,
+        note: bought ? 'BOUGHT' : def.maxStacks > 1 ? `LV ${stacks}/${def.maxStacks}` : 'UNIQUE',
+        price: bought ? null : PRICES[def.rarity],
+        disabled: !game.canBuyMod(index),
         action: { type: 'pick', index },
       };
     });
+    const livesFull = game.lives >= POWER.maxLives;
     cards.push({
-      name: `+${DRAFT.lives} LIVES`,
-      desc: game.canPickLives ? 'NO MOD THIS TIME' : 'LIVES FULL',
+      name: `+${DRAFT.lives} ${DRAFT.lives === 1 ? 'LIFE' : 'LIVES'}`,
+      desc: livesFull ? 'LIVES FULL' : 'CAN BE BOUGHT AGAIN',
       color: POWER_LOOK.life.color,
       tag: 'REPAIR',
       note: `${game.lives} → ${Math.min(POWER.maxLives, game.lives + DRAFT.lives)}`,
-      disabled: !game.canPickLives,
+      price: livesFull ? null : DRAFT.livesCost,
+      disabled: !game.canBuyLives,
       action: { type: 'lives' },
+    });
+    cards.push({
+      name: 'CONTINUE',
+      desc: game.credits > 0 ? `KEEP ${game.credits} CREDIT${game.credits === 1 ? '' : 'S'} FOR LATER` : 'NO CREDITS LEFT',
+      color: PALETTE.cyan,
+      tag: '',
+      note: '',
+      price: null,
+      disabled: false,
+      action: { type: 'continue' },
     });
 
     const next = game.stages[game.stageIndex + 1];
@@ -86,13 +105,17 @@ export class RunScreen {
     const p = document.createElement('p');
     const room = next ? ROOM_LABEL[next.room] : '';
     p.textContent = next ? `NEXT  ROOM ${next.number}${room && `  ${room}`}  ${threatPips(next.threat)}` : '';
+    const credits = document.createElement('p');
+    credits.className = 'credits';
+    credits.textContent = `CREDITS  ${game.credits}`;
     const list = document.createElement('div');
     list.className = 'cards';
-    list.append(...cards.map((spec, i) => this.card(spec, i + 1)));
-    this.root.replaceChildren(h1, p, list);
+    // Number keys for what is on sale, Enter to move on.
+    list.append(...cards.map((spec, i) => this.card(spec, spec.action.type === 'continue' ? '↵' : String(i + 1))));
+    this.root.replaceChildren(h1, p, credits, list);
   }
 
-  private card(spec: CardSpec, n: number): HTMLButtonElement {
+  private card(spec: CardSpec, shortcut: string): HTMLButtonElement {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'card';
@@ -106,7 +129,7 @@ export class RunScreen {
     });
     const key = document.createElement('span');
     key.className = 'key';
-    key.textContent = String(n);
+    key.textContent = shortcut;
     const body = document.createElement('span');
     body.className = 'body';
     const name = document.createElement('b');
@@ -121,7 +144,9 @@ export class RunScreen {
     const note = document.createElement('i');
     note.textContent = spec.note;
     meta.append(tag, note);
-    btn.append(key, body, meta);
+    const price = document.createElement('strong');
+    price.textContent = spec.price === null ? '' : `${spec.price} CR`;
+    btn.append(key, body, meta, price);
     return btn;
   }
 }
