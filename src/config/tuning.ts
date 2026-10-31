@@ -141,7 +141,9 @@ export const STAGE_EVENT_LOOK = {
  *
  * Targets: the ball bounces off them and lights them. Lighting every target in the stage completes
  * the bank: it pays `bankBonus`, unlights them all, and moves the score multiplier one step along
- * `multipliers`. The multiplier scales all brick points and lasts until a life is lost.
+ * `multipliers`. So does clearing a room without losing a life or using a second wind. The
+ * multiplier scales all brick points; either of those resets it, or drops it `ANCHOR_DROP` steps
+ * with the anchor mod (mods.ts), which is why every step is worth 1.
  *
  * Portals come in pairs: a ball whose centre gets within `capture` of one comes out of the other
  * with the same velocity, and ignores that exit until it has left its radius.
@@ -149,7 +151,7 @@ export const STAGE_EVENT_LOOK = {
 export const PINBALL = {
   target: { radius: 5, points: 25 },
   bankBonus: 500,
-  multipliers: [1, 2, 3, 5],
+  multipliers: [1, 2, 3, 4, 5],
   portal: { radius: 10, capture: 5 },
 } as const;
 

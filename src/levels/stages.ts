@@ -13,7 +13,8 @@ import type { FORMATION } from '../config/tuning';
  * `room` is the kind of room it fills (standard unless given); `tier` says how deep in a run it
  * tends to appear (see `RUN.tierWeights`), and for bosses their order. `threat` is the 1 to 3 pips
  * announcing how hard it plays, the tier unless given. A run starts with one of the `opener` rooms,
- * which appear nowhere else.
+ * which appear nowhere else. `timeLimit` is the seconds it gives to earn the time bonus, the
+ * `ROOM_TIME` of its kind unless given.
  * Pinball pieces don't move, so keep them out of a formation's way.
  */
 export interface StageTemplate {
@@ -22,6 +23,7 @@ export interface StageTemplate {
   threat?: 1 | 2 | 3;
   room?: RoomKind;
   opener?: boolean;
+  timeLimit?: number;
   layout: readonly string[];
   formations?: readonly FormationDef[];
   /** What a boss room's core and emitters do; required for one. */
@@ -77,6 +79,8 @@ export interface StageDef {
   boss: BossDef | null;
   /** Pips announcing the room. */
   threat: number;
+  /** Seconds of play to earn the time bonus. */
+  timeLimit: number;
   /** 1-based position in the run. */
   number: number;
 }

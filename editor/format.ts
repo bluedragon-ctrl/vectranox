@@ -6,6 +6,7 @@ export function formatRoom(room: StageTemplate): string {
   if (room.threat && room.threat !== room.tier) fields.push(`  "threat": ${room.threat}`);
   if (room.room && room.room !== 'standard') fields.push(`  "room": ${JSON.stringify(room.room)}`);
   if (room.opener) fields.push('  "opener": true');
+  if (room.timeLimit !== undefined) fields.push(`  "timeLimit": ${room.timeLimit}`);
   fields.push(list('layout', room.layout.map((row) => JSON.stringify(row))));
   const formations = room.formations ?? [];
   if (formations.length > 0) fields.push(list('formations', formations.map(formatFormation)));

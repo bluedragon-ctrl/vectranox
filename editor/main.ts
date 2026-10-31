@@ -1,5 +1,5 @@
 import { BRICK } from '../src/config/game';
-import { ROOM_LABEL, type RoomKind } from '../src/config/run';
+import { ROOM_LABEL, ROOM_TIME, type RoomKind } from '../src/config/run';
 import { FORMATION } from '../src/config/tuning';
 import type { BossDef, FormationDef, StageTemplate } from '../src/levels/stages';
 import { checkRoom, checkRun, isBossDef, MAX_ROWS, roomFile, type Problem } from '../src/levels/validate';
@@ -458,6 +458,20 @@ function renderForm(): void {
     const { opener: _old, ...rest } = current.room;
     change(opener.checked ? { ...rest, opener: true } : rest);
   };
+  // Left empty, the room takes the limit of its kind, shown as the placeholder.
+  const timeLimit = make('input', {
+    type: 'number',
+    min: '1',
+    step: '5',
+    value: room.timeLimit === undefined ? '' : String(room.timeLimit),
+    placeholder: String(ROOM_TIME[room.room ?? 'standard']),
+    title: 'Time limit for the time bonus, in seconds of play',
+  });
+  timeLimit.onchange = () => {
+    if (!current?.room) return;
+    const { timeLimit: _old, ...rest } = current.room;
+    change(timeLimit.value === '' ? rest : { ...rest, timeLimit: Number(timeLimit.value) });
+  };
 
   const add = make('button', {}, 'Add formation');
   add.onclick = () => {
@@ -494,6 +508,7 @@ function renderForm(): void {
     field('Tier', tier),
     field('Threat', threat),
     field('Kind', kind),
+    field('Time', timeLimit),
     make('label', { className: 'check' }, opener, 'Can open the run'),
     make(
       'div',

@@ -59,6 +59,24 @@ export const ROOM_CREDITS: Readonly<Record<RoomKind, number>> = {
 };
 
 /**
+ * Seconds a room gives to earn the time bonus when it doesn't set its own `timeLimit` (the room
+ * editor's Time field), by kind. The clock only runs while a ball is in play, and running out
+ * loses the bonus and nothing else.
+ */
+export const ROOM_TIME: Readonly<Record<RoomKind, number>> = {
+  standard: 60,
+  formation: 60,
+  elite: 60,
+  boss: 120,
+};
+
+/** Clearing a room inside its limit pays `score` (no multiplier) and `credits` on top of its `ROOM_CREDITS`. */
+export const TIME_BONUS = {
+  score: 500,
+  credits: 1,
+} as const;
+
+/**
  * Elite rooms: the ball starts `speedBonus` units/s faster, clearing the room pays `clearBonus`
  * (no multiplier), and the pick after it has `EPIC_CHANCE.elite` in mods.ts.
  */

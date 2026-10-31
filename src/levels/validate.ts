@@ -190,6 +190,7 @@ export function checkRoom(room: StageTemplate): Problem[] {
   if (![1, 2, 3].includes(room.tier)) problems.push(error(`Tier must be 1, 2 or 3, is ${String(room.tier)}.`));
   if (room.threat !== undefined && ![1, 2, 3].includes(room.threat)) problems.push(error(`Threat must be 1, 2 or 3, is ${String(room.threat)}.`));
   if (room.room && !(room.room in ROOM_LABEL)) problems.push(error(`Unknown room kind '${String(room.room)}'.`));
+  if (room.timeLimit !== undefined && !(room.timeLimit > 0)) problems.push(error(`Time limit must be above 0 seconds, is ${String(room.timeLimit)}.`));
   problems.push(...checkLayout(room), ...checkBoss(room));
   const defs = room.formations ?? [];
   if (room.room === 'formation' && defs.length === 0) problems.push(warning('A formation room with nothing moving.'));
