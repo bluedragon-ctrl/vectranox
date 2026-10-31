@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Ball } from '../../game/types';
 import { QuadBatch } from '../QuadBatch';
 import { TRAIL_FRAGMENT } from '../materials/ball';
+import { ballLook } from '../palette';
 
 /** Seconds of history a trail shows, up to `MAX_LENGTH` world units (so fast balls don't read as beams). */
 const TRAIL_TIME = 0.16;
@@ -21,6 +22,9 @@ interface Trail {
   /** The ball's radius and rendered position this frame; it leads the newest segment. */
   r: number;
   head: Point;
+  /** The ball's colours as it last looked, so a fading tail keeps them. */
+  headColor: THREE.Color;
+  tailColor: THREE.Color;
   /** False once the ball is gone and only the tail is left to fade. */
   live: boolean;
 }
@@ -32,16 +36,9 @@ interface Trail {
 export class Trails {
   readonly batch = new QuadBatch({ max: 1024, fragmentShader: TRAIL_FRAGMENT, pad: 5, blending: 'max', renderOrder: 20 });
   private trails = new Map<number, Trail>();
-  private head = new THREE.Color();
-  private tail = new THREE.Color();
   private mixed = new THREE.Color();
   /** Reused end point of a trail cut at `MAX_LENGTH`. */
   private cut: Point = { x: 0, y: 0, t: 0 };
-
-  constructor(headColor: THREE.Color, tailColor: THREE.Color) {
-    this.head.copy(headColor);
-    this.tail.copy(tailColor);
-  }
 
   clear(): void {
     this.trails.clear();
@@ -52,16 +49,25 @@ export class Trails {
     this.trails.get(id)?.pts.splice(0);
   }
 
-  /** Records this frame's positions and drops stale history. `positions` is parallel to `balls`. */
-  update(balls: readonly Ball[], positions: readonly { x: number; y: number }[], now: number): void {
+  /**
+   * Records this frame's positions and looks and drops stale history. `positions` is parallel to
+   * `balls`; `pierce` is as for `ballLook`.
+   */
+  update(balls: readonly Ball[], positions: readonly { x: number; y: number }[], now: number, pierce: number): void {
     for (const trail of this.trails.values()) trail.live = false;
     balls.forEach((b, i) => {
       const pos = positions[i];
       if (!pos) return;
       let trail = this.trails.get(b.id);
-      if (!trail) this.trails.set(b.id, (trail = { pts: [], r: b.r, head: { x: 0, y: 0, t: 0 }, live: true }));
+      if (!trail) {
+        trail = { pts: [], r: b.r, head: { x: 0, y: 0, t: 0 }, headColor: new THREE.Color(), tailColor: new THREE.Color(), live: true };
+        this.trails.set(b.id, trail);
+      }
       trail.live = true;
       trail.r = b.r;
+      const look = ballLook(b, pierce);
+      trail.headColor.copy(look.color);
+      trail.tailColor.copy(look.trailTail);
       trail.head.x = pos.x;
       trail.head.y = pos.y;
       trail.head.t = now;
@@ -86,7 +92,8 @@ export class Trails {
   /** Walks each trail back from its head; it tapers out by age or by distance, whichever ends first. */
   draw(now: number): void {
     this.batch.begin();
-    for (const { pts, r, head, live } of this.trails.values()) {
+    for (const trail of this.trails.values()) {
+      const { pts, r, head, live } = trail;
       let c = live ? head : pts[pts.length - 1];
       if (!c) continue;
       let kc = fade(c, 0, now);
@@ -106,7 +113,7 @@ export class Trails {
           len -= over;
         }
         const ka = fade(a, Math.min(dist, MAX_LENGTH), now);
-        if (len >= 0.01) this.segment(a, c, len, ka, kc, r * 0.7);
+        if (len >= 0.01) this.segment(trail, a, c, len, ka, kc, r * 0.7);
         c = a;
         kc = ka;
       }
@@ -114,12 +121,12 @@ export class Trails {
     this.batch.commit();
   }
 
-  /** Segment from tail point `a` to head point `c`, with fades `ka` and `kc`. */
-  private segment(a: Point, c: Point, len: number, ka: number, kc: number, r: number): void {
+  /** Segment of `trail` from tail point `a` to head point `c`, with fades `ka` and `kc`. */
+  private segment(trail: Trail, a: Point, c: Point, len: number, ka: number, kc: number, r: number): void {
     const rc = r * (0.35 + 0.65 * kc);
     const ra = r * (0.35 + 0.65 * ka);
     const maxR = Math.max(ra, rc);
-    this.mixed.copy(this.tail).lerp(this.head, (ka + kc) / 2);
+    this.mixed.copy(trail.tailColor).lerp(trail.headColor, (ka + kc) / 2);
     this.batch.push((a.x + c.x) / 2, (a.y + c.y) / 2, len + maxR * 2, maxR * 2, this.mixed, kc, rc, ra, ka, 0, Math.atan2(c.y - a.y, c.x - a.x));
   }
 }

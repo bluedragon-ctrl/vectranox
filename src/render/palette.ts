@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { PALETTE } from '../config/game';
 import { POWER_LOOK } from '../config/tuning';
-import type { BrickKind, PowerKind } from '../game/types';
+import type { Ball, BrickKind, PowerKind } from '../game/types';
 
 /** A boss's shots and a stunned paddle, linear. */
 export const SHOT_COLOR = new THREE.Color(0xe0000f);
@@ -65,10 +65,38 @@ export const CAPSULE_COLORS = Object.fromEntries(
 ) as Record<PowerKind, THREE.Color>;
 
 /** What a piercing ball turns towards, linear. Not the power's colour: that is the ball's own cyan. */
-export const PIERCE_BALL_COLOR = new THREE.Color(PALETTE.white);
+const PIERCE_BALL_COLOR = new THREE.Color(PALETTE.white);
+/** How far a piercing ball turns that way. */
+const PIERCE_BALL_MIX = 0.7;
 
 /** Explosive brick's blast ring, linear. */
 export const EXPLOSION_COLOR = new THREE.Color(EXPLOSIVE_COLOR);
+
+/** How a ball shows what it carries, trail included. Colours are linear. */
+export interface BallLook {
+  color: THREE.Color;
+  /** Colour its trail fades to, from `color`. */
+  trailTail: THREE.Color;
+  /** Halo boost, 0..1. */
+  glow: number;
+  /** 1 tints the white-hot core too, for a ball that has to read as its colour. */
+  tintCore: number;
+}
+
+const BALL_LOOK: BallLook = { color: new THREE.Color(), trailTail: COLORS.purple, glow: 0, tintCore: 0 };
+const CHARGED_BALL_LOOK: BallLook = { color: POWER_COLORS.detonator, trailTail: EXPLOSION_COLOR, glow: 0, tintCore: 1 };
+
+/**
+ * The look of `ball` while the pierce power stands at `pierce` (0..1). Piercing balls burn hotter;
+ * charged ones are the detonator's colour, whatever else is going on. The result is reused: read
+ * it before the next call.
+ */
+export function ballLook(ball: Pick<Ball, 'charges'>, pierce: number): BallLook {
+  const look = ball.charges > 0 ? CHARGED_BALL_LOOK : BALL_LOOK;
+  if (look === BALL_LOOK) look.color.copy(COLORS.cyan).lerp(PIERCE_BALL_COLOR, pierce * PIERCE_BALL_MIX);
+  look.glow = pierce;
+  return look;
+}
 
 /** Pinball target lamp, linear and capped like glass so a lit bank doesn't flood the bloom. */
 export const TARGET_COLOR = capBrightness(new THREE.Color(0x2dffb4));

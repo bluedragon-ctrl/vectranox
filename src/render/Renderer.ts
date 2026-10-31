@@ -17,7 +17,7 @@ import { PADDLE_FRAGMENT } from './materials/paddle';
 import { PORTAL_FRAGMENT, TARGET_FRAGMENT } from './materials/pinball';
 import { AIM_FRAGMENT, BARRIER_FRAGMENT, BLAST_FRAGMENT, BOLT_FRAGMENT, CAPSULE_FRAGMENT, SHOT_FRAGMENT, TIMER_FRAGMENT } from './materials/power';
 import { glyphMask } from './glyphs';
-import { AIM_COLOR, BRICK_GAP, brickTint, CAPSULE_COLORS, COLORS, PIERCE_BALL_COLOR, PORTAL_COLORS, POWER_COLORS, SHOT_COLOR, TARGET_COLOR } from './palette';
+import { AIM_COLOR, ballLook, BRICK_GAP, brickTint, CAPSULE_COLORS, COLORS, PORTAL_COLORS, POWER_COLORS, SHOT_COLOR, TARGET_COLOR } from './palette';
 import { QuadBatch } from './QuadBatch';
 
 /** Screen-space padding (px) between the playfield frame and its area. */
@@ -84,7 +84,7 @@ export class Renderer {
   private scene = new THREE.Scene();
   private backdropTarget = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType });
   private post: PostFx;
-  private trails = new Trails(COLORS.cyan, COLORS.purple);
+  private trails = new Trails();
   private fx = new GameFx(this.trails);
 
   private skyTime = { value: 0 };
@@ -311,7 +311,7 @@ export class Renderer {
     this.camera.updateMatrixWorld();
 
     this.interpolateBalls(game, alpha);
-    this.trails.update(game.balls, this.ballPositions, this.fx.now);
+    this.trails.update(game.balls, this.ballPositions, this.fx.now, powerLevel(game, 'pierce'));
 
     this.drawField(game);
     this.drawPortals(game);
@@ -520,16 +520,14 @@ export class Renderer {
     this.blast.commit();
   }
 
-  /** Piercing balls burn hotter; charged ones are the detonator's colour. */
   private drawBalls(game: Game, alpha: number): void {
     const pierce = powerLevel(game, 'pierce');
-    this.color.copy(COLORS.cyan).lerp(PIERCE_BALL_COLOR, pierce * 0.7);
     this.balls.begin();
     this.ballPositions.forEach((pos, i) => {
       const ball = game.balls[i];
       if (!ball) return;
-      const charged = ball.charges > 0;
-      this.balls.push(pos.x, pos.y, ball.r * 2, ball.r * 2, charged ? POWER_COLORS.detonator : this.color, 1, pierce, charged ? 1 : 0);
+      const look = ballLook(ball, pierce);
+      this.balls.push(pos.x, pos.y, ball.r * 2, ball.r * 2, look.color, 1, look.glow, look.tintCore);
     });
     for (const s of game.shadows) {
       const fade = SHADOW_LOOK.alpha * Math.min(1, s.life / SHADOW_LOOK.fade);

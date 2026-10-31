@@ -11,6 +11,17 @@ export type EmitterKind = 'turret' | 'spawner' | 'phantom';
 export type PowerKind = keyof typeof POWER.kinds;
 /** Powers that run on a timer: those with a duration (the rest act once on pickup). */
 export type TimedPower = { [K in PowerKind]: (typeof POWER.kinds)[K]['duration'] extends 0 ? never : K }[PowerKind];
+/** A `POWER.kinds` entry, for reading the fields only some kinds have. */
+export interface PowerDef {
+  duration: number;
+  opposite?: TimedPower;
+}
+/** A `STAGE_EVENTS.kinds` entry, for reading the fields only some kinds have. */
+export interface StageEventDef {
+  chance: number;
+  power?: PowerKind;
+  duration?: number;
+}
 export type HitSource = 'ball' | 'laser' | 'pulse' | 'explosion';
 /** What set off an explosion: a charged ball, or an explosive brick's fuse. */
 export type ExplosionSource = 'charge' | 'brick';
