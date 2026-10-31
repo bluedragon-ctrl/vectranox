@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { FIELD, PALETTE } from '../config/game';
+import { RUN } from '../config/run';
 import { BOSS, FORMATION, POWER, POWER_LOOK } from '../config/tuning';
 import { lerp } from '../core/math';
 import type { VisualSettings } from '../core/settings';
@@ -47,8 +48,12 @@ const LINE_GLOW = { rest: 0.35, near: 0.9 } as const;
 const CHARGE_DOT = { size: 2.6, step: 4, drop: 3.5 } as const;
 /** Horizon height as a fraction of the window, from the bottom. */
 const HORIZON = 0.42;
-/** Sun radius in screen heights: fills this fraction of the gap right of the field, within limits. */
-const SUN = { gapFill: 0.8, minRadius: 0.06, maxRadius: 0.27 } as const;
+/**
+ * Sun radius in screen heights: fills this fraction of the gap right of the field, within limits.
+ * It starts the run `high` radii above the horizon (keeping `topMargin` screen heights clear of
+ * the window's top) and sets one step per room, closing on a new step at `settleRate` (1/s).
+ */
+const SUN = { gapFill: 0.8, minRadius: 0.06, maxRadius: 0.27, high: 1.2, topMargin: 0.02, settleRate: 3 } as const;
 /** World units the playfield can move under screen shake (offset, plus roll at its corners). */
 const SHAKE_MARGIN = 12;
 const BRICK_KIND = { normal: 0, steel: 1, explosive: 2, regen: 3, core: 4, turret: 5, spawner: 6, phantom: 7 } as const;
@@ -91,6 +96,8 @@ export class Renderer {
     uResolution: this.resolution,
     uVanish: { value: new THREE.Vector2() },
     uSunR: { value: 0.2 },
+    uSunHigh: { value: 0.2 },
+    uDaylight: { value: 1 },
     uSkip: { value: new THREE.Vector4() },
     uFieldRect: { value: new THREE.Vector4() },
     uTwinkle: { value: 1 },
@@ -266,7 +273,9 @@ export class Renderer {
     const fieldRight = areaCx + (FIELD.width / 2) * scale;
     const gap = w - fieldRight;
     this.skyUniforms.uVanish.value.set((fieldRight + gap / 2) * pr, h * HORIZON * pr);
-    this.skyUniforms.uSunR.value = Math.min(SUN.maxRadius, Math.max(SUN.minRadius, (gap * SUN.gapFill) / 2 / h));
+    const sunR = Math.min(SUN.maxRadius, Math.max(SUN.minRadius, (gap * SUN.gapFill) / 2 / h));
+    this.skyUniforms.uSunR.value = sunR;
+    this.skyUniforms.uSunHigh.value = Math.min(sunR * SUN.high, 1 - HORIZON - sunR - SUN.topMargin);
     // The playfield in device pixels (y up), and the part of it that stays covered even shaken,
     // which the sky skips.
     const areaCyUp = h - areaCy;
@@ -292,6 +301,7 @@ export class Renderer {
     this.skyTime.value += dt;
     if (!this.settings.reduceFx) this.skyScroll.value += dt;
     this.portalTime += dt;
+    this.setSun(game, dt);
 
     const shake = this.fx.shake;
     this.camera.position.set(this.camBase.x + shake.x, this.camBase.y + shake.y, 10);
@@ -324,6 +334,13 @@ export class Renderer {
       flash: this.fx.flashColor,
       flashAmount: this.fx.flash,
     });
+  }
+
+  /** The sun's height follows the rooms left, so a room added to the run moves it back up. */
+  private setSun(game: Game, dt: number): void {
+    const target = game.roomsLeft / RUN.rooms;
+    const daylight = this.skyUniforms.uDaylight;
+    daylight.value = this.settings.reduceFx ? target : lerp(daylight.value, target, 1 - Math.exp(-dt * SUN.settleRate));
   }
 
   private interpolateBalls(game: Game, alpha: number): void {

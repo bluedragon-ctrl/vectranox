@@ -404,7 +404,7 @@ body {
     0 0 18px rgba(255, 42, 157, 0.6);
 }
 
-/* The run at a glance, under the logo: the score, with lives above it and the chain and multiplier below. */
+/* The run at a glance, under the logo: the score, with the room and lives above it and the chain and multiplier below. */
 #hud {
   display: flex;
   flex-direction: column;

@@ -3,7 +3,9 @@ import { SDF } from './common';
 /**
  * Screen-space synthwave scenery: starry sky, striped sun, mountain ridges and a perspective
  * floor grid scrolling towards the viewer. `uVanish` is the vanishing point in device pixels;
- * the sun sits on it, with radius `uSunR` in screen heights. `uFieldRect` is the playfield
+ * the sun sets above it, with radius `uSunR` in screen heights. `uDaylight` is the share of the
+ * run left: at 1 the sun's centre is `uSunHigh` above the horizon, at 0 it has gone below and the
+ * sky has darkened. `uFieldRect` is the playfield
  * (min xy, max xy in device pixels); `uSkip` is the part of it the opaque field always covers,
  * so nothing is drawn there. `uScroll` moves the grid and sun stripes (it holds still under
  * reduce-FX); `uTime` drives the star twinkle.
@@ -14,6 +16,8 @@ uniform float uScroll;
 uniform vec2 uResolution;
 uniform vec2 uVanish;
 uniform float uSunR;
+uniform float uSunHigh;
+uniform float uDaylight;
 uniform vec4 uSkip;
 uniform vec4 uFieldRect;
 uniform float uTwinkle;
@@ -43,26 +47,30 @@ void main() {
   float H = uResolution.y;
   vec2 q = (frag - uVanish) / H;
   vec3 col;
+  // What's lit by the sun dims as it sets: the sky falls furthest at the horizon, where it glowed.
+  float dimSky = mix(0.3, 1.0, uDaylight);
+  float dimGlow = mix(0.4, 1.0, uDaylight);
 
   if (q.y >= 0.0) {
     float t = clamp(q.y / 0.75, 0.0, 1.0);
-    col = mix(uSkyHorizon, uSkyTop, pow(t, 0.45));
+    col = mix(uSkyHorizon * dimSky, uSkyTop * mix(0.5, 1.0, uDaylight), pow(t, 0.45));
 
-    // Stars on a pixel-space lattice, fading towards the horizon.
+    // Stars on a pixel-space lattice, fading towards the horizon. More come out as the sky darkens.
     float cellSize = H * 0.018;
     vec2 cell = floor(frag / cellSize);
     float h = hash12(cell);
-    if (h > 0.93) {
+    float starCut = mix(0.87, 0.93, uDaylight);
+    if (h > starCut) {
       vec2 sp = (cell + 0.2 + 0.6 * hash22(cell + 7.0)) * cellSize;
       float d = length(frag - sp) / (H * 0.0016);
       float tw = 1.0 - uTwinkle * 0.5 * (0.5 + 0.5 * sin(uTime * (1.0 + h * 3.0) + h * 80.0));
-      col += vec3(0.75, 0.7, 1.0) * exp(-d * d) * (h - 0.93) * 14.0 * tw * smoothstep(0.02, 0.25, q.y);
+      col += vec3(0.75, 0.7, 1.0) * exp(-d * d) * (h - starCut) * mix(7.0, 14.0, uDaylight) * tw * smoothstep(0.02, 0.25, q.y);
     }
 
     // Sun: one gradient over the whole disc, with cut-outs that widen gradually towards the
     // horizon. Kept under the bloom threshold (bloom would only catch the yellow top), so its
-    // glow is drawn here, even all round.
-    vec2 sc = q - vec2(0.0, uSunR * 0.55);
+    // glow is drawn here, even all round, and goes with the last of the sun.
+    vec2 sc = q - vec2(0.0, mix(-uSunR, uSunHigh, uDaylight));
     float sd = length(sc) - uSunR;
     float sy = sc.y / uSunR;
     vec3 sunColor = mix(uSunBottom, uSunTop, smoothstep(-1.0, 1.0, clamp(sy, -1.0, 1.0)));
@@ -72,7 +80,7 @@ void main() {
     float cut = gap < 0.005 ? 1.0 : smoothstep(gap - aa, gap + aa, band);
     float sunMask = fill(sd * H) * cut;
     col = mix(col, sunColor * 0.88, sunMask);
-    col += sunColor * exp(-max(sd, 0.0) * 7.0) * 0.22 * (1.0 - fill(sd * H));
+    col += sunColor * exp(-max(sd, 0.0) * 7.0) * 0.22 * (1.0 - fill(sd * H)) * smoothstep(0.0, 0.08, uDaylight);
 
     // Mountain ridge with a neon edge and faint contour lines.
     float rh = ridge(q.x);
@@ -81,7 +89,7 @@ void main() {
     float contour = stroke(fract(q.y * 90.0) - 0.5, 0.06) * smoothstep(0.0, -0.03 * H, rd);
     vec3 rock = uSkyTop * 0.6 + uRidge * contour * 0.12;
     col = mix(col, rock, inRidge);
-    col += uRidge * (stroke(rd, 0.6) * 0.9 + exp(-abs(rd) * 0.25) * 0.15);
+    col += uRidge * (stroke(rd, 0.6) * 0.9 + exp(-abs(rd) * 0.25) * 0.15) * dimGlow;
   } else {
     // Floor: x and z on the ground plane from the perspective divide.
     float z = 1.0 / -q.y;
@@ -91,14 +99,14 @@ void main() {
     float line = 1.0 - clamp(min(a.x, a.y) / 1.3, 0.0, 1.0);
     float far = smoothstep(0.0, 0.18, -q.y);
     line *= clamp(1.4 - max(fw.x, fw.y) * 2.2, 0.0, 1.0);
-    col = mix(uSkyHorizon * 0.35, uSkyTop * 0.6, smoothstep(0.0, 0.4, -q.y));
-    col += uGrid * line * (0.22 + 0.6 * far);
-    col += uGrid * 0.18 * exp(q.y * 18.0);
+    col = mix(uSkyHorizon * 0.35 * dimSky, uSkyTop * 0.6, smoothstep(0.0, 0.4, -q.y));
+    col += uGrid * line * (0.22 + 0.6 * far) * dimGlow;
+    col += uGrid * 0.18 * exp(q.y * 18.0) * dimGlow;
   }
   // Horizon line, faded out next to the playfield's side walls so they glow evenly.
   float wall = min(abs(frag.x - uFieldRect.x), abs(frag.x - uFieldRect.z));
   float horizon = mix(0.15, 1.0, smoothstep(0.0, H * 0.08, wall));
-  col += uSunBottom * (exp(-abs(q.y) * H * 0.12) * 0.9 + exp(-abs(q.y) * 22.0) * 0.18) * horizon;
+  col += uSunBottom * (exp(-abs(q.y) * H * 0.12) * 0.9 + exp(-abs(q.y) * 22.0) * 0.18) * horizon * dimGlow;
   gl_FragColor = vec4(col, 1.0);
 }
 `;
