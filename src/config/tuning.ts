@@ -28,7 +28,7 @@ export const POWER = {
     slow: { duration: 12, weight: 10, opposite: 'fast' },
     fast: { duration: 10, weight: 8, opposite: 'slow' },
     catch: { duration: 15, weight: 9 },
-    pierce: { duration: 8, weight: 6 },
+    pierce: { duration: 6, weight: 6 },
     barrier: { duration: 8, weight: 7 },
     life: { duration: 0, weight: 3 },
     /** `charges`: bricks each ball explodes on. */
@@ -50,9 +50,13 @@ export const POWER = {
   widthRate: 10,
   slowScale: 0.7,
   fastScale: 1.3,
+  /** Ball speed while piercing. Takes the place of `fastScale` if higher, doesn't add to it; slow still applies. */
+  pierceScale: 1.3,
   /** A caught ball releases itself after this long. */
   catchHold: 3,
-  laserCooldown: 0.3,
+  laserCooldown: 0.6,
+  /** Share of its points whatever a laser bolt breaks or hits pays, before the bounty mod. */
+  laserScore: 0.25,
   boltSpeed: 560,
   boltLength: 8,
   /** Bolts leave the paddle this far in from either end. */
@@ -209,7 +213,7 @@ export const BRICK_TYPES = {
 export const BOSS = {
   windup: 0.5,
   phaseBreak: 1.5,
-  laserDamage: 0.15,
+  laserDamage: 0.3,
   portalCapture: 9,
   shot: { speed: 150, radius: 3, fan: (20 * Math.PI) / 180 },
   stun: 0.7,

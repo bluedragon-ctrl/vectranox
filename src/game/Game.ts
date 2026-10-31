@@ -48,6 +48,8 @@ const ROOM_SALT = 0x2545f491;
 const SKIN = 0.01;
 /** Bounces resolved per ball per tick; leftover motion is dropped (only matters in tight corners). */
 const MAX_BOUNCES = 4;
+/** Powers that change how fast balls fly. */
+const SPEED_POWERS: readonly PowerKind[] = ['slow', 'fast', 'pierce'];
 
 /** Each explosion's size before mods; everything else about them is the same (see `Game.explode`). */
 const EXPLOSIONS: Record<ExplosionSource, { radius: number; damage: number }> = {
@@ -297,7 +299,7 @@ export class Game {
     const { duration, opposite }: PowerDef = POWER.kinds[kind];
     if (opposite && this.isActive(opposite)) this.endPower(opposite);
     this.timers[kind] = Math.max(this.timers[kind], powerSeconds(kind, amount ?? duration, this.mods));
-    if (kind === 'slow' || kind === 'fast') this.rescaleBalls();
+    if (SPEED_POWERS.includes(kind)) this.rescaleBalls();
   }
 
   /**
@@ -379,12 +381,11 @@ export class Game {
   /** What a ball moving by (dx, dy) reaches first, as `moveBall` sees it, for the aim line. `portal`: that's a portal. */
   private firstContact(ball: Pick<Ball, 'x' | 'y' | 'r'>, dx: number, dy: number, inPortal: number | null): { hit: SweepHit | null; round: boolean; portal: boolean } {
     const { x, y, r } = ball;
-    const pierce = this.isActive('pierce');
     let hit: SweepHit | null = sweepWalls(ball, dx, dy);
     let round = false;
     let portal = false;
     for (const br of this.bricks) {
-      if (!br.alive || (pierce && !isSolid(br))) continue;
+      if (!br.alive || this.pierces(br)) continue;
       const h = sweepBox(x, y, dx, dy, br.x - r, br.y - r, br.x + br.w + r, br.y + br.h + r);
       if (closer(h, hit)) hit = h;
     }
@@ -846,7 +847,7 @@ export class Game {
     }
     const floor = fight.floor;
     core.hp = Math.max(floor, core.hp - (by === 'laser' ? BOSS.laserDamage : 1));
-    this.score += SCORE.hit * this.multiplier;
+    this.score += this.paid(SCORE.hit * this.multiplier, by);
     this.events.emit('brickHit', { id: core.id, kind: core.kind, hp: core.hp, by, x, y, ix, iy });
     if (core.hp > floor) return;
     if (core.hp > 0) this.nextPhase(fight);
@@ -904,15 +905,15 @@ export class Game {
   private shoveBall(b: Ball, br: Brick): void {
     const out = pushOut(b, br);
     if (!out) return;
-    if (!isSolid(br) && this.isActive('pierce')) {
-      this.ballHitsBrick(br, b, true);
+    if (this.pierces(br)) {
+      this.ballHitsBrick(br, b);
       return;
     }
     b.x += out.nx * (out.depth + SKIN);
     b.y += out.ny * (out.depth + SKIN);
     if (out.nx !== 0) b.vx = out.nx * Math.max(Math.abs(b.vx), FORMATION.shove);
     if (out.ny !== 0) b.vy = out.ny * Math.max(Math.abs(b.vy), FORMATION.shove);
-    this.ballHitsBrick(br, b, false);
+    this.ballHitsBrick(br, b);
     normalizeVelocity(b, this.ballSpeed(b));
   }
 
@@ -1111,12 +1112,12 @@ export class Game {
         continue;
       }
 
-      // Piercing balls go straight through anything breakable.
-      if (typeof target === 'object' && !isSolid(target) && this.isActive('pierce')) {
+      // Piercing balls go straight through what they break.
+      if (typeof target === 'object' && this.pierces(target)) {
         b.x += dx * hit.t;
         b.y += dy * hit.t;
         remaining *= 1 - hit.t;
-        this.ballHitsBrick(target, b, true);
+        this.ballHitsBrick(target, b);
         normalizeVelocity(b, this.ballSpeed(b));
         continue;
       }
@@ -1126,7 +1127,7 @@ export class Game {
       remaining *= 1 - hit.t;
       // Before the bounce, so the brick's events carry the incoming velocity.
       if (typeof target === 'object') {
-        this.ballHitsBrick(target, b, false);
+        this.ballHitsBrick(target, b);
         // Critical: a ball that broke the brick may carry on through where it stood.
         if (!target.alive && this.mods.crit > 0 && this.rng.next() < this.modValue('crit')) {
           this.events.emit('breakthrough', { id: b.id, brick: target.id });
@@ -1276,11 +1277,18 @@ export class Game {
   }
 
   private ballSpeed(b: Ball): number {
-    const scale = this.isActive('slow') ? POWER.slowScale : this.isActive('fast') ? POWER.fastScale : 1;
-    return b.speed * scale;
+    const slow = this.isActive('slow') ? POWER.slowScale : 1;
+    const fast = this.isActive('fast') ? POWER.fastScale : 1;
+    const pierce = this.isActive('pierce') ? POWER.pierceScale : 1;
+    return b.speed * slow * Math.max(fast, pierce);
   }
 
-  /** Brings moving balls to their current speed after slow/fast changes. */
+  /** While piercing, a ball goes through a brick its hit will break; any other brick stops it as usual. */
+  private pierces(br: Brick): boolean {
+    return this.isActive('pierce') && !isSolid(br) && br.hp <= 1 + this.modValue('heavy');
+  }
+
+  /** Brings moving balls to their current speed after a change in `SPEED_POWERS`. */
   private rescaleBalls(): void {
     for (const b of this.balls) if (b.vx !== 0 || b.vy !== 0) normalizeVelocity(b, this.ballSpeed(b));
   }
@@ -1297,7 +1305,7 @@ export class Game {
     this.timers[kind] = 0;
     this.events.emit('powerEnd', { kind });
     if (kind === 'catch') this.releaseCaught();
-    if (kind === 'slow' || kind === 'fast') this.rescaleBalls();
+    if (SPEED_POWERS.includes(kind)) this.rescaleBalls();
   }
 
   /** Lost life or cleared stage: timers, capsules and bolts all go. */
@@ -1468,21 +1476,26 @@ export class Game {
   }
 
   /**
-   * Ball struck a brick; it speeds up a little. `smash` breaks it outright (pierce). A brick that
-   * survives takes the heavy ball's extra hit. A charged ball then explodes, whatever the brick was.
+   * Ball struck a brick; it speeds up a little. A brick that survives takes the heavy ball's extra
+   * hit. A charged ball then explodes, whatever the brick was.
    */
-  private ballHitsBrick(br: Brick, b: Ball, smash: boolean): void {
+  private ballHitsBrick(br: Brick, b: Ball): void {
     // The dampener mod cuts the top speed too, so hits don't win back what it takes.
     const max = BALL.maxSpeed * (1 - this.modValue('dampener'));
     if (!isSolid(br)) b.speed = Math.min(max, b.speed + BALL.hitSpeedStep);
     const ix = clamp(b.x, br.x, br.x + br.w);
     const iy = clamp(b.y, br.y, br.y + br.h);
-    this.hitBrick(br, 'ball', ix, iy, smash, b);
+    this.hitBrick(br, 'ball', ix, iy, b);
     const extra = br.kind === 'steel' ? 0 : this.modValue('heavy');
-    for (let i = 0; i < extra && br.alive; i++) this.hitBrick(br, 'ball', ix, iy, false, b);
+    for (let i = 0; i < extra && br.alive; i++) this.hitBrick(br, 'ball', ix, iy, b);
     if (b.charges === 0) return;
     b.charges--;
     this.explode('charge', [b]);
+  }
+
+  /** What `points` pay when earned by `by`: the laser gets a share of them, more with the bounty mod. */
+  private paid(points: number, by: HitSource): number {
+    return by === 'laser' ? Math.round(points * (POWER.laserScore + this.modValue('bounty'))) : points;
   }
 
   /** Up to `hits` hits, stopping once the brick breaks. */
@@ -1494,7 +1507,7 @@ export class Game {
    * (ix, iy) is the impact point on the brick; `ball` the ball that struck it, if any. Bricks a
    * ball destroys extend its chain and earn the chain bonus.
    */
-  private hitBrick(br: Brick, by: HitSource, ix: number, iy: number, smash = false, ball: Ball | null = null): void {
+  private hitBrick(br: Brick, by: HitSource, ix: number, iy: number, ball: Ball | null = null): void {
     // Callers may queue hits on a brick that an earlier hit already broke.
     if (!br.alive) return;
     br.hitTick = this.tick;
@@ -1511,9 +1524,9 @@ export class Game {
       this.hitCore(br, by, ix, iy);
       return;
     }
-    br.hp = smash ? 0 : br.hp - 1;
+    br.hp--;
     if (br.hp > 0) {
-      this.score += SCORE.hit * this.multiplier;
+      this.score += this.paid(SCORE.hit * this.multiplier, by);
       this.events.emit('brickHit', { id: br.id, kind: br.kind, hp: br.hp, by, x, y, ix, iy });
       return;
     }
@@ -1530,7 +1543,7 @@ export class Game {
     const multiplier = this.multiplier;
     const bonus = this.chainBonus(chain) * multiplier;
     if (ball) ball.chainPoints += bonus;
-    const points = brickPoints(br) * multiplier + bonus;
+    const points = this.paid(brickPoints(br) * multiplier + bonus, by);
     this.score += points;
     const vx = ball?.vx ?? 0;
     const vy = ball?.vy ?? 0;
