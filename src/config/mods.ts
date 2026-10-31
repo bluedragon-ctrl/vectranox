@@ -1,5 +1,6 @@
 import type { PowerKind, TimedPower } from '../game/types';
 import { PALETTE } from './game';
+import { POWER } from './tuning';
 
 /*
  * Mods: the cards bought between stages. Everything about them lives here: name, rarity, how
@@ -11,7 +12,7 @@ import { PALETTE } from './game';
 export type Rarity = 'common' | 'rare' | 'epic';
 
 /** Credits a mod costs, by rarity. What rooms pay is `ROOM_CREDITS` in run.ts. */
-export const PRICES: Readonly<Record<Rarity, number>> = { common: 1, rare: 2, epic: 4 };
+export const PRICES: Readonly<Record<Rarity, number>> = { common: 1, rare: 2, epic: 5 };
 
 /**
  * Chance the pick's last card is epic instead of rare: `depth` for each `RUN.bandRooms` rooms of
@@ -123,6 +124,14 @@ export const MODS = {
     perStack: 3,
     addSeconds: 'laser',
     describe: (_, held) => `LASER LASTS ${secs(held.powerSeconds('laser', 0))} S LONGER`,
+  },
+  bounty: {
+    name: 'BOUNTY',
+    rarity: 'common',
+    maxStacks: 3,
+    /** Share of full points laser bolts pay, added (base: `POWER.laserScore`). */
+    perStack: 0.25,
+    describe: (v) => `LASER PAYS ${pct(POWER.laserScore + v)} OF FULL SCORE`,
   },
   multistart: {
     name: 'MULTI START',
