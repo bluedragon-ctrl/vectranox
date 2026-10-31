@@ -152,6 +152,12 @@ export class Game {
     return stage;
   }
 
+  /** Rooms of the run still to clear, this one included, so it drops as the pick opens. The sun sets by this. */
+  get roomsLeft(): number {
+    const cleared = this.state === 'draft' || this.state === 'complete' ? 1 : 0;
+    return this.stages.length - this.stageIndex - cleared;
+  }
+
   /** Score multiplier for brick points. */
   get multiplier(): number {
     const steps = PINBALL.multipliers;
