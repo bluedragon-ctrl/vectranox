@@ -231,6 +231,17 @@ export const MODS = {
     perStack: 0.25,
     describe: (v) => `${pct(v)} CHANCE AN EXPLOSION BREAKS EACH STEEL BRICK IN REACH`,
   },
+  rollback: {
+    name: 'ROLLBACK',
+    rarity: 'rare',
+    maxStacks: 3,
+    /**
+     * Rooms added as it is taken, not an effect that lasts: the next room comes under the number of
+     * the one just cleared, the rooms after it keep theirs, so the sun rises by a room (see `extraRoom`).
+     */
+    perStack: 1,
+    describe: () => 'ROOM NUMBER GOES BACK 1: THE SUN RISES, ONE MORE ROOM TO PLAY',
+  },
 
   // ── Epic ──
   heavy: {

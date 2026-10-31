@@ -5,7 +5,7 @@ import { BOSS, BRICK_TYPES, FORMATION, PINBALL, POWER, POWER_LOOK, STAGE_EVENTS 
 import { EventBus } from '../core/events';
 import { clamp, lerp } from '../core/math';
 import { Rng } from '../core/rng';
-import { assembleRun, buildStage } from '../levels/assemble';
+import { assembleRun, buildStage, extraRoom } from '../levels/assemble';
 import { TEMPLATES, type StageDef, type StageTemplate } from '../levels/stages';
 import { BossFight } from './boss';
 import { sweepBox, sweepCircle, type SweepHit } from './collision';
@@ -40,6 +40,8 @@ import type {
 
 /** Keeps the mod offers' random stream apart from the stage's. */
 const OFFER_SALT = 0x9e3779b9;
+/** Keeps the rollback mod's rooms' random stream apart from the others. */
+const ROOM_SALT = 0x2545f491;
 
 /** Distance a ball is pushed off a surface after a bounce, so the next sweep starts outside it. */
 const SKIN = 0.01;
@@ -96,7 +98,7 @@ export class Game {
   fight: BossFight | null = null;
   /** Seconds the paddle can't move for yet. */
   stun = 0;
-  /** The run's stages, assembled from the seed. */
+  /** The run's stages, assembled from the seed; the rollback mod adds to them. */
   readonly stages: StageDef[];
   /** Stacks held of each mod; mods last the whole run. */
   readonly mods = Object.fromEntries(MOD_KINDS.map((k) => [k, 0])) as Record<ModKind, number>;
@@ -129,6 +131,8 @@ export class Game {
   private rng: Rng;
   /** Mod offers, so in-stage play doesn't shift them. */
   private offerRng: Rng;
+  /** Rooms added by the rollback mod. */
+  private roomRng: Rng;
   private nextId = 1;
   private breakableLeft = 0;
   private laserCooldown = 0;
@@ -152,6 +156,7 @@ export class Game {
     if (this.stages.length === 0) throw new Error('Game needs at least one stage');
     this.rng = new Rng(seed);
     this.offerRng = new Rng(seed ^ OFFER_SALT);
+    this.roomRng = new Rng(seed ^ ROOM_SALT);
   }
 
   get stage(): StageDef {
@@ -323,7 +328,14 @@ export class Game {
    * in play it comes from the pick between stages.
    */
   applyMod(kind: ModKind): void {
-    this.mods[kind] = Math.min(MODS[kind].maxStacks, this.mods[kind] + 1);
+    if (this.mods[kind] >= MODS[kind].maxStacks) return;
+    this.mods[kind]++;
+    if (kind === 'rollback') this.rollBack();
+  }
+
+  /** The rollback mod: a new room next, under this room's number, so the rooms after it keep theirs. */
+  private rollBack(): void {
+    this.stages.splice(this.stageIndex + 1, 0, extraRoom(this.roomRng, this.stages, this.stage.number - 1));
   }
 
   /**
@@ -338,7 +350,7 @@ export class Game {
 
   /** As `tryStage`, for any template. The room editor's Play button comes through here. */
   tryTemplate(template: StageTemplate): void {
-    this.stages[this.stageIndex] = buildStage(template, this.stageIndex, false);
+    this.stages[this.stageIndex] = buildStage(template, this.stage.number - 1, false);
     this.loadStage(this.stageIndex);
   }
 
@@ -436,14 +448,14 @@ export class Game {
       return;
     }
     this.credits += this.roomCredits;
-    this.offers = rollMods(this.offerRng, this.mods, epicChance(this.stage.room, this.stageIndex + 1));
+    this.offers = rollMods(this.offerRng, this.mods, epicChance(this.stage.room, this.stage.number));
     // Every mod maxed and lives full: nothing to choose.
     if (this.offers.length === 0 && this.lives >= POWER.maxLives) {
       this.afterDraft();
       return;
     }
     this.setState('draft');
-    this.events.emit('draftOpen', { stage: this.stageIndex + 1, offers: this.offers.slice(), credits: this.credits });
+    this.events.emit('draftOpen', { stage: this.stage.number, offers: this.offers.slice(), credits: this.credits });
   }
 
   private afterDraft(): void {
@@ -472,7 +484,7 @@ export class Game {
     if (!keepPowers) this.clearPowers();
     const x = this.paddle.x;
     const y = this.restY(BALL.radius);
-    const speed = BALL.baseSpeed + this.stageIndex * BALL.stageSpeedStep + (this.stage.room === 'elite' ? ELITE.speedBonus : 0);
+    const speed = BALL.baseSpeed + (this.stage.number - 1) * BALL.stageSpeedStep + (this.stage.room === 'elite' ? ELITE.speedBonus : 0);
     const ball: Ball = {
       id: this.nextId++,
       x,
@@ -528,7 +540,7 @@ export class Game {
   private tickRoomTime(dt: number): void {
     if (this.timeLeft === 0) return;
     this.timeLeft = Math.max(0, this.timeLeft - dt);
-    if (this.timeLeft === 0) this.events.emit('timeUp', { stage: this.stageIndex + 1 });
+    if (this.timeLeft === 0) this.events.emit('timeUp', { stage: this.stage.number });
   }
 
   /** Runs every play tick, after the stage was resolved. Triggers for the ongoing events. */
@@ -902,7 +914,7 @@ export class Game {
       this.clearThreats();
       this.clearPowers();
       this.setState('clear');
-      this.events.emit('stageClear', { stage: this.stageIndex + 1, score: this.score, bonus, timeBonus, flawless: this.flawless, multiplier: this.multiplier });
+      this.events.emit('stageClear', { stage: this.stage.number, score: this.score, bonus, timeBonus, flawless: this.flawless, multiplier: this.multiplier });
       return;
     }
     if (this.bricks.some((br) => !br.alive)) this.bricks = this.bricks.filter((br) => br.alive);
@@ -939,7 +951,7 @@ export class Game {
       this.serve();
     } else {
       this.setState('over');
-      this.events.emit('gameOver', { stage: this.stageIndex + 1, score: this.score });
+      this.events.emit('gameOver', { stage: this.stage.number, score: this.score });
     }
   }
 
