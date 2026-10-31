@@ -1,6 +1,6 @@
 import { POWER, POWER_LOOK } from '../config/tuning';
-import { CHARGE_POWERS, TIMED_POWERS } from '../game/powers';
-import type { ChargePower, PowerKind, TimedPower } from '../game/types';
+import { TIMED_POWERS } from '../game/powers';
+import type { PowerKind, TimedPower } from '../game/types';
 import { cssColor } from './dom';
 
 interface Row {
@@ -13,20 +13,9 @@ interface Row {
   last: number;
 }
 
-interface ChargeRow {
-  el: HTMLElement;
-  pips: HTMLElement[];
-  count: HTMLElement;
-  shown: number;
-}
-
-/**
- * Active powers in the left panel. Timed ones: name, a draining bar and seconds left. Charge
- * ones: name, a pip per charge slot and the count.
- */
+/** Active powers in the left panel: name, a draining bar and seconds left. */
 export class PowerHud {
   private rows = new Map<TimedPower, Row>();
-  private chargeRows = new Map<ChargePower, ChargeRow>();
   private none: HTMLElement;
 
   constructor(root: HTMLElement) {
@@ -42,17 +31,9 @@ export class PowerHud {
       root.append(el);
       this.rows.set(kind, { el, bar, secs, shown: '', full: POWER.kinds[kind].duration, last: 0 });
     }
-    for (const kind of CHARGE_POWERS) {
-      const track = span('pips');
-      const pips = Array.from({ length: POWER[kind].maxCharges }, () => track.appendChild(document.createElement('i')));
-      const count = span('secs');
-      const el = powerRow(kind, track, count);
-      root.append(el);
-      this.chargeRows.set(kind, { el, pips, count, shown: -1 });
-    }
   }
 
-  update(timers: Readonly<Record<TimedPower, number>>, charges: Readonly<Record<ChargePower, number>>): void {
+  update(timers: Readonly<Record<TimedPower, number>>): void {
     let any = false;
     for (const [kind, row] of this.rows) {
       const left = timers[kind];
@@ -67,15 +48,6 @@ export class PowerHud {
       row.shown = text;
       row.secs.textContent = text;
       row.bar.style.width = `${(left / row.full) * 100}%`;
-    }
-    for (const [kind, row] of this.chargeRows) {
-      const n = charges[kind];
-      any ||= n > 0;
-      row.el.classList.toggle('hidden', n === 0);
-      if (n === row.shown) continue;
-      row.shown = n;
-      row.count.textContent = `x${n}`;
-      row.pips.forEach((pip, i) => pip.classList.toggle('on', i < n));
     }
     this.none.classList.toggle('hidden', any);
   }

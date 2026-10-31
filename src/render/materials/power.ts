@@ -144,8 +144,8 @@ void main() {
 }
 `;
 
-/** Charge dot under the paddle: a small solid dot with a faint glow. The instance rectangle is its diameter. */
-export const CHARGE_FRAGMENT = /* glsl */ `
+/** Focus timer line under the paddle: a thin solid bar with a faint glow. The instance rectangle is its full size. */
+export const TIMER_FRAGMENT = /* glsl */ `
 varying vec2 vLocal;
 varying vec2 vHalf;
 varying vec4 vColor;
@@ -153,12 +153,30 @@ varying vec4 vColor;
 ${SDF}
 
 void main() {
-  float d = length(vLocal) - vHalf.x;
+  float d = sdRoundBox(vLocal, vHalf, vHalf.y);
   float body = fill(d);
   vec3 tint = vColor.rgb;
-  vec4 col = vec4(mix(tint, vec3(1.0), 0.3), 1.0) * body;
+  vec4 col = vec4(tint, 1.0) * body;
   col.rgb += tint * exp(-max(d, 0.0) * 1.2) * 0.25 * (1.0 - body);
-  gl_FragColor = col;
+  gl_FragColor = col * vColor.a;
+}
+`;
+
+/** Focus aim line: one straight leg of a ball's path, a thin even beam glowing additively. Long side along y. */
+export const AIM_FRAGMENT = /* glsl */ `
+varying vec2 vLocal;
+varying vec2 vHalf;
+varying vec4 vColor;
+
+${SDF}
+
+void main() {
+  float hl = max(vHalf.y - vHalf.x, 0.0);
+  float d = sdSegment(vLocal, vec2(0.0, -hl), vec2(0.0, hl), vHalf.x);
+  float core = fill(d);
+  vec3 tint = vColor.rgb;
+  vec3 col = mix(tint, vec3(1.0), 0.3) * core + tint * exp(-max(d, 0.0) * 0.9) * 0.3 * (1.0 - core);
+  gl_FragColor = vec4(col * vColor.a, 0.0);
 }
 `;
 

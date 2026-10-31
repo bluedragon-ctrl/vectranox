@@ -32,7 +32,7 @@ type UiState = 'title' | 'playing' | 'paused' | 'between' | 'naming' | 'ended';
 /** Seconds the final banner stays up in-game before the end screen accepts input. */
 const END_DELAY = 1.5;
 const START_HINT = 'CLICK / ENTER TO START';
-const CONTROLS_HINT = 'MOVE  ← → / A D / MOUSE\nLAUNCH · FIRE  SPACE / CLICK\nDETONATE  X / RIGHT CLICK\nPAUSE  P / ESC · MUTE  M';
+const CONTROLS_HINT = 'MOVE  ← → / A D / MOUSE\nLAUNCH · FIRE  SPACE / CLICK\nHOLD TO SLOW  X / RIGHT CLICK\nPAUSE  P / ESC · MUTE  M';
 
 function el<T extends HTMLElement = HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -409,7 +409,7 @@ let fps = 60;
 startLoop({
   update: (dt) => {
     if (ui !== 'playing') return;
-    game.update(dt, input.sample(game.paddle.x, game.stun > 0));
+    game.update(dt, input.sample(game.paddle.x, game.stun > 0, game.focusLeft > 0));
     if ((game.state === 'over' || game.state === 'complete') && game.stateTime >= END_DELAY) {
       endRun();
     } else if (game.state === 'draft') {
@@ -443,7 +443,7 @@ startLoop({
     setText(hudCredits, String(game.credits));
     setText(hudChain, formatChain(game));
     setText(hudMult, `×${game.multiplier}`);
-    powerHud.update(game.timers, game.charges);
+    powerHud.update(game.timers);
     modHud.update(game.mods);
     setText(sysFps, fps.toFixed(0));
     setText(sysBalls, String(game.balls.length));

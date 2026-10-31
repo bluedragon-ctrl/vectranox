@@ -13,8 +13,7 @@ import { PALETTE } from './game';
  * weight to 0 to switch a kind off). No capsule drops while `maxCapsules` are already falling.
  *
  * Durations are in seconds; 0 means the power is instant. Picking a timed power again restarts
- * its timer; opposites (expand/narrow, slow/fast) cancel each other. Charge powers (detonator)
- * have no timer: each capsule adds charges, and the alt button spends them.
+ * its timer; opposites (expand/narrow, slow/fast) cancel each other.
  */
 export const POWER = {
   /** Chance (0..1) that a destroyed brick drops a capsule. */
@@ -58,19 +57,34 @@ export const POWER = {
   boltInset: 5,
   barrierY: 7,
   /**
-   * Alt press spends one charge: every ball goes off as one explosion of this `radius` and `damage`
-   * (`target: 'highest'` blows only the ball nearest the bricks) and the balls fly on. An explosion
-   * works the same whatever set it off (see `BRICK_TYPES`). A capsule gives `charges` when none are
-   * held, else `recharge` more, up to `maxCharges`.
+   * A capsule charges every ball in play: each goes off as an explosion of this `radius` and
+   * `damage` when it next hits a brick, on top of the hit itself, and flies on. Balls split off a
+   * charged ball are charged too. An explosion works the same whatever set it off (see `BRICK_TYPES`).
    */
   detonator: {
-    charges: 3,
-    recharge: 1,
-    maxCharges: 5,
     radius: 32,
     damage: 1,
-    target: 'all' as 'all' | 'highest',
   },
+} as const;
+
+/**
+ * Focus: an alt press slows the world to `scale`, until the button is let go or `duration`
+ * seconds pass. Then it can't be used for `cooldown` seconds. Both times are real
+ * seconds, not slowed ones. The paddle gets its own `paddleScale`, applied to keys and mouse alike,
+ * so the same hand movement places it more finely.
+ *
+ * While it runs, a line shows where each falling ball will reach the paddle, through up to
+ * `aimBounces` bounces. A ball that won't get there (it turns back up or enters a portal first)
+ * has no line. If the paddle as it stands would bounce the ball, a second line runs from there
+ * to the first thing the ball hits. The bricks are taken as they stand, so moving ones can still
+ * prove either line wrong.
+ */
+export const FOCUS = {
+  scale: 0.25,
+  paddleScale: 0.3,
+  duration: 3,
+  cooldown: 5,
+  aimBounces: 8,
 } as const;
 
 /** Power colours by family: negative powers are always red, the rest go by what they act on. */
@@ -79,6 +93,8 @@ const POWER_FAMILY = {
   paddle: PALETTE.magenta,
   life: PALETTE.yellow,
   bad: PALETTE.red,
+  /** The detonator acts on the ball, but gets the colour the ball turns. */
+  charge: PALETTE.orange,
 } as const;
 
 /** How each power shows up: capsule letter, colour, and whether it is a negative one. */
@@ -93,7 +109,7 @@ export const POWER_LOOK = {
   pierce: { label: 'PIERCE', glyph: 'P', color: POWER_FAMILY.ball, bad: false },
   barrier: { label: 'BARRIER', glyph: 'B', color: POWER_FAMILY.ball, bad: false },
   life: { label: 'LIFE', glyph: '+', color: POWER_FAMILY.life, bad: false },
-  detonator: { label: 'DETONATOR', glyph: 'X', color: POWER_FAMILY.paddle, bad: false },
+  detonator: { label: 'DETONATOR', glyph: 'X', color: POWER_FAMILY.charge, bad: false },
 } as const satisfies Record<keyof typeof POWER.kinds, { label: string; glyph: string; color: number; bad: boolean }>;
 
 /**
@@ -119,8 +135,8 @@ export const STAGE_EVENTS = {
     hunter: { chance: 1, maxPerStage: 1, bricksLeft: 3, idleTime: 12, duration: 5 },
     /** Serving on the last life late in a stage raises the barrier. */
     safetyNet: { chance: 0.5, maxPerStage: 1, lives: 1, bricksLeft: 15, duration: 15 },
-    /** Few bricks left: the paddle gets free detonator charges. */
-    demolition: { chance: 0.5, maxPerStage: 1, bricksLeft: 6, charges: 2 },
+    /** Few bricks left: every ball is charged, as by a detonator capsule. */
+    demolition: { chance: 0.5, maxPerStage: 1, bricksLeft: 6 },
   },
   /** How long the in-game banner stays up. */
   bannerTime: 1.8,
@@ -133,7 +149,7 @@ export const STAGE_EVENT_LOOK = {
   pulse: { label: 'PULSE', sub: 'GRID SHOCKED', color: PALETTE.purple },
   hunter: { label: 'HUNTER', sub: 'LASER ONLINE', color: PALETTE.magenta },
   safetyNet: { label: 'SAFETY NET', sub: 'BARRIER UP', color: POWER_LOOK.barrier.color },
-  demolition: { label: 'DEMOLITION', sub: 'CHARGES ARMED', color: POWER_LOOK.detonator.color },
+  demolition: { label: 'DEMOLITION', sub: 'BALLS CHARGED', color: POWER_LOOK.detonator.color },
 } as const satisfies Record<keyof typeof STAGE_EVENTS.kinds, { label: string; sub: string; color: number }>;
 
 /**
@@ -161,7 +177,7 @@ export const PINBALL = {
  * Explosive: `fuse` seconds after it breaks, it goes off as an explosion of this `radius` and
  * `damage` at its centre. Every breakable brick in reach (measured to the nearest point of the
  * brick) takes the damage once; explosives caught in it set each other off, one fuse later. Steel
- * is unaffected, bar the steel breaker mod. Detonator charges work the same way, and the blast
+ * is unaffected, bar the steel breaker mod. Charged balls work the same way, and the blast
  * radius, steel breaker and cluster charge mods apply to both.
  *
  * Regenerating: takes `hp` hits and wins one back after `delay` seconds without a hit, again

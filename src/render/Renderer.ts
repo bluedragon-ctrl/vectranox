@@ -1,11 +1,10 @@
 import * as THREE from 'three';
 import { FIELD, PALETTE } from '../config/game';
 import { RUN } from '../config/run';
-import { BOSS, FORMATION, POWER, POWER_LOOK } from '../config/tuning';
+import { BOSS, FOCUS, FORMATION, POWER, POWER_LOOK } from '../config/tuning';
 import { lerp } from '../core/math';
 import type { VisualSettings } from '../core/settings';
 import type { Game } from '../game/Game';
-import { CHARGE_POWERS } from '../game/powers';
 import type { PowerKind, TimedPower } from '../game/types';
 import { GameFx } from './fx/GameFx';
 import { PostFx } from './fx/PostFx';
@@ -16,9 +15,9 @@ import { BRICK_FRAGMENT } from './materials/brick';
 import { FULLSCREEN_VERTEX } from './materials/common';
 import { PADDLE_FRAGMENT } from './materials/paddle';
 import { PORTAL_FRAGMENT, TARGET_FRAGMENT } from './materials/pinball';
-import { BARRIER_FRAGMENT, BLAST_FRAGMENT, BOLT_FRAGMENT, CAPSULE_FRAGMENT, CHARGE_FRAGMENT, SHOT_FRAGMENT } from './materials/power';
+import { AIM_FRAGMENT, BARRIER_FRAGMENT, BLAST_FRAGMENT, BOLT_FRAGMENT, CAPSULE_FRAGMENT, SHOT_FRAGMENT, TIMER_FRAGMENT } from './materials/power';
 import { glyphMask } from './glyphs';
-import { BRICK_GAP, brickTint, CAPSULE_COLORS, COLORS, PIERCE_BALL_COLOR, PORTAL_COLORS, POWER_COLORS, SHOT_COLOR, TARGET_COLOR } from './palette';
+import { AIM_COLOR, BRICK_GAP, brickTint, CAPSULE_COLORS, COLORS, PIERCE_BALL_COLOR, PORTAL_COLORS, POWER_COLORS, SHOT_COLOR, TARGET_COLOR } from './palette';
 import { QuadBatch } from './QuadBatch';
 
 /** Screen-space padding (px) between the playfield frame and its area. */
@@ -44,8 +43,10 @@ const AREA_FLASH = 0.35;
 const HEAL_FLASH = { ticks: 30, strength: 0.25 } as const;
 /** Formation line brightness: at rest, and added as a formation closes in on it. */
 const LINE_GLOW = { rest: 0.35, near: 0.9 } as const;
-/** Held charges show as dots under the paddle: dot diameter, spacing, and drop below the paddle's bottom edge. */
-const CHARGE_DOT = { size: 2.6, step: 4, drop: 3.5 } as const;
+/** Focus timer line under the paddle: height, drop below the paddle's bottom edge, and brightness while cooling down. */
+const FOCUS_LINE = { height: 1, drop: 2, cooldownAlpha: 0.7 } as const;
+/** Focus aim lines: beam width, and brightness of the way down and of the rebound, the one the player steers. */
+const AIM_LINE = { width: 0.9, path: 0.5, rebound: 0.9 } as const;
 /** Horizon height as a fraction of the window, from the bottom. */
 const HORIZON = 0.42;
 /**
@@ -155,11 +156,11 @@ export class Renderer {
   private portals = new QuadBatch({ max: MAX_PORTALS, pad: 6, fragmentShader: PORTAL_FRAGMENT, renderOrder: 9 });
   /** Drives the portals' spin. */
   private portalTime = 0;
-  private chargeDots = new QuadBatch({ max: 16, pad: 2, fragmentShader: CHARGE_FRAGMENT, renderOrder: 27 });
+  private focusLine = new QuadBatch({ max: 1, pad: 2, fragmentShader: TIMER_FRAGMENT, renderOrder: 27 });
+  private aimLines = new QuadBatch({ max: POWER.maxBalls * (FOCUS.aimBounces + 1), pad: 3, fragmentShader: AIM_FRAGMENT, renderOrder: 24 });
 
   private ballPositions: { x: number; y: number }[] = [];
   private color = new THREE.Color();
-  private armedColor = new THREE.Color();
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -199,9 +200,10 @@ export class Renderer {
       this.trails.batch.mesh,
       this.capsules.mesh,
       this.shots.mesh,
+      this.aimLines.mesh,
       this.bolts.mesh,
       this.paddle.mesh,
-      this.chargeDots.mesh,
+      this.focusLine.mesh,
       this.blast.mesh,
       this.balls.mesh,
       this.fx.particles.pieces.mesh,
@@ -318,6 +320,7 @@ export class Renderer {
     this.drawBarrier(game);
     this.drawCapsules(game, alpha);
     this.drawShots(game, alpha);
+    this.drawAimLines(game);
     this.drawBolts(game, alpha);
     this.drawPaddle(game, alpha);
     this.drawBlast();
@@ -468,24 +471,47 @@ export class Renderer {
       powerLevel(game, 'catch'),
     );
     this.paddle.commit();
-    this.drawCharges(game, x);
+    this.drawFocusLine(game, x);
   }
 
-  /** Held charges as a row of dots under the paddle, one per charge, in the power's colour. */
-  private drawCharges(game: Game, x: number): void {
-    const p = game.paddle;
-    const dots = this.chargeDots;
-    let y = p.y - p.h / 2 - CHARGE_DOT.drop;
-    dots.begin();
-    for (const kind of CHARGE_POWERS) {
-      const n = game.charges[kind];
-      if (n === 0) continue;
-      for (let i = 0; i < n; i++) {
-        dots.push(x + (i - (n - 1) / 2) * CHARGE_DOT.step, y, CHARGE_DOT.size, CHARGE_DOT.size, POWER_COLORS[kind]);
-      }
-      y -= CHARGE_DOT.step;
+  /** During focus, each falling ball's path to the paddle, one quad per straight leg, then its rebound. */
+  private drawAimLines(game: Game): void {
+    this.aimLines.begin();
+    if (game.focusLeft > 0) {
+      this.ballPositions.forEach((pos, i) => {
+        const ball = game.balls[i];
+        const path = ball && game.ballPath(ball);
+        if (!path) return;
+        let from = pos;
+        for (const to of path) {
+          this.pushAimLine(from, to, AIM_LINE.path);
+          from = to;
+        }
+        const end = game.reboundEnd(ball, from);
+        if (end) this.pushAimLine(from, end, AIM_LINE.rebound);
+      });
     }
-    dots.commit();
+    this.aimLines.commit();
+  }
+
+  private pushAimLine(from: { x: number; y: number }, to: { x: number; y: number }, brightness: number): void {
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    this.aimLines.push((from.x + to.x) / 2, (from.y + to.y) / 2, AIM_LINE.width, Math.hypot(dx, dy), AIM_COLOR, brightness, 0, 0, 0, 0, Math.atan2(-dx, dy));
+  }
+
+  /** Under the paddle: focus left, draining, then the cooldown, filling back up; nothing once it's ready. */
+  private drawFocusLine(game: Game, x: number): void {
+    const p = game.paddle;
+    const line = this.focusLine;
+    const y = p.y - p.h / 2 - FOCUS_LINE.drop;
+    line.begin();
+    if (game.focusLeft > 0) {
+      line.push(x, y, p.w * (game.focusLeft / game.focusDuration), FOCUS_LINE.height, COLORS.cyan);
+    } else if (game.focusCooldown > 0) {
+      line.push(x, y, p.w * (1 - game.focusCooldown / game.focusRest), FOCUS_LINE.height, COLORS.purple, FOCUS_LINE.cooldownAlpha);
+    }
+    line.commit();
   }
 
   private drawBlast(): void {
@@ -494,17 +520,16 @@ export class Renderer {
     this.blast.commit();
   }
 
-  /** Piercing balls burn hotter; with detonator charges held, the balls that would blow are tinted. */
+  /** Piercing balls burn hotter; charged ones are the detonator's colour. */
   private drawBalls(game: Game, alpha: number): void {
     const pierce = powerLevel(game, 'pierce');
-    const armed = game.charges.detonator > 0 ? game.blastBalls() : [];
     this.color.copy(COLORS.cyan).lerp(PIERCE_BALL_COLOR, pierce * 0.7);
-    this.armedColor.copy(this.color).lerp(POWER_COLORS.detonator, 0.75);
     this.balls.begin();
     this.ballPositions.forEach((pos, i) => {
       const ball = game.balls[i];
       if (!ball) return;
-      this.balls.push(pos.x, pos.y, ball.r * 2, ball.r * 2, armed.includes(ball) ? this.armedColor : this.color, 1, pierce);
+      const charged = ball.charges > 0;
+      this.balls.push(pos.x, pos.y, ball.r * 2, ball.r * 2, charged ? POWER_COLORS.detonator : this.color, 1, pierce, charged ? 1 : 0);
     });
     for (const s of game.shadows) {
       const fade = SHADOW_LOOK.alpha * Math.min(1, s.life / SHADOW_LOOK.fade);

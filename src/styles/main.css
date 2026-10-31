@@ -690,23 +690,6 @@ body {
   box-shadow: 0 0 6px var(--c);
 }
 
-.power .pips {
-  display: flex;
-  gap: 3px;
-}
-
-.power .pips i {
-  flex: 1;
-  max-width: 12px;
-  height: 6px;
-  background: rgba(157, 77, 255, 0.18);
-}
-
-.power .pips i.on {
-  background: var(--c);
-  box-shadow: 0 0 6px var(--c);
-}
-
 .power .secs {
   text-align: right;
   color: var(--text-dim);

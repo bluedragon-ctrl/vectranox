@@ -139,9 +139,9 @@ export const MODS = {
     name: 'ARMORY',
     rarity: 'common',
     maxStacks: 3,
-    /** Detonator charges at the start of each stage (capped at `POWER.detonator.maxCharges`). */
+    /** Bricks each stage's first ball explodes on (see `POWER.detonator`). */
     perStack: 1,
-    describe: (v) => `START EACH STAGE WITH ${v} DETONATOR CHARGE${v === 1 ? '' : 'S'}`,
+    describe: (v) => `EACH STAGE'S FIRST BALL EXPLODES ON ITS NEXT ${v === 1 ? 'BRICK' : `${v} BRICKS`}`,
   },
   failsafe: {
     name: 'FAILSAFE',
@@ -150,6 +150,22 @@ export const MODS = {
     /** Seconds of barrier at the start of each stage. */
     perStack: 5,
     describe: (v, held) => `START EACH STAGE WITH ${secs(v * (1 + held.extender))} S OF BARRIER`,
+  },
+  dilation: {
+    name: 'TIME DILATION',
+    rarity: 'common',
+    maxStacks: 3,
+    /** Real seconds added to focus (base: `FOCUS.duration`). */
+    perStack: 1,
+    describe: (v) => `SLOWDOWN LASTS ${v} S LONGER`,
+  },
+  recovery: {
+    name: 'QUICK RECOVERY',
+    rarity: 'common',
+    maxStacks: 2,
+    /** Real seconds cut from focus's cooldown (base: `FOCUS.cooldown`). */
+    perStack: 1,
+    describe: (v) => `SLOWDOWN COOLDOWN ${v} S SHORTER`,
   },
 
   // ── Rare ──
