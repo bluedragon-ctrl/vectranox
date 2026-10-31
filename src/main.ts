@@ -331,7 +331,7 @@ function overlayContent(): OverlayContent | null {
         case 'serve':
           if (game.breached) return { title: 'LINE BREACHED', sub: 'FORMATION PUSHED BACK\nCLICK / SPACE TO LAUNCH' };
           return {
-            title: `ROOM ${game.stage.number}  ${threatPips(game.stage.threat)}`,
+            title: `ROOM ${roomCount(game)}  ${threatPips(game.stage.threat)}`,
             sub: `${stageLabel(game)}\nCLICK / SPACE TO LAUNCH`,
           };
         case 'clear':
@@ -354,6 +354,11 @@ function endTitle(): string {
   return game.state === 'complete' ? 'RUN COMPLETE' : 'GAME OVER';
 }
 
+/** This room out of the run's total. */
+function roomCount(g: Game): string {
+  return `${g.stage.number}/${g.stages.length}`;
+}
+
 /** The stage's name, after its room kind unless it is a standard room. */
 function stageLabel(g: Game): string {
   const room = ROOM_LABEL[g.stage.room];
@@ -370,6 +375,7 @@ function formatChain(g: Game): string {
 renderScores(scoreList, scores);
 
 const hudScore = el('hud-score');
+const hudRoom = el('hud-room');
 const hudLives = el('hud-lives');
 const hudChain = el('hud-chain');
 const hudMult = el('hud-mult');
@@ -409,6 +415,7 @@ startLoop({
 
     if (frameTime > 0) fps += (1 / frameTime - fps) * 0.05;
     setText(hudScore, formatScore(game.score));
+    setText(hudRoom, roomCount(game));
     setText(hudLives, String(game.lives));
     setText(hudChain, formatChain(game));
     setText(hudMult, `×${game.multiplier}`);
