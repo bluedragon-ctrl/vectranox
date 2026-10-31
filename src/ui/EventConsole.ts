@@ -31,8 +31,8 @@ const POWER_EVENTS: ReadonlySet<string> = new Set<LogEvent>([
   'powerEnd',
   'explosion',
   'targetBank',
-  'modPick',
-  'livesPick',
+  'modBuy',
+  'livesBuy',
   'secondWind',
 ]);
 

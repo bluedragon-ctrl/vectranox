@@ -2,29 +2,25 @@ import { PALETTE } from './game';
 import { POWER } from './tuning';
 
 /*
- * Mods: the cards picked between stages. Everything about them lives here: name, rarity, how
+ * Mods: the cards bought between stages. Everything about them lives here: name, rarity, how
  * far they stack, the effect of one stack and the card text. Edit freely; the simulation only
  * reads this (each mod's effect is applied in game/Game.ts where noted).
  */
 
 export type Rarity = 'common' | 'rare' | 'epic';
-export type RarityWeights = Readonly<Record<Rarity, number>>;
+
+/** Credits a mod costs, by rarity. What rooms pay is `ROOM_CREDITS` in run.ts. */
+export const PRICES: Readonly<Record<Rarity, number>> = { common: 1, rare: 2, epic: 4 };
 
 /**
- * Chance of each rarity per card slot, for each `RUN.bandRooms` rooms of the run (relative weights;
- * the last row is used past the end). Deeper rooms lean towards rare and epic cards.
+ * Chance the pick's last card is epic instead of rare: `depth` for each `RUN.bandRooms` rooms of
+ * the run (the last entry is used past the end), `elite` and `boss` after those rooms at any depth.
  */
-export const RARITY_WEIGHTS: readonly RarityWeights[] = [
-  { common: 70, rare: 25, epic: 5 },
-  { common: 55, rare: 33, epic: 12 },
-  { common: 45, rare: 37, epic: 18 },
-];
-
-/** The pick after an elite room, at any depth. */
-export const ELITE_WEIGHTS: RarityWeights = { common: 0, rare: 70, epic: 30 };
-
-/** The pick after a boss, at any depth. */
-export const BOSS_WEIGHTS: RarityWeights = { common: 0, rare: 30, epic: 70 };
+export const EPIC_CHANCE = {
+  depth: [0.1, 0.25, 0.4],
+  elite: 0.5,
+  boss: 1,
+} as const;
 
 /** Card tag and colour for each rarity. */
 export const RARITY_LOOK = {
@@ -274,13 +270,23 @@ export const MODS = {
     perStack: 5,
     describe: (v, held) => `EVERY MULTI-BALL SPLIT RAISES ${secs(v * (1 + held.extender))} S OF BARRIER`,
   },
+  salvage: {
+    name: 'SALVAGE',
+    rarity: 'epic',
+    maxStacks: 1,
+    /** Credits added to what every cleared room pays. */
+    perStack: 1,
+    describe: (v) => `EVERY CLEARED ROOM PAYS ${v} MORE CREDIT${v === 1 ? '' : 'S'}`,
+  },
 } as const satisfies Record<string, ModDef>;
 
 /**
- * The pick between stages: `offers` mod cards, plus a card for `lives` extra lives instead (up
- * to `POWER.maxLives`).
+ * The pick between stages: a mod card of each rarity in `slots` (the last may turn epic, see
+ * `EPIC_CHANCE`), plus a card for `lives` extra lives at `livesCost` credits that can be bought
+ * again (up to `POWER.maxLives`). Any number of cards can be bought; credits not spent carry over.
  */
 export const DRAFT = {
-  offers: 3,
-  lives: 2,
-} as const;
+  slots: ['common', 'common', 'rare', 'rare'],
+  lives: 1,
+  livesCost: 1,
+} as const satisfies { slots: readonly Rarity[]; lives: number; livesCost: number };

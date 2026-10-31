@@ -83,11 +83,12 @@ export type GameEvents = {
   lifeLost: { lives: number };
   /** `bonus` is what an elite room paid on top; `score` includes it. */
   stageClear: { stage: number; score: number; bonus: number };
-  /** The pick between stages opened with these mod offers. */
-  draftOpen: { stage: number; offers: ModKind[] };
-  modPick: { kind: ModKind; stacks: number };
-  /** The pick went to extra lives: `gained` of them, `lives` now. */
-  livesPick: { gained: number; lives: number };
+  /** The pick between stages opened with these mod offers and `credits` to spend. */
+  draftOpen: { stage: number; offers: ModKind[]; credits: number };
+  /** A mod was bought, `credits` left. */
+  modBuy: { kind: ModKind; stacks: number; credits: number };
+  /** Lives were bought: `gained` of them, `lives` now, `credits` left. */
+  livesBuy: { gained: number; lives: number; credits: number };
   gameOver: { stage: number; score: number };
   runComplete: { score: number };
 };

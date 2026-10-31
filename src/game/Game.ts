@@ -1,6 +1,6 @@
 import { BALL, BRICK, FIELD, PADDLE, RULES, SCORE, SIM } from '../config/game';
-import { BOSS_WEIGHTS, DRAFT, ELITE_WEIGHTS, MODS } from '../config/mods';
-import { BOSS_ROOM, ELITE } from '../config/run';
+import { DRAFT, MODS, PRICES } from '../config/mods';
+import { BOSS_ROOM, ELITE, ROOM_CREDITS } from '../config/run';
 import { BOSS, BRICK_TYPES, FORMATION, PINBALL, POWER, POWER_LOOK, STAGE_EVENTS } from '../config/tuning';
 import { EventBus } from '../core/events';
 import { clamp, lerp } from '../core/math';
@@ -12,7 +12,7 @@ import { sweepBox, sweepCircle, type SweepHit } from './collision';
 import type { GameEvents, WallSide } from './events';
 import { buildFormations, type Formation } from './formation';
 import { parseLayout } from './layout';
-import { depthWeights, MOD_KINDS, rollMods } from './mods';
+import { epicChance, MOD_KINDS, rollMods } from './mods';
 import { aim, closer, normalizeVelocity, pushOut, sweepWalls } from './physics';
 import { CHARGE_POWERS, GOOD_POWERS, OPPOSITE, POWER_KINDS, rollPower, TIMED_POWERS } from './powers';
 import { StageEventTracker } from './stageEvents';
@@ -102,6 +102,10 @@ export class Game {
   readonly mods = Object.fromEntries(MOD_KINDS.map((k) => [k, 0])) as Record<ModKind, number>;
   /** The pick's mod offers, while drafting. */
   offers: ModKind[] = [];
+  /** The offers already bought; their cards stay in place. */
+  readonly bought = new Set<ModKind>();
+  /** What the pick has to spend; rooms pay them and what isn't spent carries over. */
+  credits = 0;
   /** Seconds left on each timed power; 0 is off. */
   readonly timers = Object.fromEntries(TIMED_POWERS.map((k) => [k, 0])) as Record<TimedPower, number>;
   /** Charges held for each charge power, spent by the alt button. */
@@ -234,7 +238,7 @@ export class Game {
       case 'clear':
         if (this.stateTime >= RULES.stageClearDelay) this.afterStage();
         break;
-      // Waiting for the player's choice (pickMod / pickLives).
+      // Waiting for the player's choices (buyMod / buyLives / endDraft).
       case 'draft':
       case 'over':
       case 'complete':
@@ -338,27 +342,41 @@ export class Game {
    * allowed. (Recorded with their tick, they replay like the per-tick input.)
    */
 
-  /** Takes offer `index` of the mod pick. */
-  pickMod(index: number): boolean {
+  /** Whether offer `index` is still there and affordable. */
+  canBuyMod(index: number): boolean {
     const kind = this.offers[index];
-    if (this.state !== 'draft' || !kind) return false;
+    return this.state === 'draft' && !!kind && !this.bought.has(kind) && this.credits >= PRICES[MODS[kind].rarity];
+  }
+
+  /** Buys offer `index` of the pick; the pick stays open. */
+  buyMod(index: number): boolean {
+    const kind = this.offers[index];
+    if (!kind || !this.canBuyMod(index)) return false;
+    this.credits -= PRICES[MODS[kind].rarity];
+    this.bought.add(kind);
     this.applyMod(kind);
-    this.events.emit('modPick', { kind, stacks: this.mods[kind] });
-    this.afterDraft();
+    this.events.emit('modBuy', { kind, stacks: this.mods[kind], credits: this.credits });
     return true;
   }
 
-  /** Whether the lives option would add any (lives are capped). */
-  get canPickLives(): boolean {
-    return this.state === 'draft' && this.lives < POWER.maxLives;
+  /** Whether extra lives are affordable and would add any (lives are capped). */
+  get canBuyLives(): boolean {
+    return this.state === 'draft' && this.credits >= DRAFT.livesCost && this.lives < POWER.maxLives;
   }
 
-  /** Takes extra lives instead of a mod. */
-  pickLives(): boolean {
-    if (!this.canPickLives) return false;
+  /** Buys extra lives; the pick stays open. */
+  buyLives(): boolean {
+    if (!this.canBuyLives) return false;
     const before = this.lives;
+    this.credits -= DRAFT.livesCost;
     this.lives = Math.min(POWER.maxLives, this.lives + DRAFT.lives);
-    this.events.emit('livesPick', { gained: this.lives - before, lives: this.lives });
+    this.events.emit('livesBuy', { gained: this.lives - before, lives: this.lives, credits: this.credits });
+    return true;
+  }
+
+  /** Closes the pick and moves on to the next stage. */
+  endDraft(): boolean {
+    if (this.state !== 'draft') return false;
     this.afterDraft();
     return true;
   }
@@ -397,33 +415,33 @@ export class Game {
     if (this.mods.laserstart > 0) this.applyPower('laser', this.modValue('laserstart'));
   }
 
-  /** Stage cleared: the run ends after the last one; otherwise the pick opens. */
+  /** Credits clearing this room pays; none for the last, with no pick after it. */
+  get roomCredits(): number {
+    return this.stageIndex + 1 >= this.stages.length ? 0 : ROOM_CREDITS[this.stage.room] + this.modValue('salvage');
+  }
+
+  /** Stage cleared: the run ends after the last one; otherwise it pays and the pick opens. */
   private afterStage(): void {
     if (this.stageIndex + 1 >= this.stages.length) {
       this.setState('complete');
       this.events.emit('runComplete', { score: this.score });
       return;
     }
-    this.offers = this.rollOffers(DRAFT.offers);
+    this.credits += this.roomCredits;
+    this.offers = rollMods(this.offerRng, this.mods, epicChance(this.stage.room, this.stageIndex + 1));
     // Every mod maxed and lives full: nothing to choose.
     if (this.offers.length === 0 && this.lives >= POWER.maxLives) {
       this.afterDraft();
       return;
     }
     this.setState('draft');
-    this.events.emit('draftOpen', { stage: this.stageIndex + 1, offers: this.offers.slice() });
+    this.events.emit('draftOpen', { stage: this.stageIndex + 1, offers: this.offers.slice(), credits: this.credits });
   }
 
   private afterDraft(): void {
     this.offers = [];
+    this.bought.clear();
     this.loadStage(this.stageIndex + 1);
-  }
-
-  /** Mods on offer for the next stage's depth; an elite room just cleared pays with better ones. */
-  private rollOffers(count: number): ModKind[] {
-    const { room } = this.stage;
-    const weights = room === 'boss' ? BOSS_WEIGHTS : room === 'elite' ? ELITE_WEIGHTS : depthWeights(this.stageIndex + 1);
-    return rollMods(this.offerRng, this.mods, weights, count);
   }
 
   /** A mod's total effect at the stacks held: its `perStack` times the stacks. */

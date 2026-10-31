@@ -24,7 +24,8 @@ npm run dev
 | Alt action (detonate a charge) | right click | X |
 | Pause | Esc | P or Esc |
 | Mute audio | | M |
-| Between stages: pick a mod or +2 lives | click a card | 1–4 |
+| Between stages: buy mods and lives with credits | click a card | 1–5 |
+| Between stages: move on | click CONTINUE | Enter |
 
 In dev builds the running game is available in the browser console as `vnx.game`;
 `vnx.game.applyPower('laser')` grants a power-up (any kind from `POWER.kinds`, e.g. `'detonator'` for charges) and
