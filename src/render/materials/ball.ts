@@ -2,7 +2,8 @@ import { SDF } from './common';
 
 /**
  * Ball: white-hot core, tinted rim and a wide soft halo. The instance rectangle is the ball's
- * diameter; `uPad` holds the halo. params: x = glow boost (0..1).
+ * diameter; `uPad` holds the halo. params: x = glow boost (0..1), y = 1 tints the core too, for a
+ * ball that has to read as its colour.
  */
 export const BALL_FRAGMENT = /* glsl */ `
 varying vec2 vLocal;
@@ -19,7 +20,8 @@ void main() {
   float boost = vParams.x;
   float body = fill(d);
   float t = clamp(length(vLocal) / r, 0.0, 1.0);
-  vec3 core = mix(vec3(1.05, 1.02, 1.1), tint * 0.95, smoothstep(0.35, 1.0, t));
+  vec3 centre = mix(vec3(1.05, 1.02, 1.1), tint, vParams.y);
+  vec3 core = mix(centre, tint * 0.95, smoothstep(0.35, 1.0, t));
   vec4 col = vec4(core, 1.0) * body;
   float halo = exp(-max(d, 0.0) * 2.2) * (0.15 + boost * 0.15);
   col.rgb += tint * halo * (1.0 - body);

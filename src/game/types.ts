@@ -9,12 +9,10 @@ export type BrickKind = 'normal' | 'steel' | 'explosive' | 'regen' | 'core' | Em
 export type EmitterKind = 'turret' | 'spawner' | 'phantom';
 
 export type PowerKind = keyof typeof POWER.kinds;
-/** Powers that give charges, spent one per alt press. */
-export type ChargePower = 'detonator';
-/** Powers that run on a timer: those with a duration (the rest act once on pickup, or give charges). */
+/** Powers that run on a timer: those with a duration (the rest act once on pickup). */
 export type TimedPower = { [K in PowerKind]: (typeof POWER.kinds)[K]['duration'] extends 0 ? never : K }[PowerKind];
 export type HitSource = 'ball' | 'laser' | 'pulse' | 'explosion';
-/** What set off an explosion: a detonator charge, or an explosive brick's fuse. */
+/** What set off an explosion: a charged ball, or an explosive brick's fuse. */
 export type ExplosionSource = 'charge' | 'brick';
 export type StageEventKind = keyof typeof STAGE_EVENTS.kinds;
 export type ModKind = keyof typeof MODS;
@@ -28,8 +26,10 @@ export interface TickInput {
   launch: boolean;
   /** Fire button held (auto-fires the laser). */
   fire: boolean;
-  /** Alt button press (spends a charge, e.g. detonates a ball). */
+  /** Alt button press (starts focus). */
   alt: boolean;
+  /** Alt button held (keeps focus going). */
+  altHeld: boolean;
 }
 
 /** Position is the centre; `px` is x at the previous tick, for render interpolation. */
@@ -62,6 +62,8 @@ export interface Ball {
   chainPoints: number;
   /** Id of the portal the ball just came out of; that portal ignores it until it has left. */
   inPortal: number | null;
+  /** Bricks it will still explode on (detonator). */
+  charges: number;
 }
 
 /** Pinball target: a round lamp the ball bounces off and lights. Position is the centre. */

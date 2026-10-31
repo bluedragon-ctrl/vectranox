@@ -73,6 +73,9 @@ export type GameEvents = {
   powerMissed: { id: number; kind: PowerKind };
   powerEnd: { kind: TimedPower };
   laserFire: { x: number; y: number };
+  /** Focus started: the world runs slow until `focusEnd`. */
+  focusStart: Record<string, never>;
+  focusEnd: Record<string, never>;
   /** Ball `id` broke brick `brick` and carried on through it (critical mod). */
   breakthrough: { id: number; brick: number };
   /** A stage event fired; `bricks` is how many breakable bricks were left. */

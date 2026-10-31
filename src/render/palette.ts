@@ -73,5 +73,8 @@ export const EXPLOSION_COLOR = new THREE.Color(EXPLOSIVE_COLOR);
 /** Pinball target lamp, linear and capped like glass so a lit bank doesn't flood the bloom. */
 export const TARGET_COLOR = capBrightness(new THREE.Color(0x2dffb4));
 
+/** Focus aim lines, linear: laser green, a colour nothing that hurts or breaks uses. */
+export const AIM_COLOR = new THREE.Color(0x39ff14);
+
 /** Accretion-disk colour of each portal pair, in layout order (repeats past the end). */
 export const PORTAL_COLORS = [PALETTE.purple, PALETTE.cyan, PALETTE.orange].map((hex) => new THREE.Color(hex));
