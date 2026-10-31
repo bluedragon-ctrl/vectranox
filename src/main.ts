@@ -3,7 +3,7 @@ import { AudioEngine } from './audio/AudioEngine';
 import { GameSounds } from './audio/GameSounds';
 import { Input, type ControlMode } from './core/input';
 import { PALETTE } from './config/game';
-import { BOSS_ROOM, ELITE, ROOM_LABEL, threatPips, TIME_BONUS } from './config/run';
+import { BOSS_ROOM, ELITE, ROOM_LABEL, RUN, threatPips, TIME_BONUS } from './config/run';
 import { startLoop } from './core/loop';
 import { addScore, formatScore, loadLastName, loadScores, NAME_LENGTH, rankOf, type ScoreEntry } from './core/scores';
 import { loadAudioSettings, loadVisualSettings, saveAudioSettings, saveVisualSettings } from './core/settings';
@@ -375,7 +375,7 @@ function formatTime(seconds: number): string {
 
 /** This room out of the run's total. */
 function roomCount(g: Game): string {
-  return `${g.stage.number}/${g.stages.length}`;
+  return `${g.stage.number}/${RUN.rooms}`;
 }
 
 /** The stage's name, after its room kind unless it is a standard room. */

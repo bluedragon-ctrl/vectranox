@@ -31,6 +31,18 @@ export function assembleRun(seed: number): StageDef[] {
   return stages;
 }
 
+/**
+ * A room for a run under way, as stage `depth` (0-based), for the rollback mod. Only standard or
+ * formation: elites and bosses stay where the run rolled them. Templates don't repeat while unused
+ * ones are left.
+ */
+export function extraRoom(rng: Rng, stages: readonly StageDef[], depth: number): StageDef {
+  const room = rng.next() < RUN.formationChance ? 'formation' : 'standard';
+  const used = new Set(TEMPLATES.filter((t) => stages.some((s) => s.name === t.name)));
+  const template = pickTemplate(rng, used, depth, room);
+  return buildStage(template, depth, rng.next() < RUN.depth.mirrorChance, rng);
+}
+
 /** The kind of the room after `stages`. */
 function rollRoom(rng: Rng, stages: readonly StageDef[], bossesLeft: boolean): RoomKind {
   const depth = stages.length;

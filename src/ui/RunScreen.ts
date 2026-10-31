@@ -1,7 +1,7 @@
 import { DRAFT, MODS, PRICES, RARITY_LOOK } from '../config/mods';
 import { PALETTE } from '../config/game';
 import { ROOM_LABEL, threatPips } from '../config/run';
-import { POWER, POWER_LOOK } from '../config/tuning';
+import { POWER } from '../config/tuning';
 import type { Game } from '../game/Game';
 import { describeMod } from '../game/mods';
 import { cssColor } from './dom';
@@ -81,7 +81,7 @@ export class RunScreen {
     cards.push({
       name: `+${DRAFT.lives} ${DRAFT.lives === 1 ? 'LIFE' : 'LIVES'}`,
       desc: livesFull ? 'LIVES FULL' : 'CAN BE BOUGHT AGAIN',
-      color: POWER_LOOK.life.color,
+      color: RARITY_LOOK.common.color,
       tag: 'REPAIR',
       note: `${game.lives} → ${Math.min(POWER.maxLives, game.lives + DRAFT.lives)}`,
       price: livesFull ? null : DRAFT.livesCost,
