@@ -12,7 +12,7 @@ import { POWER } from './tuning';
 export type Rarity = 'common' | 'rare' | 'epic';
 
 /** Credits a mod costs, by rarity. What rooms pay is `ROOM_CREDITS` in run.ts. */
-export const PRICES: Readonly<Record<Rarity, number>> = { common: 1, rare: 2, epic: 4 };
+export const PRICES: Readonly<Record<Rarity, number>> = { common: 1, rare: 2, epic: 5 };
 
 /**
  * Chance the pick's last card is epic instead of rare: `depth` for each `RUN.bandRooms` rooms of
