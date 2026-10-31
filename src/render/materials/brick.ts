@@ -8,9 +8,10 @@ import { SDF } from './common';
  * A boss's emitters are dark casings with a mark that lights as they wind up. Its core is the one
  * brick that animates: a reactor casing with an energy bar that pulses faster with each phase.
  *
- * Instance data: colour rgb = tint, alpha = hits left (regenerating bricks show a lit slot per hit).
+ * Instance data: colour rgb = tint, alpha = hits left (regenerating bricks and glass ones that take
+ * more than one hit show a lit slot per hit).
  * params: x = kind (0 normal, 1 steel, 2 explosive, 3 regenerating, 4 core, 5 turret, 6 spawner,
- * 7 phantom), y = hits a regenerating brick started with, z = hit flash,
+ * 7 phantom), y = hits the brick started with, z = hit flash,
  * w = an emitter's wind-up, or the core's heat, 0..1.
  * The instance rectangle is the brick's visual footprint; `uPad` leaves room for halo and shadow.
  */
@@ -29,7 +30,7 @@ ${SDF}
 const float DEPTH = 2.6;
 const float RADIUS = 1.6;
 const float BEVEL = 2.4;
-/** Spacing of the hit slots on regenerating bricks. */
+/** Spacing of the hit slots. */
 const float NOTCH_STEP = 3.4;
 
 /** Gradient of sdRoundBox(p, b, r). */
@@ -37,6 +38,15 @@ vec2 gradRoundBox(vec2 p, vec2 b, float r) {
   vec2 q = abs(p) - b + r;
   vec2 g = max(q.x, q.y) > 0.0 ? normalize(max(q, 0.0)) : (q.x > q.y ? vec2(1.0, 0.0) : vec2(0.0, 1.0));
   return g * vec2(p.x < 0.0 ? -1.0 : 1.0, p.y < 0.0 ? -1.0 : 1.0);
+}
+
+/** A slot per hit sunk into the top face across the middle; the ones still to take are lit. */
+vec3 hitSlots(vec3 top, vec2 pt, vec3 tint, float hp, float maxHp) {
+  float slot = floor(pt.x / NOTCH_STEP + maxHp * 0.5);
+  float inRow = step(0.0, slot) * step(slot, maxHp - 1.0);
+  float notch = sdRoundBox(pt - vec2((slot + 0.5 - maxHp * 0.5) * NOTCH_STEP, 0.0), vec2(0.8, 1.5), 0.4);
+  top = mix(top, tint * 0.1, fill(notch - 0.4) * inRow);
+  return mix(top, mix(tint, vec3(1.0), 0.55), fill(notch) * inRow * step(slot, hp - 1.0));
 }
 
 void main() {
@@ -137,13 +147,7 @@ void main() {
     top = tint * (0.28 + 0.3 * smoothstep(-1.0, 0.6, yN) + 0.25 * diff);
     top += vec3(spec) * 0.5 + mix(tint, vec3(1.0), 0.4) * fres * 0.9;
     top += tint * exp(-length(pt * vec2(0.14, 0.3))) * 0.5;
-    // A slot per hit sunk into the plate across the middle; the ones still to take are lit.
-    float hp = vColor.a;
-    float slot = floor(pt.x / NOTCH_STEP + maxHp * 0.5);
-    float inRow = step(0.0, slot) * step(slot, maxHp - 1.0);
-    float notch = sdRoundBox(pt - vec2((slot + 0.5 - maxHp * 0.5) * NOTCH_STEP, 0.0), vec2(0.8, 1.5), 0.4);
-    top = mix(top, tint * 0.1, fill(notch - 0.4) * inRow);
-    top = mix(top, mix(tint, vec3(1.0), 0.55), fill(notch) * inRow * step(slot, hp - 1.0));
+    top = hitSlots(top, pt, tint, vColor.a, maxHp);
     side = tint * 0.3;
   } else {
     top = bg * (0.25 + tint * 0.9);
@@ -155,6 +159,7 @@ void main() {
     float glint = exp(-length((pt - vec2(-hb.x + 3.2, hb.y - 2.0)) * vec2(0.6, 1.4)) * 1.2);
     top += vec3(1.0) * glint * 0.6;
     top += tint * diff * 0.12 + tint * fres * 0.9 + vec3(spec) * 0.7;
+    if (maxHp > 1.5) top = hitSlots(top, pt, tint, vColor.a, maxHp);
     side = tint * 0.1 + bg * 0.15;
   }
   // Side face: darker, with a faint lip where it meets the top face.

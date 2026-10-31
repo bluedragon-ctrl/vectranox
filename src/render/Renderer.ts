@@ -383,7 +383,7 @@ export class Renderer {
         br.w - BRICK_GAP,
         br.h - BRICK_GAP,
         brickTint(br, this.color),
-        br.kind === 'regen' ? br.hp : 1,
+        br.hp,
         BRICK_KIND[br.kind],
         br.maxHp,
         Math.max(flash * flash, heal),
