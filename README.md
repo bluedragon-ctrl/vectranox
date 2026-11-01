@@ -64,7 +64,7 @@ One-time setup: repo **Settings → Pages → Source: GitHub Actions**.
 
 ## Online scores
 
-The world table is a Cloudflare Worker with a D1 database, in `worker/`. Without `VITE_SCORES_URL` at build time the game has the local table alone, and if the Worker can't be reached the local table carries on by itself.
+The high scores are a Cloudflare Worker with a D1 database, in `worker/`, and the deployed game shows only that table. Without `VITE_SCORES_URL` at build time, as in plain `npm run dev`, the game uses a table in localStorage instead.
 
 One-time setup:
 

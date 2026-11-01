@@ -84,17 +84,14 @@ const input = new Input(canvas, renderer);
 const chainPopups = new ChainPopups(el('popups'), el('panel'), (x, y) => renderer.worldToClient(x, y));
 const runScreen = new RunScreen(el('run-screen'), (action) => runAction(action, 'mouse'));
 const bossBar = new BossBar(el('boss-bar'), (x, y) => renderer.worldToClient(x, y));
-const scoreBoard = new ScoreBoard(el('score-list'), { world: el<HTMLButtonElement>('score-tab-world'), local: el<HTMLButtonElement>('score-tab-local') }, ONLINE_SCORES);
+const scoreBoard = new ScoreBoard(el('score-list'));
 const nameEntry = new NameEntry(el<HTMLFormElement>('name-entry'), el<HTMLInputElement>('name-field'), saveScore);
 
 let ui: UiState = 'title';
-let scores = loadScores();
-/** The online table as last fetched, or null if the server wasn't reached. */
-let worldScores: ScoreEntry[] | null = null;
-/** The place the run that just ended takes on the local table, or -1. */
+/** The table in play: online as last fetched (null until the server answers), or local in a build without a server. */
+let scores: ScoreEntry[] | null = ONLINE_SCORES ? null : loadScores();
+/** The place the run that just ended takes on the table, or -1. */
 let endRank = -1;
-/** The same on the online table as last fetched, or -1. */
-let endWorldRank = -1;
 /** What the server made of the run that just ended, for the end screen. */
 let worldResult = '';
 /** Waiting for the browser to grant pointer lock before play starts in mouse mode. */
@@ -149,10 +146,9 @@ function enterPlay(mode: ControlMode): void {
   if (ui === 'ended') {
     game = newGame();
     endRank = -1;
-    endWorldRank = -1;
     worldResult = '';
-    scoreBoard.setLocal(scores);
-    void refreshWorldScores();
+    scoreBoard.show(scores);
+    void refreshScores();
   }
   input.mode = mode;
   input.reset();
@@ -202,20 +198,21 @@ function runKey(code: string): boolean {
   return true;
 }
 
-/** Reloads the online table, keeping the last one shown if the server can't be reached. */
-async function refreshWorldScores(): Promise<void> {
-  const fetched = await fetchScores();
-  if (!fetched) return;
-  worldScores = fetched;
-  scoreBoard.setWorld(worldScores);
+/** Reloads the online table, keeping the last one if the server can't be reached. */
+async function refreshScores(): Promise<void> {
+  if (!ONLINE_SCORES) return;
+  scores = (await fetchScores()) ?? scores;
+  scoreBoard.show(scores);
 }
 
-/** The run is over: asks for a name if it made either table. A single room from the editor never counts. */
+/**
+ * The run is over: asks for a name if it made the table, or if the table never loaded,
+ * since the server may take the score all the same. A single room from the editor never counts.
+ */
 function endRun(): void {
   releasePointer();
-  endRank = playtest ? -1 : rankOf(scores, game.score);
-  endWorldRank = playtest || !worldScores ? -1 : rankOf(worldScores, game.score);
-  if (endRank < 0 && endWorldRank < 0) {
+  endRank = playtest ? -1 : rankOf(scores ?? [], game.score);
+  if (endRank < 0) {
     ui = 'ended';
     return;
   }
@@ -227,14 +224,14 @@ function saveScore(name: string): void {
   if (ui !== 'naming') return;
   const entry: ScoreEntry = { name, score: game.score, stage: String(game.stage.number), won: game.state === 'complete' };
   saveLastName(name);
-  if (endRank >= 0) {
-    scores = addScore(scores, entry, endRank);
-    scoreBoard.setLocal(scores, endRank);
-    scoreBoard.show('local');
-  }
   nameEntry.hide();
   ui = 'ended';
-  if (ONLINE_SCORES) void sendScore(entry, game);
+  if (ONLINE_SCORES) {
+    void sendScore(entry, game);
+    return;
+  }
+  scores = addScore(scores ?? [], entry, endRank);
+  scoreBoard.show(scores, endRank);
 }
 
 /** Puts a finished run on the online table. A new run may have started by the time the answer comes. */
@@ -246,12 +243,10 @@ async function sendScore(entry: ScoreEntry, run: Game): Promise<void> {
     return;
   }
   logUi('scoreSent', { rank: result.rank + 1 });
-  worldScores = result.scores;
+  scores = result.scores;
   const current = run === game;
   if (current) worldResult = `WORLD #${result.rank + 1}`;
-  const onTable = current && result.rank < result.scores.length;
-  scoreBoard.setWorld(worldScores, onTable ? result.rank : -1);
-  if (onTable) scoreBoard.show('world');
+  scoreBoard.show(scores, current ? result.rank : -1);
 }
 
 function pause(reason: string): void {
@@ -346,7 +341,7 @@ function overlayContent(): OverlayContent | null {
     case 'paused':
       return { title: 'PAUSED', sub: `${START_HINT}\n\n${CONTROLS_HINT}`, menu: true };
     case 'naming':
-      return { title: endTitle(), sub: `SCORE ${formatScore(game.score)}\nNEW HIGH SCORE  ${namingRanks()}`, menu: true };
+      return { title: endTitle(), sub: `SCORE ${formatScore(game.score)}\n${scores ? `NEW HIGH SCORE  #${endRank + 1}` : 'NAME YOUR SCORE'}`, menu: true };
     case 'ended':
       return { title: endTitle(), sub: `SCORE ${formatScore(game.score)}${worldResult && `\n${worldResult}`}\n\n${START_HINT}`, menu: true };
     case 'between':
@@ -371,12 +366,6 @@ function overlayContent(): OverlayContent | null {
           return null;
       }
   }
-}
-
-/** The places the run takes, on the tables it made. */
-function namingRanks(): string {
-  const ranks = [endWorldRank >= 0 ? `WORLD #${endWorldRank + 1}` : '', endRank >= 0 ? `LOCAL #${endRank + 1}` : ''];
-  return ranks.filter(Boolean).join(' · ');
 }
 
 function endTitle(): string {
@@ -416,10 +405,8 @@ function formatChain(g: Game): string {
   return chain >= 2 ? `×${chain} +${g.chainBonus(chain) * g.multiplier}` : '—';
 }
 
-scoreBoard.setLocal(scores);
-void refreshWorldScores().then(() => {
-  if (worldScores) scoreBoard.show('world');
-});
+if (ONLINE_SCORES) void refreshScores();
+else scoreBoard.show(scores);
 
 const hudScore = el('hud-score');
 const hudRoom = el('hud-room');
