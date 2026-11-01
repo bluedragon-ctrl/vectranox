@@ -172,6 +172,11 @@ body {
   pointer-events: none;
 }
 
+/* No room past the wall: the badge sits over the side panel, so it has to draw above it. */
+#popups.docked {
+  z-index: 1;
+}
+
 #popups.paused .popup {
   animation-play-state: paused;
 }
