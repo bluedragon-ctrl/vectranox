@@ -63,7 +63,7 @@ export const POWER = {
   /** A caught ball releases itself after this long. */
   catchHold: 3,
   laserCooldown: 0.6,
-  /** Share of its points whatever a laser bolt breaks or hits pays, before the bounty mod. */
+  /** Share of its points whatever a laser bolt breaks or hits pays, before the long beam mod. */
   laserScore: 0.25,
   boltSpeed: 560,
   boltLength: 8,
@@ -232,8 +232,8 @@ export const BRICK_TYPES = {
  *
  * Emitters flash for `windup` seconds before they act. A phase break lasts `phaseBreak` seconds: the
  * core takes no damage and nothing fires. Damage can't run past a phase's threshold, so one good
- * shot into a vault can't end the fight. Lasers do `laserDamage` per bolt to the core; everything
- * else does a whole hit. Portals in a boss room catch a ball from `portalCapture`, as they are
+ * shot into a vault can't end the fight. Lasers do `laserDamage` per bolt to the core, more with
+ * the piercing laser mod; everything else does a whole hit. Portals in a boss room catch a ball from `portalCapture`, as they are
  * the only way into a vault.
  *
  * `shot`: speed, hit radius, and the angle between a fan's shots. `stun`: seconds the paddle can't

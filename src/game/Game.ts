@@ -1,5 +1,5 @@
 import { BALL, BRICK, FIELD, PADDLE, RULES, SCORE, SIM } from '../config/game';
-import { ANCHOR_DROP, DRAFT, MODS, PRICES, type GrantTrigger } from '../config/mods';
+import { ANCHOR_DROP, DRAFT, LASERPIERCE_CORE, MODS, PRICES, type GrantTrigger } from '../config/mods';
 import { BOSS_ROOM, ELITE, ROOM_CREDITS, TIME_BONUS } from '../config/run';
 import { BOSS, BRICK_TYPES, FOCUS, FORMATION, PINBALL, POWER, STAGE_EVENTS } from '../config/tuning';
 import { EventBus } from '../core/events';
@@ -12,7 +12,7 @@ import { sweepBox, sweepCircle, type SweepHit } from './collision';
 import type { GameEvents, WallSide } from './events';
 import { buildFormations, type Formation } from './formation';
 import { parseLayout } from './layout';
-import { epicChance, MOD_GRANTS, MOD_KINDS, powerSeconds, rollMods, splitInto } from './mods';
+import { epicChance, laserPay, MOD_GRANTS, MOD_KINDS, powerSeconds, rollMods, splitInto } from './mods';
 import { aim, closer, normalizeVelocity, pushOut, sweepWalls } from './physics';
 import { COMMON_POWERS, GOOD_POWERS, RARE_POWERS, rollPower, TIMED_POWERS } from './powers';
 import { StageEventTracker } from './stageEvents';
@@ -880,7 +880,8 @@ export class Game {
       return;
     }
     const floor = fight.floor;
-    core.hp = Math.max(floor, core.hp - (by === 'laser' ? BOSS.laserDamage : 1));
+    const boltDamage = BOSS.laserDamage + LASERPIERCE_CORE * this.mods.laserpierce;
+    core.hp = Math.max(floor, core.hp - (by === 'laser' ? boltDamage : 1));
     this.score += this.paid(SCORE.hit * this.multiplier, by);
     this.events.emit('brickHit', { id: core.id, kind: core.kind, hp: core.hp, by, x, y, ix, iy });
     if (core.hp > floor) return;
@@ -1481,9 +1482,9 @@ export class Game {
     this.events.emit('ballSpawn', { id: ball.id, x: ball.x, y: ball.y });
   }
 
-  private maybeDrop(x: number, y: number): void {
+  private maybeDrop(x: number, y: number, chance = POWER.dropChance + this.modValue('lucky')): void {
     if (this.breakableLeft === 0 || this.capsules.length >= POWER.maxCapsules) return;
-    if (this.rng.next() >= POWER.dropChance + this.modValue('lucky')) return;
+    if (this.rng.next() >= chance) return;
     const pool = this.rng.next() < POWER.rareChance ? RARE_POWERS : COMMON_POWERS;
     this.dropCapsule(rollPower(this.rng, pool), x, y);
   }
@@ -1534,9 +1535,9 @@ export class Game {
     this.explode('charge', [b]);
   }
 
-  /** What `points` pay when earned by `by`: the laser gets a share of them, more with the bounty mod. */
+  /** What `points` pay when earned by `by`: the laser gets a share of them, more with the long beam mod. */
   private paid(points: number, by: HitSource): number {
-    return by === 'laser' ? Math.round(points * (POWER.laserScore + this.modValue('bounty'))) : points;
+    return by === 'laser' ? Math.round(points * laserPay(this.mods)) : points;
   }
 
   /** Up to `hits` hits, stopping once the brick breaks. */
@@ -1593,7 +1594,7 @@ export class Game {
     this.maybeDrop(x, y);
   }
 
-  /** Steel never counts towards clearing a stage, so breaking it pays like a normal brick and nothing more. */
+  /** Steel never counts towards clearing a stage, so breaking it pays like a normal brick and always drops a capsule. */
   private breakSteel(br: Brick, ix: number, iy: number): void {
     br.alive = false;
     const x = br.x + br.w / 2;
@@ -1602,7 +1603,7 @@ export class Game {
     const points = SCORE.perHp * multiplier;
     this.score += points;
     this.events.emit('brickDestroyed', { id: br.id, kind: br.kind, points, chain: 0, bonus: 0, multiplier, by: 'explosion', x, y, ix, iy, vx: 0, vy: 0 });
-    this.maybeDrop(x, y);
+    this.maybeDrop(x, y, 1);
   }
 }
 
