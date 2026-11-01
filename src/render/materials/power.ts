@@ -144,7 +144,7 @@ void main() {
 }
 `;
 
-/** Focus aim line: one straight leg of a ball's path, a thin even beam glowing additively. Long side along y. */
+/** A thin even beam glowing additively, for focus aim lines and the target bank's circuit. Long side along y. */
 export const AIM_FRAGMENT = /* glsl */ `
 varying vec2 vLocal;
 varying vec2 vHalf;

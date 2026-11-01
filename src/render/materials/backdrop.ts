@@ -332,12 +332,15 @@ void main() {
 /**
  * The playfield: opaque dark well over the scenery, neon U-shaped frame (the bottom is open) and a dashed death line.
  * `uHits` holds recent wall impacts: xy = world position, z = strength (0..1).
+ * `uSurge` lights the frame from a completed target bank: xy = origin, z = how far it has spread, w = strength (0..1).
  * `uLine` is the line marching formations must not reach: x = height, y = brightness (0 when the stage has none).
  */
 export const FIELD_FRAGMENT = /* glsl */ `
 uniform vec2 uField;
 uniform vec4 uHits[8];
 uniform float uDanger;
+uniform vec4 uSurge;
+uniform vec3 uSurgeColor;
 uniform vec2 uLine;
 uniform vec3 uFrame;
 uniform vec3 uGuide;
@@ -369,6 +372,9 @@ void main() {
   // brighten the top edge, which sits next to the bricks and the screen border).
   vec3 frame = uFrame * (1.0 + hit * 0.15);
   col.rgb += frame * (stroke(d, 0.5) * 0.85 + exp(-d * 0.5) * 0.18);
+  // The one thing allowed past the bloom threshold: the frame should flare, and only for a moment.
+  float surge = uSurge.w * (1.0 - smoothstep(uSurge.z - 24.0, uSurge.z, length(w - uSurge.xy)));
+  col.rgb += uSurgeColor * surge * (stroke(d, 0.9) * 2.5 + exp(-d * 0.4) * 0.6);
 
   float dash = step(0.5, fract(w.x / 8.0)) * step(0.0, w.x) * step(w.x, uField.x);
   col.rgb += uDeath * stroke(w.y, 0.35) * dash * (0.5 + uDanger);
