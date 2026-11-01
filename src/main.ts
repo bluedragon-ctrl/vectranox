@@ -32,7 +32,7 @@ type UiState = 'title' | 'playing' | 'paused' | 'between' | 'naming' | 'ended';
 /** Seconds the final banner stays up in-game before the end screen accepts input. */
 const END_DELAY = 1.5;
 const START_HINT = 'CLICK / ENTER TO START';
-const CONTROLS_HINT = 'MOVE  ← → / A D / MOUSE\nLAUNCH · FIRE  SPACE / CLICK\nHOLD TO SLOW  X / RIGHT CLICK\nPAUSE  P / ESC · MUTE  M';
+const CONTROLS_HINT = 'MOVE  ← → / A D / MOUSE\nLAUNCH · FIRE  SPACE / CLICK\nHOLD TO SLOW  X / RIGHT CLICK\nPAUSE  P / ESC\nMUSIC  M · SFX  F';
 
 function el<T extends HTMLElement = HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -294,8 +294,8 @@ window.addEventListener(
       return;
     }
     if (e.repeat) return;
-    if (e.code === 'KeyM') {
-      audioPanel.toggleMute();
+    if (e.code === 'KeyM' || e.code === 'KeyF') {
+      audioPanel.toggle(e.code === 'KeyM' ? 'musicOn' : 'sfxOn');
       return;
     }
     if (ui === 'playing') {

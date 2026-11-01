@@ -7,7 +7,7 @@ import { Synth } from './synth';
  * Owns the WebAudio graph:
  *
  *   sfx bus ──────────────────────┐
- *   music decks → muffle → music ─┴→ master → limiter → speakers
+ *   music decks → muffle → music ─┴→ limiter → speakers
  *
  * Browsers only let audio start from a user gesture, so the context is created on the first
  * click or key press (`unlock`); until then the game is silent and sounds are simply skipped.
@@ -18,7 +18,6 @@ export class AudioEngine {
   synth: Synth | null = null;
 
   private ctx: AudioContext | null = null;
-  private master: GainNode | null = null;
   private musicBus: GainNode | null = null;
   private sfxBus: GainNode | null = null;
   private muffle: BiquadFilterNode | null = null;
@@ -40,12 +39,12 @@ export class AudioEngine {
 
   apply(settings: AudioSettings): void {
     this.settings = { ...settings };
-    if (!this.ctx || !this.master || !this.musicBus || !this.sfxBus) return;
+    if (!this.ctx || !this.musicBus || !this.sfxBus) return;
     const now = this.ctx.currentTime;
-    const level = (steps: number) => (steps / AUDIO.steps) ** 2;
-    smooth(this.master.gain, settings.mute ? 0 : level(settings.master), now);
-    smooth(this.musicBus.gain, level(settings.music), now);
-    smooth(this.sfxBus.gain, level(settings.sfx), now);
+    const level = (steps: number, on: boolean) => (on ? (steps / AUDIO.steps) ** 2 : 0);
+    smooth(this.musicBus.gain, level(settings.music, settings.musicOn), now);
+    smooth(this.sfxBus.gain, level(settings.sfx, settings.sfxOn), now);
+    this.music.setEnabled(settings.musicOn);
   }
 
   /** Pause screen: the music drops behind a lowpass filter. */
@@ -72,12 +71,10 @@ export class AudioEngine {
     limiter.release.value = 0.15;
     limiter.connect(ctx.destination);
 
-    this.master = ctx.createGain();
-    this.master.connect(limiter);
     this.sfxBus = ctx.createGain();
-    this.sfxBus.connect(this.master);
+    this.sfxBus.connect(limiter);
     this.musicBus = ctx.createGain();
-    this.musicBus.connect(this.master);
+    this.musicBus.connect(limiter);
     this.muffleGain = ctx.createGain();
     this.muffleGain.connect(this.musicBus);
     this.muffle = ctx.createBiquadFilter();

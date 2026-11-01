@@ -40,6 +40,7 @@ export class MusicPlayer {
   private order: number[] = [];
   private lastPlayed = -1;
   private failures = 0;
+  private enabled = true;
 
   get hasTracks(): boolean {
     return TRACKS.length > 0;
@@ -74,16 +75,31 @@ export class MusicPlayer {
       });
       return deck;
     });
-    this.advance(AUDIO.skipFade);
+    if (this.enabled) this.advance(AUDIO.skipFade);
+  }
+
+  /**
+   * Disabled music is paused rather than left playing silently, and resumes where it stopped.
+   * The pause waits out the bus fade so it doesn't click.
+   */
+  setEnabled(on: boolean): void {
+    if (on === this.enabled) return;
+    this.enabled = on;
+    const deck = this.decks[this.active];
+    if (!deck) return;
+    window.clearTimeout(deck.stopTimer);
+    if (!on) deck.stopTimer = window.setTimeout(() => deck.el.pause(), 100);
+    else if (deck.leaving) this.advance(AUDIO.skipFade);
+    else deck.el.play().catch(() => undefined);
   }
 
   /** Skips to the next track. */
   next(): void {
-    if (this.ctx) this.advance(AUDIO.skipFade);
+    if (this.ctx && this.enabled) this.advance(AUDIO.skipFade);
   }
 
   private isCurrent(deck: Deck): boolean {
-    return deck === this.decks[this.active] && !deck.leaving;
+    return this.enabled && deck === this.decks[this.active] && !deck.leaving;
   }
 
   /** Fades the current deck out and the next track in on the other deck. */

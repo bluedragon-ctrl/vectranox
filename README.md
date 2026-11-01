@@ -23,7 +23,8 @@ npm run dev
 | Fire laser | hold button | hold Space |
 | Slow the game (hold) | right click | X |
 | Pause | Esc | P or Esc |
-| Mute audio | | M |
+| Music on / off | click MUSIC in the menu | M |
+| Sound effects on / off | click SFX in the menu | F |
 | Between stages: buy mods and lives with credits | click a card | 1–5 |
 | Between stages: move on | click CONTINUE | Enter |
 

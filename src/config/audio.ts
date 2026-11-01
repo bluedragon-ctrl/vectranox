@@ -5,7 +5,7 @@
 export const AUDIO = {
   /** Volume sliders go from 0 to this many steps; gain follows the square of the level. */
   steps: 10,
-  defaults: { master: 8, music: 6, sfx: 8, mute: false },
+  defaults: { music: 5, sfx: 6, musicOn: false, sfxOn: true },
   /** Seconds two music tracks overlap when one runs into the next. */
   crossfade: 4,
   /** Crossfade when the player skips a track. */
