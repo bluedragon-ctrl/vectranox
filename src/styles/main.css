@@ -404,7 +404,7 @@ body {
     0 0 18px rgba(255, 42, 157, 0.6);
 }
 
-/* The run at a glance, under the logo: the score, with the room and lives above it and the chain and multiplier below. */
+/* The run at a glance, under the logo: the score, the room's clock, then the chain and multiplier, and the room and lives last. */
 #hud {
   display: flex;
   flex-direction: column;
@@ -426,25 +426,22 @@ body {
   color: var(--yellow);
 }
 
-/* Two pairs on a row: the first stays left, the second goes right. */
+/* Pairs on a row: spread evenly, the first left and the last right. */
 .hud-row b:not(:last-child) {
   margin-right: auto;
 }
 
-/* The room's time limit ran out: the bonus is gone. */
-#hud-time.out {
-  color: var(--text-dim);
-}
-
-/* The number the player chases. */
-.score-main {
+/* The number the player chases, and the live readouts under it. */
+.score-main,
+.hud-big {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
 }
 
-.score-main span {
+.score-main span,
+.hud-big span {
   font-family: var(--display);
   font-weight: 500;
   font-size: 12px;
@@ -461,6 +458,21 @@ body {
   text-shadow:
     0 0 6px rgba(255, 210, 63, 0.6),
     0 0 16px rgba(255, 210, 63, 0.3);
+}
+
+/* Fixed-width digits, so the numbers hold still as they tick. */
+.hud-big b {
+  font-weight: normal;
+  font-size: clamp(30px, 3vw, 46px);
+  letter-spacing: 0.04em;
+  color: var(--cyan);
+  text-shadow: 0 0 8px rgba(45, 226, 255, 0.5);
+}
+
+/* The room's time limit ran out: the bonus is gone. */
+#hud-time.out {
+  color: var(--text-dim);
+  text-shadow: none;
 }
 
 .block h2 {
@@ -627,6 +639,10 @@ body {
   min-height: 0;
   display: flex;
   flex-direction: column;
+}
+
+#console-block.hidden {
+  display: none;
 }
 
 #console {
