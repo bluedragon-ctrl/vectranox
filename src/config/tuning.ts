@@ -81,9 +81,10 @@ export const POWER = {
  *
  * While it runs, a line shows where each falling ball will reach the paddle, through up to
  * `aimBounces` bounces. A ball that won't get there (it turns back up or enters a portal first)
- * has no line. If the paddle as it stands would bounce the ball, a second line runs from there
- * to the first thing the ball hits. The bricks are taken as they stand, so moving ones can still
- * prove either line wrong.
+ * has no line. If the paddle as it stands would bounce or catch the ball, a second line runs from
+ * there to the first thing the ball hits, for a catch once it is released; a ball already caught
+ * has just this line. The bricks are taken as they stand, so moving ones can still prove either
+ * line wrong.
  */
 export const FOCUS = {
   scale: 0.25,
