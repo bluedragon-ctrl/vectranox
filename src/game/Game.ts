@@ -46,6 +46,8 @@ const ROOM_SALT = 0x2545f491;
 
 /** Distance a ball is pushed off a surface after a bounce, so the next sweep starts outside it. */
 const SKIN = 0.01;
+/** How far along the paddle a caught ball can stick, as a share of its half width. */
+const CATCH_EDGE = 0.9;
 /** Bounces resolved per ball per tick; leftover motion is dropped (only matters in tight corners). */
 const MAX_BOUNCES = 4;
 /** Powers that change how fast balls fly. */
@@ -326,10 +328,12 @@ export class Game {
 
   /**
    * Where a falling ball goes from here: the points it turns at, ending where it reaches the
-   * paddle's height. Null if it won't get there (see `FOCUS`). Bounces as `moveBall` does.
+   * paddle's height. Empty for a caught ball, which is there already. Null if it won't get
+   * there (see `FOCUS`). Bounces as `moveBall` does.
    */
   ballPath(b: Ball): { x: number; y: number }[] | null {
-    if (b.stuck !== null || b.vy >= 0) return null;
+    if (b.stuck !== null) return [];
+    if (b.vy >= 0) return null;
     const floor = this.restY(b.r);
     const speed = Math.hypot(b.vx, b.vy);
     const probe = { x: b.x, y: b.y, r: b.r, vx: b.vx, vy: b.vy };
@@ -366,12 +370,14 @@ export class Game {
 
   /**
    * Where a ball arriving at `landing` (the end of its `ballPath`) first hits something after
-   * bouncing off the paddle as it stands now. Null if the paddle would miss it or catch it.
+   * leaving the paddle as it stands now, bounced or, with catch, released from where it sticks.
+   * Null if the paddle would miss it.
    */
   reboundEnd(b: Ball, landing: { x: number; y: number }): { x: number; y: number } | null {
     const p = this.paddle;
-    if (this.isActive('catch') || Math.abs(landing.x - p.x) >= p.w / 2 + b.r) return null;
-    const offset = clamp((landing.x - p.x) / (p.w / 2), -1, 1);
+    if (b.stuck === null && Math.abs(landing.x - p.x) >= p.w / 2 + b.r) return null;
+    const edge = this.isActive('catch') ? CATCH_EDGE : 1;
+    const offset = b.stuck ?? clamp((landing.x - p.x) / (p.w / 2), -edge, edge);
     const probe = { x: landing.x, y: landing.y, r: b.r, vx: 0, vy: 0 };
     aim(probe, offset * BALL.maxBounceAngle, Math.hypot(FIELD.width, FIELD.height));
     const { hit } = this.firstContact(probe, probe.vx, probe.vy, null);
@@ -1232,7 +1238,7 @@ export class Game {
     const p = this.paddle;
     const offset = clamp((b.x - p.x) / (p.w / 2), -1, 1);
     if (top && this.isActive('catch')) {
-      b.stuck = clamp(offset, -0.9, 0.9);
+      b.stuck = clamp(offset, -CATCH_EDGE, CATCH_EDGE);
       b.stuckTime = 0;
       b.vx = b.vy = 0;
       this.holdCaught(b, 0);
