@@ -1,4 +1,4 @@
-import { DRAFT, EPIC_CHANCE, MODS, type HeldEffects, type ModDef, type Rarity } from '../config/mods';
+import { DRAFT, EPIC_CHANCE, LONGBEAM_PAY, MODS, type HeldEffects, type ModDef, type Rarity } from '../config/mods';
 import { RUN, type RoomKind } from '../config/run';
 import { POWER, POWER_LOOK } from '../config/tuning';
 import type { Rng } from '../core/rng';
@@ -34,13 +34,22 @@ export function splitInto(mods: ModStacks): number {
   return POWER.splitInto + MODS.extraball.perStack * mods.extraball;
 }
 
+/** Share of full points laser bolts pay with `mods`. */
+export function laserPay(mods: ModStacks): number {
+  return POWER.laserScore + LONGBEAM_PAY * mods.longbeam;
+}
+
 /**
  * Card text for `kind` at `stacks` stacks, with the numbers the other mods in `held` give it
  * (the pick shows the stacks it would have once taken, the panel the stacks held).
  */
 export function describeMod(kind: ModKind, held: ModStacks, stacks = held[kind]): string {
   const shown: ModStacks = { ...held, [kind]: stacks };
-  const effects: HeldEffects = { powerSeconds: (power, base) => powerSeconds(power, base, shown), splitInto: splitInto(shown) };
+  const effects: HeldEffects = {
+    powerSeconds: (power, base) => powerSeconds(power, base, shown),
+    splitInto: splitInto(shown),
+    laserPay: laserPay(shown),
+  };
   return MODS[kind].describe(MODS[kind].perStack * stacks, effects);
 }
 

@@ -1,6 +1,6 @@
 import type { PowerKind, TimedPower } from '../game/types';
 import { PALETTE } from './game';
-import { POWER } from './tuning';
+import { BOSS } from './tuning';
 
 /*
  * Mods: the cards bought between stages. Everything about them lives here: name, rarity, how
@@ -26,6 +26,12 @@ export const EPIC_CHANCE = {
 
 /** Multiplier steps a lost multiplier drops with 1, 2, 3... stacks of the anchor mod, instead of all of them. */
 export const ANCHOR_DROP = [3, 2, 1] as const;
+
+/** Share of full points each stack of long beam adds to what laser bolts pay (base: `POWER.laserScore`). */
+export const LONGBEAM_PAY = 0.25;
+
+/** Core damage each stack of piercing laser adds to a bolt (base: `BOSS.laserDamage`). */
+export const LASERPIERCE_CORE = 0.3;
 
 /** Card tag and colour for each rarity. */
 export const RARITY_LOOK = {
@@ -64,6 +70,8 @@ export interface HeldEffects {
   powerSeconds: (kind: TimedPower, base: number) => number;
   /** Balls each ball becomes on a split. */
   splitInto: number;
+  /** Share of full points laser bolts pay. */
+  laserPay: number;
 }
 
 /** 0.15 → "15%". */
@@ -112,18 +120,13 @@ export const MODS = {
     name: 'LONG BEAM',
     rarity: 'common',
     maxStacks: 3,
-    /** Seconds added to every laser grant (capsule, laser start, hunter event), before the extender. */
+    /**
+     * Seconds added to every laser grant (capsule, laser start, hunter event), before the extender.
+     * Each stack also adds `LONGBEAM_PAY` to what laser bolts pay.
+     */
     perStack: 3,
     addSeconds: 'laser',
-    describe: (_, held) => `LASER LASTS ${secs(held.powerSeconds('laser', 0))} S LONGER`,
-  },
-  bounty: {
-    name: 'BOUNTY',
-    rarity: 'common',
-    maxStacks: 3,
-    /** Share of full points laser bolts pay, added (base: `POWER.laserScore`). */
-    perStack: 0.25,
-    describe: (v) => `LASER PAYS ${pct(POWER.laserScore + v)} OF FULL SCORE`,
+    describe: (_, held) => `LASER LASTS ${secs(held.powerSeconds('laser', 0))} S LONGER AND PAYS ${pct(held.laserPay)} OF FULL SCORE`,
   },
   multistart: {
     name: 'MULTI START',
@@ -148,7 +151,7 @@ export const MODS = {
   armory: {
     name: 'ARMORY',
     rarity: 'common',
-    maxStacks: 3,
+    maxStacks: 2,
     /** Bricks each stage's first ball explodes on (see `POWER.detonator`). */
     perStack: 1,
     grant: { on: 'stageStart', power: 'detonator' },
@@ -159,7 +162,7 @@ export const MODS = {
     rarity: 'common',
     maxStacks: 3,
     /** Seconds of barrier at the start of each stage. */
-    perStack: 5,
+    perStack: 10,
     grant: { on: 'stageStart', power: 'barrier' },
     describe: (v, held) => `START EACH STAGE WITH ${secs(held.powerSeconds('barrier', v))} S OF BARRIER`,
   },
@@ -208,21 +211,22 @@ export const MODS = {
   secondwind: {
     name: 'SECOND WIND',
     rarity: 'rare',
-    maxStacks: 2,
+    maxStacks: 1,
     /**
      * Times per stage that losing the last ball serves a new one instead of costing a life.
      * Powers are kept; the multiplier goes as for a lost life, and the room is no longer flawless.
      */
     perStack: 1,
-    describe: (v) => `${v === 1 ? 'ONCE' : `${v} TIMES`} A STAGE, A LOST BALL COSTS NO LIFE, ONLY THE MULTIPLIER`,
+    describe: () => 'ONCE A STAGE, A LOST BALL COSTS NO LIFE, ONLY THE MULTIPLIER',
   },
   laserpierce: {
     name: 'PIERCING LASER',
     rarity: 'rare',
     maxStacks: 2,
-    /** Bricks a laser bolt can break and fly on through before it stops. */
+    /** Bricks a laser bolt can break and fly on through before it stops. Each stack also adds `LASERPIERCE_CORE` core damage. */
     perStack: 1,
-    describe: (v) => `LASER BOLTS GO THROUGH ${v} BROKEN BRICK${v === 1 ? '' : 'S'}`,
+    describe: (v) =>
+      `LASER BOLTS GO THROUGH ${v} BROKEN BRICK${v === 1 ? '' : 'S'} AND DO ${secs(BOSS.laserDamage + LASERPIERCE_CORE * v)} DAMAGE TO A BOSS CORE`,
   },
   amplifier: {
     name: 'AMPLIFIER',
@@ -255,9 +259,12 @@ export const MODS = {
     name: 'STEEL BREAKER',
     rarity: 'rare',
     maxStacks: 2,
-    /** Chance each steel brick in reach of an explosion breaks (rolled once per explosion). */
+    /**
+     * Chance each steel brick in reach of an explosion breaks (rolled once per explosion). Broken
+     * steel drops a capsule, up to `POWER.maxCapsules` falling.
+     */
     perStack: 0.25,
-    describe: (v) => `${pct(v)} CHANCE AN EXPLOSION BREAKS EACH STEEL BRICK IN REACH`,
+    describe: (v) => `${pct(v)} CHANCE AN EXPLOSION BREAKS EACH STEEL BRICK IN REACH, DROPPING A CAPSULE`,
   },
   rollback: {
     name: 'ROLLBACK',
@@ -309,12 +316,12 @@ export const MODS = {
   splitguard: {
     name: 'SPLIT GUARD',
     rarity: 'epic',
-    maxStacks: 2,
+    maxStacks: 1,
     /**
      * Seconds of barrier from every split (multi-ball capsule, multi start, splitter, overload
      * event). A longer barrier already up is left alone.
      */
-    perStack: 5,
+    perStack: 10,
     grant: { on: 'split', power: 'barrier' },
     describe: (v, held) => `EVERY MULTI-BALL SPLIT RAISES ${secs(held.powerSeconds('barrier', v))} S OF BARRIER`,
   },
