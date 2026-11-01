@@ -11,6 +11,8 @@ import { PALETTE } from './game';
  * Drops: every destroyed brick rolls `dropChance`; on a hit, the kind is picked by weight. Weights
  * are relative, so a kind's share of drops is its weight divided by the sum of all weights (set a
  * weight to 0 to switch a kind off). No capsule drops while `maxCapsules` are already falling.
+ * `rare` kinds have their own roll: `rareChance` of drops come from them, by their weights among
+ * themselves, and stage events never hand them out.
  *
  * Durations are in seconds; 0 means the power is instant. Picking a timed power again restarts
  * its timer, unless more time than that is left; `opposite` powers cancel each other. Capsules,
@@ -19,6 +21,8 @@ import { PALETTE } from './game';
 export const POWER = {
   /** Chance (0..1) that a destroyed brick drops a capsule. */
   dropChance: 0.14,
+  /** Chance (0..1) that a dropped capsule is a rare one. */
+  rareChance: 0.05,
   maxCapsules: 3,
   kinds: {
     multi: { duration: 0, weight: 14 },
@@ -33,6 +37,10 @@ export const POWER = {
     life: { duration: 0, weight: 3 },
     /** `charges`: bricks each ball explodes on. */
     detonator: { duration: 0, weight: 6, charges: 1 },
+    /** `bricks`: random normal bricks that turn explosive, whatever hits they had left. */
+    zap: { duration: 0, weight: 1, rare: true, bricks: 6 },
+    /** Shows focus's aim lines without its slowdown. */
+    oracle: { duration: 12, weight: 1, rare: true },
   },
 
   capsuleWidth: 22,
@@ -102,6 +110,7 @@ const POWER_FAMILY = {
   bad: PALETTE.red,
   /** The detonator acts on the ball, but gets the colour the ball turns. */
   charge: PALETTE.orange,
+  rare: PALETTE.white,
 } as const;
 
 /** How each power shows up: capsule letter, colour, and whether it is a negative one. */
@@ -117,7 +126,15 @@ export const POWER_LOOK = {
   barrier: { label: 'BARRIER', glyph: 'B', color: POWER_FAMILY.ball, bad: false },
   life: { label: 'LIFE', glyph: '+', color: POWER_FAMILY.life, bad: false },
   detonator: { label: 'DETONATOR', glyph: 'X', color: POWER_FAMILY.charge, bad: false },
+  zap: { label: 'ZAP', glyph: 'Z', color: POWER_FAMILY.rare, bad: false },
+  oracle: { label: 'ORACLE', glyph: 'O', color: POWER_FAMILY.rare, bad: false },
 } as const satisfies Record<keyof typeof POWER.kinds, { label: string; glyph: string; color: number; bad: boolean }>;
+
+/** Banner when a rare capsule is caught. */
+export const RARE_POWER_BANNER: Partial<Record<keyof typeof POWER.kinds, { label: string; sub: string; color: number }>> = {
+  zap: { label: POWER_LOOK.zap.label, sub: 'BRICKS PRIMED', color: POWER_LOOK.zap.color },
+  oracle: { label: POWER_LOOK.oracle.label, sub: 'PATHS REVEALED', color: POWER_LOOK.oracle.color },
+};
 
 /**
  * Stage events: rule-based help that keeps the end of a stage from dragging.

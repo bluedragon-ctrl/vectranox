@@ -14,7 +14,7 @@ import { buildFormations, type Formation } from './formation';
 import { parseLayout } from './layout';
 import { epicChance, MOD_GRANTS, MOD_KINDS, powerSeconds, rollMods, splitInto } from './mods';
 import { aim, closer, normalizeVelocity, pushOut, sweepWalls } from './physics';
-import { GOOD_POWERS, POWER_KINDS, rollPower, TIMED_POWERS } from './powers';
+import { COMMON_POWERS, GOOD_POWERS, RARE_POWERS, rollPower, TIMED_POWERS } from './powers';
 import { StageEventTracker } from './stageEvents';
 import type {
   Ball,
@@ -283,7 +283,7 @@ export class Game {
 
   /**
    * Applies a power as if its capsule was caught. `amount` is what mods and stage events grant
-   * instead of the capsule's: seconds, or charges for the detonator. Public so the dev console can
+   * instead of the capsule's: seconds, charges for the detonator, bricks for zap. Public so the dev console can
    * grant powers (`vnx.game.applyPower('laser')`).
    */
   applyPower(kind: PowerKind, amount?: number): void {
@@ -296,6 +296,9 @@ export class Game {
         return;
       case 'detonator':
         this.chargeBalls(amount ?? POWER.kinds.detonator.charges);
+        return;
+      case 'zap':
+        this.zapBricks(amount ?? POWER.kinds.zap.bricks);
         return;
     }
     const { duration, opposite }: PowerDef = POWER.kinds[kind];
@@ -327,6 +330,11 @@ export class Game {
         break;
       }
     }
+  }
+
+  /** Aim lines are up: focus or the oracle power is running. */
+  get aiming(): boolean {
+    return this.state === 'play' && (this.focusLeft > 0 || this.isActive('oracle'));
   }
 
   /**
@@ -1476,7 +1484,8 @@ export class Game {
   private maybeDrop(x: number, y: number): void {
     if (this.breakableLeft === 0 || this.capsules.length >= POWER.maxCapsules) return;
     if (this.rng.next() >= POWER.dropChance + this.modValue('lucky')) return;
-    this.dropCapsule(rollPower(this.rng, POWER_KINDS), x, y);
+    const pool = this.rng.next() < POWER.rareChance ? RARE_POWERS : COMMON_POWERS;
+    this.dropCapsule(rollPower(this.rng, pool), x, y);
   }
 
   private dropCapsule(kind: PowerKind, x: number, y: number): void {
@@ -1484,6 +1493,18 @@ export class Game {
     const capsule: Capsule = { id: this.nextId++, kind, x: clamp(x, hw, FIELD.width - hw), y, py: y };
     this.capsules.push(capsule);
     this.events.emit('powerDrop', { id: capsule.id, kind, x: capsule.x, y });
+  }
+
+  /** Up to `count` random normal bricks turn explosive and flash; one hit now breaks them. */
+  private zapBricks(count: number): void {
+    const bricks = this.bricks.filter((br) => br.alive && br.kind === 'normal' && !br.falling);
+    for (let i = 0; i < count && bricks.length > 0; i++) {
+      const [br] = bricks.splice(Math.floor(this.rng.next() * bricks.length), 1);
+      if (!br) break;
+      br.kind = 'explosive';
+      br.hp = br.maxHp = 1;
+      br.hitTick = this.tick;
+    }
   }
 
   /** The lowest `count` breakable bricks take `damage` hits each, struck from below. */

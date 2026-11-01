@@ -15,6 +15,7 @@ export type TimedPower = { [K in PowerKind]: (typeof POWER.kinds)[K]['duration']
 export interface PowerDef {
   duration: number;
   opposite?: TimedPower;
+  rare?: true;
 }
 /** A `STAGE_EVENTS.kinds` entry, for reading the fields only some kinds have. */
 export interface StageEventDef {
