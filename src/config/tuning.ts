@@ -123,30 +123,43 @@ export const POWER_LOOK = {
  * Stage events: rule-based help that keeps the end of a stage from dragging.
  *
  * When an event's trigger is met it rolls `chance` (0..1, set it to 0 to switch the event off).
- * Hit or miss, the trigger is then spent until it re-arms: brick-count triggers re-arm on the
- * next destroyed brick, `pulse` on the next breakable brick hit, `safetyNet` on the next serve.
+ * A miss spends the trigger until it re-arms: brick-count triggers re-arm on the next destroyed
+ * brick, `pulse` on the next breakable brick hit, `safetyNet` on the next serve.
  * No event fires more than `maxPerStage` times in one stage. Times are in seconds of play.
+ *
+ * Brick-count events wait for a stall, so a player still breaking bricks finishes the stage alone:
+ * `stall` is the seconds without a kill before each firing, the last entry holding from there on.
+ * A repeat counts from the kill or from the event's last firing, whichever came later. Only the
+ * safety net fires sooner than `gap` after another event. A new serve hands back one firing of
+ * those in `perBalls`, since what they gave went with the balls. Boss rooms have no stalls, gap or
+ * hand-backs: every event fires once, straight on its trigger, and the hunter after `bossHunterIdle`.
  *
  * `power` is the power an event grants, as a capsule would, for `duration` seconds if given.
  */
 export const STAGE_EVENTS = {
   kinds: {
     /** A brick spits out a capsule (never a negative one) once few bricks are left. */
-    supplyDrop: { chance: 0.75, maxPerStage: 1, bricksLeft: 8 },
+    supplyDrop: { chance: 1, maxPerStage: 2, bricksLeft: 8, stall: [0, 15] },
     /** Every ball splits (see `POWER.splitInto`) when the stage is almost done. */
-    overload: { chance: 1, maxPerStage: 1, bricksLeft: 4, power: 'multi' },
+    overload: { chance: 1, maxPerStage: 1, bricksLeft: 4, stall: [5], power: 'multi' },
     /**
      * No breakable brick hit for `idleTime`: a pulse rises from the paddle and the lowest `maxBricks`
-     * breakable bricks take `damage` hits each (steel shrugs it off).
+     * breakable bricks take `damage` hits each (steel shrugs it off). It spares the last brick, so
+     * it never ends a stage by itself, until `finishAfter` passes without a kill. Then, with at
+     * most `maxBricks` left, it fires past `maxPerStage` and hits them all, so no stage can stall
+     * for good on bricks the ball can't reach.
      */
-    pulse: { chance: 1, maxPerStage: 2, idleTime: 10, maxBricks: 8, damage: 1 },
-    /** Last few bricks survive `idleTime` without a kill: the paddle gets the laser. */
-    hunter: { chance: 1, maxPerStage: 1, bricksLeft: 3, idleTime: 12, power: 'laser', duration: 5 },
+    pulse: { chance: 1, maxPerStage: 2, idleTime: 10, maxBricks: 5, damage: 1, finishAfter: 25 },
+    /** Last few bricks survive without a kill: the paddle gets the laser. */
+    hunter: { chance: 1, maxPerStage: 3, bricksLeft: 3, stall: [7, 14], power: 'laser', duration: 5 },
     /** Serving on the last life late in a stage raises the barrier. */
     safetyNet: { chance: 0.5, maxPerStage: 1, lives: 1, bricksLeft: 15, power: 'barrier', duration: 15 },
     /** Few bricks left: every ball is charged, as by a detonator capsule. */
-    demolition: { chance: 0.5, maxPerStage: 1, bricksLeft: 6, power: 'detonator' },
+    demolition: { chance: 1, maxPerStage: 1, bricksLeft: 6, stall: [3], power: 'detonator' },
   },
+  gap: 3,
+  perBalls: ['overload', 'demolition'],
+  bossHunterIdle: 12,
   /** How long the in-game banner stays up. */
   bannerTime: 1.8,
 } as const;

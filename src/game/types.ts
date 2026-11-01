@@ -19,6 +19,7 @@ export interface PowerDef {
 /** A `STAGE_EVENTS.kinds` entry, for reading the fields only some kinds have. */
 export interface StageEventDef {
   chance: number;
+  stall?: readonly number[];
   power?: PowerKind;
   duration?: number;
 }
