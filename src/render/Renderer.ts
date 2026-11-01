@@ -42,6 +42,15 @@ const FLASH_TICKS = 12;
 const AREA_FLASH = 0.35;
 /** Ticks a regenerating brick stays lit after winning back a hit, and how bright. */
 const HEAL_FLASH = { ticks: 30, strength: 0.25 } as const;
+/** A completed target bank blinks this many times over `time` seconds, at this white flash; reduce-FX keeps only the hit flash. */
+const BANK_BLINK = { time: 1, blinks: 3, strength: 0.35 } as const;
+/**
+ * A completed bank's circuit: a beam races round the pins in `race` seconds and the closed loop
+ * holds until `time`, fading over the last `fade`. Reduce-FX shows the whole loop, dimmed, with no race.
+ */
+const BANK_CIRCUIT = { width: 1.1, brightness: 1.6, race: 0.3, time: 1, fade: 0.4 } as const;
+/** The surge reaches the far corner of the field in `spread` seconds and fades out over `time`. Off under reduce-FX. */
+const BANK_SURGE = { spread: 0.35, time: 0.85 } as const;
 /** Formation line brightness: at rest, and added as a formation closes in on it. */
 const LINE_GLOW = { rest: 0.35, near: 0.9 } as const;
 /** Brightness of the paddle's focus bar while it recharges; lit up full, it says focus is ready. */
@@ -144,6 +153,8 @@ export class Renderer {
       uField: { value: new THREE.Vector2(FIELD.width, FIELD.height) },
       uHits: { value: Array.from({ length: 8 }, () => new THREE.Vector4()) },
       uDanger: { value: 0 },
+      uSurge: { value: new THREE.Vector4() },
+      uSurgeColor: { value: TARGET_COLOR },
       uLine: { value: new THREE.Vector2(FORMATION.line, 0) },
       uFrame: { value: COLORS.cyan },
       uGuide: { value: COLORS.purple },
@@ -184,6 +195,7 @@ export class Renderer {
   private shots = new QuadBatch({ max: MAX_SHOTS, pad: 4, fragmentShader: SHOT_FRAGMENT, renderOrder: 23 });
   private blast = new QuadBatch({ max: MAX_BALLS, pad: 4, fragmentShader: BLAST_FRAGMENT, renderOrder: 26 });
   private targets = new QuadBatch({ max: MAX_TARGETS, pad: 6, fragmentShader: TARGET_FRAGMENT, renderOrder: 11 });
+  private bankLines = new QuadBatch({ max: MAX_TARGETS, pad: 3, fragmentShader: AIM_FRAGMENT, renderOrder: 12 });
   private portals = new QuadBatch({ max: MAX_PORTALS, pad: 6, fragmentShader: PORTAL_FRAGMENT, renderOrder: 9 });
   /** Drives the portals' spin. */
   private portalTime = 0;
@@ -215,6 +227,7 @@ export class Renderer {
       blit,
       this.portals.mesh,
       this.targets.mesh,
+      this.bankLines.mesh,
       this.bricks.mesh,
       this.barrier.mesh,
       this.trails.batch.mesh,
@@ -349,6 +362,7 @@ export class Renderer {
     this.drawField(game);
     this.drawPortals(game);
     this.drawTargets(game);
+    this.drawBankCircuit(game);
     this.drawBricks(game, alpha);
     this.drawBarrier(game);
     this.drawCapsules(game, alpha);
@@ -398,6 +412,16 @@ export class Renderer {
       v.set(hit?.x ?? 0, hit?.y ?? 0, hit?.strength ?? 0, 0);
     });
     u.uDanger!.value = this.fx.danger;
+    const age = this.fx.bankAge;
+    const pins = game.targets;
+    const surge = u.uSurge!.value as THREE.Vector4;
+    // A quick CONTINUE can bring in the next room, pinless, while the surge still fades.
+    surge.w = this.settings.reduceFx || pins.length === 0 ? 0 : Math.max(0, 1 - age / BANK_SURGE.time);
+    if (surge.w > 0) {
+      surge.x = pins.reduce((sum, t) => sum + t.x, 0) / pins.length;
+      surge.y = pins.reduce((sum, t) => sum + t.y, 0) / pins.length;
+      surge.z = (age / BANK_SURGE.spread) * Math.hypot(FIELD.width, FIELD.height);
+    }
     const pressure = game.linePressure;
     (u.uLine!.value as THREE.Vector2).y = pressure === null ? 0 : LINE_GLOW.rest + LINE_GLOW.near * pressure;
     this.field.begin();
@@ -433,9 +457,33 @@ export class Renderer {
     this.targets.begin();
     for (const t of game.targets) {
       const flash = Math.max(0, 1 - (game.tick - t.hitTick) / FLASH_TICKS) * this.fx.brickFlash;
-      this.targets.push(t.x, t.y, t.r * 2, t.r * 2, TARGET_COLOR, 1, t.lit ? 1 : 0, flash * flash);
+      const age = this.fx.bankAge;
+      const blink = !this.settings.reduceFx && age < BANK_BLINK.time && ((age * BANK_BLINK.blinks) / BANK_BLINK.time) % 1 < 0.5;
+      this.targets.push(t.x, t.y, t.r * 2, t.r * 2, TARGET_COLOR, 1, t.lit || blink ? 1 : 0, Math.max(flash * flash, blink ? BANK_BLINK.strength : 0));
     }
     this.targets.commit();
+  }
+
+  /** The loop a completed bank closes through its pins. */
+  private drawBankCircuit(game: Game): void {
+    this.bankLines.begin();
+    const age = this.fx.bankAge;
+    if (age < BANK_CIRCUIT.time && game.targets.length > 0) {
+      const loop = bankLoop(game.targets);
+      const lengths = loop.slice(1).map((to, i) => Math.hypot(to.x - loop[i]!.x, to.y - loop[i]!.y));
+      const brightness = BANK_CIRCUIT.brightness * this.fx.brickFlash * Math.min(1, (BANK_CIRCUIT.time - age) / BANK_CIRCUIT.fade);
+      let left = this.settings.reduceFx ? Infinity : (lengths.reduce((sum, l) => sum + l, 0) * age) / BANK_CIRCUIT.race;
+      lengths.forEach((length, i) => {
+        const from = loop[i]!;
+        const to = loop[i + 1]!;
+        const share = Math.min(1, left / length);
+        left -= length;
+        if (share <= 0) return;
+        const end = { x: from.x + (to.x - from.x) * share, y: from.y + (to.y - from.y) * share };
+        this.pushBeam(this.bankLines, from, end, BANK_CIRCUIT.width, TARGET_COLOR, brightness);
+      });
+    }
+    this.bankLines.commit();
   }
 
   /** Each pair has its own colour; the two ends of a pair spin opposite ways (in and out). */
@@ -519,20 +567,20 @@ export class Renderer {
         if (!path) return;
         let from = pos;
         for (const to of path) {
-          this.pushAimLine(from, to, AIM_LINE.path);
+          this.pushBeam(this.aimLines, from, to, AIM_LINE.width, AIM_COLOR, AIM_LINE.path);
           from = to;
         }
         const end = game.reboundEnd(ball, from);
-        if (end) this.pushAimLine(from, end, AIM_LINE.rebound);
+        if (end) this.pushBeam(this.aimLines, from, end, AIM_LINE.width, AIM_COLOR, AIM_LINE.rebound);
       });
     }
     this.aimLines.commit();
   }
 
-  private pushAimLine(from: { x: number; y: number }, to: { x: number; y: number }, brightness: number): void {
+  private pushBeam(batch: QuadBatch, from: { x: number; y: number }, to: { x: number; y: number }, width: number, color: THREE.Color, brightness: number): void {
     const dx = to.x - from.x;
     const dy = to.y - from.y;
-    this.aimLines.push((from.x + to.x) / 2, (from.y + to.y) / 2, AIM_LINE.width, Math.hypot(dx, dy), AIM_COLOR, brightness, 0, 0, 0, 0, Math.atan2(-dx, dy));
+    batch.push((from.x + to.x) / 2, (from.y + to.y) / 2, width, Math.hypot(dx, dy), color, brightness, 0, 0, 0, 0, Math.atan2(-dx, dy));
   }
 
   private drawBlast(): void {
@@ -559,6 +607,14 @@ export class Renderer {
 }
 
 /** 1 while a power runs, fading to 0 over its last second. */
+/** The pins in order round their middle, back to the first, or just the two ends of a pair. */
+function bankLoop(pins: readonly { x: number; y: number }[]): { x: number; y: number }[] {
+  const cx = pins.reduce((sum, p) => sum + p.x, 0) / pins.length;
+  const cy = pins.reduce((sum, p) => sum + p.y, 0) / pins.length;
+  const loop = [...pins].sort((a, b) => Math.atan2(a.y - cy, a.x - cx) - Math.atan2(b.y - cy, b.x - cx));
+  return loop.length > 2 ? [...loop, loop[0]!] : loop;
+}
+
 function powerLevel(game: Game, kind: TimedPower): number {
   return Math.min(1, game.timers[kind] / POWER_FADE);
 }

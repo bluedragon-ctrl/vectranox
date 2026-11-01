@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { BRICK, FIELD } from '../../config/game';
 import type { Game } from '../../game/Game';
 import type { HitSource } from '../../game/types';
-import { BRICK_GAP, brickTint, COLORS, EXPLOSION_COLOR, POWER_COLORS } from '../palette';
+import { BRICK_GAP, brickTint, COLORS, EXPLOSION_COLOR, POWER_COLORS, TARGET_COLOR } from '../palette';
 import { fractureRect } from './fracture';
 import { Particles } from './Particles';
 import { Shake } from './Shake';
@@ -41,6 +41,8 @@ export class GameFx {
   laserFlash = 0;
   /** The paddle flashes once when focus can be used again. */
   focusFlash = 0;
+  /** Seconds since a target bank was last completed. */
+  bankAge = Infinity;
   readonly barrierHit = { x: 0, strength: 0 };
   /** Explosions going off: a ring per centre, growing to the radius and fading, on their own clock since they chain. */
   explosions: { x: number; y: number; radius: number; strength: number; color: THREE.Color }[] = [];
@@ -73,6 +75,7 @@ export class GameFx {
     this.paddlePulse = Math.max(0, this.paddlePulse - dt * 4);
     this.laserFlash = Math.max(0, this.laserFlash - dt * 6);
     this.focusFlash = Math.max(0, this.focusFlash - dt * 3);
+    this.bankAge += dt;
     this.barrierHit.strength = Math.max(0, this.barrierHit.strength - dt * 2.5);
     for (const e of this.explosions) e.strength -= dt * 4;
     this.explosions = this.explosions.filter((e) => e.strength > 0);
@@ -87,6 +90,7 @@ export class GameFx {
     this.trails.clear();
     this.areaHits.clear();
     this.explosions = [];
+    this.bankAge = Infinity;
     const ev = game.events;
     this.unsubscribe = [
       ev.on('wallHit', ({ side, x, y }) => {
@@ -178,6 +182,11 @@ export class GameFx {
       ev.on('bossDown', () => {
         this.shake.add(0.7);
         this.pulse(COLORS.yellow, 0.3, 0.9);
+      }),
+      ev.on('targetBank', () => {
+        this.bankAge = 0;
+        this.shake.add(0.2);
+        this.pulse(TARGET_COLOR, 0.05, 0.4);
       }),
       ev.on('stageEvent', ({ kind }) => {
         if (kind !== 'pulse') return;
