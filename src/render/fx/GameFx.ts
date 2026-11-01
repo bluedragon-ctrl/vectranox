@@ -39,6 +39,8 @@ export class GameFx {
   paddleHitOffset = 0;
   /** Laser emitters light up on every shot. */
   laserFlash = 0;
+  /** The paddle flashes once when focus can be used again. */
+  focusFlash = 0;
   readonly barrierHit = { x: 0, strength: 0 };
   /** Explosions going off: a ring per centre, growing to the radius and fading, on their own clock since they chain. */
   explosions: { x: number; y: number; radius: number; strength: number; color: THREE.Color }[] = [];
@@ -70,6 +72,7 @@ export class GameFx {
     this.danger = Math.max(0, this.danger - dt * 1.1);
     this.paddlePulse = Math.max(0, this.paddlePulse - dt * 4);
     this.laserFlash = Math.max(0, this.laserFlash - dt * 6);
+    this.focusFlash = Math.max(0, this.focusFlash - dt * 3);
     this.barrierHit.strength = Math.max(0, this.barrierHit.strength - dt * 2.5);
     for (const e of this.explosions) e.strength -= dt * 4;
     this.explosions = this.explosions.filter((e) => e.strength > 0);
@@ -114,6 +117,9 @@ export class GameFx {
       }),
       ev.on('laserFire', () => {
         this.laserFlash = 1;
+      }),
+      ev.on('focusReady', () => {
+        this.focusFlash = this.reduce ? 0.3 : 1;
       }),
       ev.on('explosion', ({ source, centres, radius }) => {
         const color = source === 'charge' ? POWER_COLORS.detonator : EXPLOSION_COLOR;

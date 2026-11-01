@@ -90,14 +90,6 @@ export const MODS = {
     perStack: 0.05,
     describe: (v) => `CAPSULE DROP CHANCE +${pct(v)}`,
   },
-  magnet: {
-    name: 'MAGNET',
-    rarity: 'common',
-    maxStacks: 2,
-    /** Units per second falling capsules drift sideways towards the paddle. */
-    perStack: 45,
-    describe: (v) => `CAPSULES DRIFT TO THE PADDLE (${v} U/S)`,
-  },
   extender: {
     name: 'EXTENDER',
     rarity: 'common',

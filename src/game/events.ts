@@ -76,6 +76,8 @@ export type GameEvents = {
   /** Focus started: the world runs slow until `focusEnd`. */
   focusStart: Record<string, never>;
   focusEnd: Record<string, never>;
+  /** Focus has rested and can be used again. */
+  focusReady: Record<string, never>;
   /** Ball `id` broke brick `brick` and carried on through it (critical mod). */
   breakthrough: { id: number; brick: number };
   /** A stage event fired; `bricks` is how many breakable bricks were left. */

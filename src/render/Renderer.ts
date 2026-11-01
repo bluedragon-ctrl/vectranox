@@ -15,7 +15,7 @@ import { BRICK_FRAGMENT } from './materials/brick';
 import { FULLSCREEN_VERTEX } from './materials/common';
 import { PADDLE_FRAGMENT } from './materials/paddle';
 import { PORTAL_FRAGMENT, TARGET_FRAGMENT } from './materials/pinball';
-import { AIM_FRAGMENT, BARRIER_FRAGMENT, BLAST_FRAGMENT, BOLT_FRAGMENT, CAPSULE_FRAGMENT, SHOT_FRAGMENT, TIMER_FRAGMENT } from './materials/power';
+import { AIM_FRAGMENT, BARRIER_FRAGMENT, BLAST_FRAGMENT, BOLT_FRAGMENT, CAPSULE_FRAGMENT, SHOT_FRAGMENT } from './materials/power';
 import { glyphMask } from './glyphs';
 import { AIM_COLOR, ballLook, BRICK_GAP, brickTint, CAPSULE_COLORS, COLORS, PORTAL_COLORS, POWER_COLORS, SHOT_COLOR, TARGET_COLOR } from './palette';
 import { QuadBatch } from './QuadBatch';
@@ -43,8 +43,8 @@ const AREA_FLASH = 0.35;
 const HEAL_FLASH = { ticks: 30, strength: 0.25 } as const;
 /** Formation line brightness: at rest, and added as a formation closes in on it. */
 const LINE_GLOW = { rest: 0.35, near: 0.9 } as const;
-/** Focus timer line under the paddle: height, drop below the paddle's bottom edge, and brightness while cooling down. */
-const FOCUS_LINE = { height: 1, drop: 2, cooldownAlpha: 0.7 } as const;
+/** Brightness of the paddle's focus bar while it recharges; lit up full, it says focus is ready. */
+const FOCUS_BAR_RECHARGING = 0.3;
 /** Focus aim lines: beam width, and brightness of the way down and of the rebound, the one the player steers. */
 const AIM_LINE = { width: 0.9, path: 0.5, rebound: 0.9 } as const;
 /** Horizon height as a fraction of the window, from the bottom. */
@@ -144,9 +144,13 @@ export class Renderer {
       uAccent: { value: COLORS.magenta },
       uCatch: { value: POWER_COLORS.catch },
       uLaserFlash: { value: 0 },
+      uFocusColor: { value: AIM_COLOR },
+      uFocus: { value: 1 },
+      uFocusLit: { value: 1 },
+      uFocusFlash: { value: 0 },
     },
   });
-  private balls = new QuadBatch({ max: MAX_BALLS, pad: 3, fragmentShader: BALL_FRAGMENT, renderOrder: 30 });
+  private balls =new QuadBatch({ max: MAX_BALLS, pad: 3, fragmentShader: BALL_FRAGMENT, renderOrder: 30 });
   private barrier = new QuadBatch({ max: 1, pad: 6, fragmentShader: BARRIER_FRAGMENT, renderOrder: 15 });
   private capsules = new QuadBatch({ max: MAX_CAPSULES, pad: 4, fragmentShader: CAPSULE_FRAGMENT, renderOrder: 22 });
   private bolts = new QuadBatch({ max: MAX_BOLTS, pad: 4, fragmentShader: BOLT_FRAGMENT, renderOrder: 24 });
@@ -156,7 +160,6 @@ export class Renderer {
   private portals = new QuadBatch({ max: MAX_PORTALS, pad: 6, fragmentShader: PORTAL_FRAGMENT, renderOrder: 9 });
   /** Drives the portals' spin. */
   private portalTime = 0;
-  private focusLine = new QuadBatch({ max: 1, pad: 2, fragmentShader: TIMER_FRAGMENT, renderOrder: 27 });
   private aimLines = new QuadBatch({ max: POWER.maxBalls * (FOCUS.aimBounces + 1), pad: 3, fragmentShader: AIM_FRAGMENT, renderOrder: 24 });
 
   private ballPositions: { x: number; y: number }[] = [];
@@ -203,7 +206,6 @@ export class Renderer {
       this.aimLines.mesh,
       this.bolts.mesh,
       this.paddle.mesh,
-      this.focusLine.mesh,
       this.blast.mesh,
       this.balls.mesh,
       this.fx.particles.pieces.mesh,
@@ -457,6 +459,9 @@ export class Renderer {
     const p = game.paddle;
     const x = lerp(p.px, p.x, alpha);
     this.paddle.uniforms.uLaserFlash!.value = this.fx.laserFlash;
+    this.paddle.uniforms.uFocus!.value = focusLevel(game);
+    this.paddle.uniforms.uFocusLit!.value = game.focusCooldown > 0 ? FOCUS_BAR_RECHARGING : 1;
+    this.paddle.uniforms.uFocusFlash!.value = this.fx.focusFlash;
     this.paddle.begin();
     this.paddle.push(
       x,
@@ -471,7 +476,6 @@ export class Renderer {
       powerLevel(game, 'catch'),
     );
     this.paddle.commit();
-    this.drawFocusLine(game, x);
   }
 
   /** During focus, each falling ball's path to the paddle, one quad per straight leg, then its rebound. */
@@ -500,20 +504,6 @@ export class Renderer {
     this.aimLines.push((from.x + to.x) / 2, (from.y + to.y) / 2, AIM_LINE.width, Math.hypot(dx, dy), AIM_COLOR, brightness, 0, 0, 0, 0, Math.atan2(-dx, dy));
   }
 
-  /** Under the paddle: focus left, draining, then the cooldown, filling back up; nothing once it's ready. */
-  private drawFocusLine(game: Game, x: number): void {
-    const p = game.paddle;
-    const line = this.focusLine;
-    const y = p.y - p.h / 2 - FOCUS_LINE.drop;
-    line.begin();
-    if (game.focusLeft > 0) {
-      line.push(x, y, p.w * (game.focusLeft / game.focusDuration), FOCUS_LINE.height, COLORS.cyan);
-    } else if (game.focusCooldown > 0) {
-      line.push(x, y, p.w * (1 - game.focusCooldown / game.focusRest), FOCUS_LINE.height, COLORS.purple, FOCUS_LINE.cooldownAlpha);
-    }
-    line.commit();
-  }
-
   private drawBlast(): void {
     this.blast.begin();
     for (const e of this.fx.explosions) this.blast.push(e.x, e.y, e.radius * 2, e.radius * 2, e.color, 1, e.strength);
@@ -540,6 +530,12 @@ export class Renderer {
 /** 1 while a power runs, fading to 0 over its last second. */
 function powerLevel(game: Game, kind: TimedPower): number {
   return Math.min(1, game.timers[kind] / POWER_FADE);
+}
+
+/** How full the focus bar is, 0..1: focus left, draining, then the cooldown, filling back up. */
+function focusLevel(game: Game): number {
+  if (game.focusLeft > 0) return game.focusLeft / game.focusDuration;
+  return 1 - game.focusCooldown / game.focusRest;
 }
 
 function fullscreenQuad(material: THREE.ShaderMaterial): THREE.Mesh {

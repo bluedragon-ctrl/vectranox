@@ -144,24 +144,6 @@ void main() {
 }
 `;
 
-/** Focus timer line under the paddle: a thin solid bar with a faint glow. The instance rectangle is its full size. */
-export const TIMER_FRAGMENT = /* glsl */ `
-varying vec2 vLocal;
-varying vec2 vHalf;
-varying vec4 vColor;
-
-${SDF}
-
-void main() {
-  float d = sdRoundBox(vLocal, vHalf, vHalf.y);
-  float body = fill(d);
-  vec3 tint = vColor.rgb;
-  vec4 col = vec4(tint, 1.0) * body;
-  col.rgb += tint * exp(-max(d, 0.0) * 1.2) * 0.25 * (1.0 - body);
-  gl_FragColor = col * vColor.a;
-}
-`;
-
 /** Focus aim line: one straight leg of a ball's path, a thin even beam glowing additively. Long side along y. */
 export const AIM_FRAGMENT = /* glsl */ `
 varying vec2 vLocal;
