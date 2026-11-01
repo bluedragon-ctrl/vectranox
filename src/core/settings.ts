@@ -1,10 +1,14 @@
 import { AUDIO } from '../config/audio';
+import { RESOLUTIONS } from '../config/game';
+
+export type Resolution = (typeof RESOLUTIONS)[number];
 
 /** Player-facing video options. Persisted in localStorage. */
 export interface VisualSettings {
   bloom: boolean;
   /** Tones down flashes and chromatic pulses, stops star twinkle, and disables screen shake. */
   reduceFx: boolean;
+  resolution: Resolution;
 }
 
 /** Player-facing audio options. Levels are slider steps, 0..`AUDIO.steps`. Persisted in localStorage. */
@@ -22,12 +26,14 @@ export function loadVisualSettings(): VisualSettings {
   const defaults: VisualSettings = {
     bloom: true,
     reduceFx: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+    resolution: 'auto',
   };
   const saved = load<VisualSettings>(KEY);
   if (!saved) return defaults;
   return {
     bloom: typeof saved.bloom === 'boolean' ? saved.bloom : defaults.bloom,
     reduceFx: typeof saved.reduceFx === 'boolean' ? saved.reduceFx : defaults.reduceFx,
+    resolution: RESOLUTIONS.find((r) => r === saved.resolution) ?? defaults.resolution,
   };
 }
 

@@ -88,7 +88,7 @@ worker/              (later) Cloudflare Worker + D1 schema
 | 5a | Run progression | Run → sectors → stages, seeded procedural assembly from templates scaled by depth, pick 1 of 3 mods or +2 lives between stages (rarity tiers). **Done:** 3 × 4 stages, 14 templates, 24 mods. Currency and shop dropped in favour of the lives card. |
 | 5b | Room types | Stage variety: moving formations (sweep, invader march, rotate, sine) and the line where they cost a life, new brick types (explosive, regenerating; multi-hit and indestructible already exist), and distinct room kinds a sector mixes (standard, formation, elite). **Done:** 16 standard, 8 formation and 6 elite templates. |
 | 5c | Boss rooms | Bosses built from bricks and formations, with a core and HP bar, turrets, spawners and phantoms, phases as it takes damage, and a boss cache on kill. **Done:** 3 bosses, 4 boss bricks, room editor and validator support. |
-| 6 | Scores & settings | Local high-score table, 6-char name entry, settings, quality presets. **Done so far:** score table, name entry, settings. Quality presets remain. |
+| 6 | Scores & settings | Local high-score table, 6-char name entry, settings, render quality. **Done.** Named presets were dropped: at 1080p on one fast GPU, bloom was half the frame and resolution set most of the rest, so a RESOLUTION setting (AUTO, 100, 75, 50%) replaces them. AUTO lowers resolution and then bloom while the frame rate stays under 45, undoing a step that doesn't help (`QUALITY` in `src/config/game.ts`). |
 | 7 | Polish | Parallax background, music-reactive visuals, attract mode. |
 | 8 | Online | Worker + D1 leaderboard, rate limiting, optional Turnstile / replay validation; VPS move. |
 

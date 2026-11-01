@@ -51,12 +51,13 @@ export class PostFx {
     this.composer.addPass(this.final);
   }
 
-  setSize(width: number, height: number, pixelRatio: number): void {
+  /** `renderScale`: share of the screen's resolution drawn, which keeps the glow the same size on screen. */
+  setSize(width: number, height: number, pixelRatio: number, renderScale: number): void {
     this.composer.setPixelRatio(pixelRatio);
     this.composer.setSize(width, height);
     // The pass resets invSize on every resize. Shrinking it packs the blur taps closer together.
     for (const material of this.bloom.separableBlurMaterials) {
-      (this.uniform('invSize', material.uniforms).value as THREE.Vector2).multiplyScalar(BLOOM.reach);
+      (this.uniform('invSize', material.uniforms).value as THREE.Vector2).multiplyScalar(BLOOM.reach * renderScale);
     }
   }
 
