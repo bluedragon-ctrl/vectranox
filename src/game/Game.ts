@@ -1325,7 +1325,10 @@ export class Game {
       this.events.emit('focusEnd', {});
       return;
     }
-    this.focusCooldown = Math.max(0, this.focusCooldown - dt);
+    if (this.focusCooldown > 0) {
+      this.focusCooldown = Math.max(0, this.focusCooldown - dt);
+      if (this.focusCooldown === 0) this.events.emit('focusReady', {});
+    }
     if (!input.alt || this.focusCooldown > 0) return;
     this.focusLeft = this.focusDuration;
     this.events.emit('focusStart', {});
@@ -1393,7 +1396,6 @@ export class Game {
     const hh = POWER.capsuleHeight / 2;
     this.capsules = this.capsules.filter((c) => {
       c.y -= POWER.fallSpeed * dt;
-      this.pull(c, dt);
       if (Math.abs(c.x - p.x) < p.w / 2 + hw && Math.abs(c.y - p.y) < p.h / 2 + hh) {
         this.score += SCORE.capsule;
         this.events.emit('powerCollect', { id: c.id, kind: c.kind });
@@ -1404,14 +1406,6 @@ export class Game {
       this.events.emit('powerMissed', { id: c.id, kind: c.kind });
       return false;
     });
-  }
-
-  /** The magnet mod draws falling capsules above the paddle sideways towards it. */
-  private pull(pickup: { x: number; y: number }, dt: number): void {
-    const speed = this.modValue('magnet');
-    if (speed === 0 || pickup.y < this.paddle.y) return;
-    const step = speed * dt;
-    pickup.x += clamp(this.paddle.x - pickup.x, -step, step);
   }
 
   /**

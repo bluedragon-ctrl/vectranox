@@ -64,10 +64,8 @@ export const CAPSULE_COLORS = Object.fromEntries(
   (Object.keys(POWER_COLORS) as PowerKind[]).map((k) => [k, capBrightness(POWER_COLORS[k].clone())]),
 ) as Record<PowerKind, THREE.Color>;
 
-/** What a piercing ball turns towards, linear. Not the power's colour: that is the ball's own cyan. */
-const PIERCE_BALL_COLOR = new THREE.Color(PALETTE.white);
-/** How far a piercing ball turns that way. */
-const PIERCE_BALL_MIX = 0.7;
+/** What a piercing ball turns, linear. Not the power's colour: that is the ball's own cyan. */
+const PIERCE_BALL_COLOR = COLORS.magenta;
 
 /** Explosive brick's blast ring, linear. */
 export const EXPLOSION_COLOR = new THREE.Color(EXPLOSIVE_COLOR);
@@ -87,13 +85,16 @@ const BALL_LOOK: BallLook = { color: new THREE.Color(), trailTail: COLORS.purple
 const CHARGED_BALL_LOOK: BallLook = { color: POWER_COLORS.detonator, trailTail: EXPLOSION_COLOR, glow: 0, tintCore: 1 };
 
 /**
- * The look of `ball` while the pierce power stands at `pierce` (0..1). Piercing balls burn hotter;
- * charged ones are the detonator's colour, whatever else is going on. The result is reused: read
- * it before the next call.
+ * The look of `ball` while the pierce power stands at `pierce` (0..1). Piercing balls turn magenta,
+ * core included; charged ones are the detonator's colour, whatever else is going on. The result is
+ * reused: read it before the next call.
  */
 export function ballLook(ball: Pick<Ball, 'charges'>, pierce: number): BallLook {
   const look = ball.charges > 0 ? CHARGED_BALL_LOOK : BALL_LOOK;
-  if (look === BALL_LOOK) look.color.copy(COLORS.cyan).lerp(PIERCE_BALL_COLOR, pierce * PIERCE_BALL_MIX);
+  if (look === BALL_LOOK) {
+    look.color.copy(COLORS.cyan).lerp(PIERCE_BALL_COLOR, pierce);
+    look.tintCore = pierce;
+  }
   look.glow = pierce;
   return look;
 }

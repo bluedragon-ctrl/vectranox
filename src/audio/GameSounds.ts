@@ -202,6 +202,9 @@ export class GameSounds {
       ev.on('powerEnd', () => {
         this.play('powerEnd', (s) => s.notes([note(7, C5), note(0, C5)], 0.09, { type: 'triangle', dur: 0.14, gain: 0.08 }));
       }),
+      ev.on('focusReady', () => {
+        this.play('focusReady', (s) => s.notes([note(12, C5), note(19, C5)], 0.07, { type: 'triangle', dur: 0.16, gain: 0.14, pan: paddlePan() }));
+      }),
       ev.on('laserFire', ({ x }) => {
         this.play('laser', (s) => s.tone({ type: 'sawtooth', freq: 1700, to: 320, cutoff: 4200, dur: 0.09, gain: 0.07, pan: pan(x) }));
       }),

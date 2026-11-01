@@ -6,7 +6,8 @@ import { SDF } from './common';
  * at both ends. Same 2.5D treatment as the bricks (top face, side face, shadow).
  *
  * Power-ups add to it: laser raises two emitters where the bolts leave, catch coats the top
- * with a glowing film.
+ * with a glowing film. A bar in the body shows focus: `uFocus` is how far it reaches from the
+ * centre (0..1), `uFocusLit` its brightness, and `uFocusFlash` lights the whole paddle.
  *
  * Instance data: colour = rim tint. params: x = hit pulse (0..1), y = hit offset (-1..1),
  * z = laser (0..1), w = catch (0..1).
@@ -15,6 +16,10 @@ export const PADDLE_FRAGMENT = /* glsl */ `
 uniform vec3 uAccent;
 uniform vec3 uCatch;
 uniform float uLaserFlash;
+uniform vec3 uFocusColor;
+uniform float uFocus;
+uniform float uFocusLit;
+uniform float uFocusFlash;
 varying vec2 vLocal;
 varying vec2 vHalf;
 varying vec4 vColor;
@@ -56,6 +61,12 @@ void main() {
   // Upper highlight.
   top += vec3(0.9, 0.95, 1.0) * smoothstep(0.55, 0.85, yN) * smoothstep(hb.x - 2.0, hb.x - 8.0, abs(pt.x)) * 0.35;
 
+  // Focus bar: fills from the centre out to the emitters.
+  float reach = uFocus * (hb.x - 7.0);
+  float bar = (1.0 - smoothstep(reach - 0.4, reach + 0.4, abs(pt.x))) * (1.0 - smoothstep(0.45, 0.6, abs(yN))) * smoothstep(0.0, 0.02, uFocus);
+  top = mix(top, uFocusColor * uFocusLit, bar);
+  top += uFocusColor * uFocusFlash;
+
   // Hit pulse spreading from the impact point.
   float spread = exp(-abs(pt.x - hitX) / (4.0 + 26.0 * (1.0 - pulse)));
   top += vec3(1.0) * pulse * spread * 0.7;
@@ -83,6 +94,7 @@ void main() {
   col = over(vec4(top, 1.0) * fill(dTop), col);
   float outside = 1.0 - fill(dSil);
   col.rgb += rimColor * (exp(-max(dSil, 0.0) * 1.1) * (0.075 + pulse * 0.18)) * outside;
+  col.rgb += uFocusColor * exp(-max(dSil, 0.0) * 0.6) * uFocusFlash * 0.5 * outside;
   col.rgb += uAccent * exp(-max(dBarrel, 0.0) * 0.9) * (0.08 + uLaserFlash * 0.4) * laser * (1.0 - fill(dBarrel));
   gl_FragColor = col;
 }
