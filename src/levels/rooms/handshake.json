@@ -1,7 +1,6 @@
 {
   "name": "HANDSHAKE",
   "tier": 1,
-  "opener": true,
   "layout": [
     "1111..o..1111",
     "1111.....1111",
