@@ -16,7 +16,7 @@ Breakout-style roguelike with 80s synthwave vector graphics, running in desktop 
 | Layout | Canvas fills the window. Portrait (3:4) playfield on the **right**; left is a CSS "terminal" panel: run info, powers, mods, live event console. Overlays (title, pause, upgrade pick, name entry) are CSS; the title, pause and end screens carry the high scores and options. |
 | Game structure | Roguelike runs (see below). Marching formations reaching the line above the paddle cost a life. |
 | Audio | Generated SFX via WebAudio synth (oscillators and filtered noise, panned by x; brick hits climb a pentatonic scale until the paddle touches a ball). Music: user-provided `.ogg` / `.mp3` tracks dropped into `src/assets/music/`, picked up at build time, played as a shuffled playlist with crossfade. Music and SFX volume on the title, pause and end screens, each with an on/off switch (**M** for music, **F** for SFX; both on by default, music at step 1 of 10); the music muffles while paused. Audio starts on the first click or key press (browser autoplay rules). |
-| High scores | Name: 6 chars `[A-Z0-9 ]`. Now: top 10 in localStorage (`src/core/scores.ts`), each with where the run ended or WIN; a run that makes the table asks for a name, prefilled with the last one. Rooms played from the editor don't count. Later: Cloudflare Worker + **D1** (not KV — KV is eventually consistent and can't sort). |
+| High scores | Name: 6 chars `[A-Z0-9 ]`. Top 10 in localStorage (`src/core/scores.ts`) and online (`worker/`, a Cloudflare Worker + **D1**, not KV: KV is eventually consistent, can't sort and has no atomic update), each with where the run ended or WIN. The menu shows them on WORLD and LOCAL tabs. A run that makes either table asks for a name, prefilled with the last one, and every named run goes to the server, which keeps them all and answers with the run's world place. The local table never depends on the server. Rooms played from the editor don't count. Scores are checked for range and rate-limited, but the browser sends them, so they can be faked until replay validation exists. |
 | Hosting | GitHub Pages via Actions now; same static build on a VPS later. Vite `base: './'` so paths work on both. |
 
 ## Architecture
@@ -30,8 +30,8 @@ Breakout-style roguelike with 80s synthwave vector graphics, running in desktop 
    emits typed events on the event bus
    │                         │
    ▼ state snapshot          ▼ events
- Renderer (three.js)        Audio (WebAudio)       UI (CSS)            ScoreService
- interpolates between ticks synth SFX, music bus   HUD, menus,         Local → Remote
+ Renderer (three.js)        Audio (WebAudio)       UI (CSS)            Scores
+ interpolates between ticks synth SFX, music bus   HUD, menus,         Local + Worker
  SDF/glass, particles, post                        event console
 ```
 
@@ -50,8 +50,7 @@ src/
   audio/             AudioEngine, synth voices, GameSounds (event → sound), MusicPlayer
   assets/music/      .ogg / .mp3 tracks (globbed at build time)
   ui/                left panel, overlays, event console
-  scores/            ScoreService interface + implementations
-worker/              (later) Cloudflare Worker + D1 schema
+worker/              Cloudflare Worker + D1 schema (online high scores)
 ```
 
 ## Roguelike structure (proposal — to be refined)
@@ -92,7 +91,7 @@ worker/              (later) Cloudflare Worker + D1 schema
 | 5c | Boss rooms | Bosses built from bricks and formations, with a core and HP bar, turrets, spawners and phantoms, phases as it takes damage, and a boss cache on kill. **Done:** 3 bosses, 4 boss bricks, room editor and validator support. |
 | 6 | Scores & settings | Local high-score table, 6-char name entry, settings, render quality. **Done.** Named presets were dropped: at 1080p on one fast GPU, bloom was half the frame and resolution set most of the rest, so a RESOLUTION setting (AUTO, 100, 75, 50%) replaces them. AUTO lowers resolution and then bloom while the frame rate stays under 45, undoing a step that doesn't help (`QUALITY` in `src/config/game.ts`). |
 | 7 | Polish | Two alternative backdrops to the sunset, each counting down the run the same way. **Done.** Attract mode was skipped as not needed for now. Parallax and music-reactive visuals were dropped. |
-| 8 | Online | Worker + D1 leaderboard, rate limiting, optional Turnstile / replay validation; VPS move. |
+| 8 | Online | Worker + D1 leaderboard, rate limiting, optional Turnstile / replay validation; VPS move. **Leaderboard and rate limiting done.** |
 
 ## Open questions
 

@@ -8,7 +8,10 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "editor": "vite --config editor/vite.config.ts"
+    "editor": "vite --config editor/vite.config.ts",
+    "worker:dev": "npx wrangler@4 dev --config worker/wrangler.toml",
+    "worker:deploy": "npx wrangler@4 deploy --config worker/wrangler.toml",
+    "worker:schema": "npx wrangler@4 d1 execute vectranox-scores --config worker/wrangler.toml --file worker/schema.sql"
   },
   "dependencies": {
     "three": "^0.186.1"

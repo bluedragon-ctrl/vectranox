@@ -17,7 +17,7 @@ const FALLBACK_NAME = 'PLAYER';
 const KEY = 'vectranox.scores';
 const NAME_KEY = 'vectranox.name';
 
-function isEntry(v: unknown): v is ScoreEntry {
+export function isEntry(v: unknown): v is ScoreEntry {
   const e = v as Partial<ScoreEntry> | null;
   return (
     typeof e === 'object' &&
@@ -56,7 +56,6 @@ export function rankOf(scores: readonly ScoreEntry[], score: number): number {
 export function addScore(scores: readonly ScoreEntry[], entry: ScoreEntry, rank: number): ScoreEntry[] {
   const next = [...scores.slice(0, rank), entry, ...scores.slice(rank)].slice(0, TABLE_SIZE);
   writeJson(KEY, next);
-  writeJson(NAME_KEY, entry.name);
   return next;
 }
 
@@ -72,6 +71,10 @@ export function cleanName(raw: string): string {
 /** The name to save for what was typed. */
 export function finalName(raw: string): string {
   return cleanName(raw).trimEnd() || FALLBACK_NAME;
+}
+
+export function saveLastName(name: string): void {
+  writeJson(NAME_KEY, name);
 }
 
 /** The name entered last, to prefill the field. */
