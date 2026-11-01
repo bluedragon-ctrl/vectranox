@@ -309,6 +309,7 @@ export class Game {
    * console can try them (`vnx.game.fireStageEvent('overload')`).
    */
   fireStageEvent(kind: StageEventKind): void {
+    const spareLast = !this.fight && !this.pulseFinishes;
     this.stageEvents.fired(kind);
     this.events.emit('stageEvent', { kind, bricks: this.breakableLeft });
     const { power, duration }: StageEventDef = STAGE_EVENTS.kinds[kind];
@@ -320,9 +321,11 @@ export class Game {
         if (br) this.dropCapsule(rollPower(this.rng, GOOD_POWERS), br.x + br.w / 2, br.y + br.h / 2);
         break;
       }
-      case 'pulse':
-        this.pulseBricks(STAGE_EVENTS.kinds.pulse.maxBricks, STAGE_EVENTS.kinds.pulse.damage);
+      case 'pulse': {
+        const { maxBricks, damage } = STAGE_EVENTS.kinds.pulse;
+        this.pulseBricks(Math.min(maxBricks, this.breakableLeft - (spareLast ? 1 : 0)), damage);
         break;
+      }
     }
   }
 
@@ -600,6 +603,7 @@ export class Game {
     this.events.emit('ballSpawn', { id: ball.id, x, y });
     this.sinceHit = this.sinceKill = 0;
     this.stageEvents.arm('safetyNet');
+    if (!this.fight) this.stageEvents.refund(STAGE_EVENTS.perBalls);
     this.setState('serve');
   }
 
@@ -642,18 +646,34 @@ export class Game {
   private checkStageEvents(dt: number): void {
     this.sinceHit += dt;
     this.sinceKill += dt;
+    this.stageEvents.tick(dt);
     const { supplyDrop, overload, pulse, hunter, demolition } = STAGE_EVENTS.kinds;
     const left = this.breakableLeft;
-    if (left <= supplyDrop.bricksLeft) this.tryStageEvent('supplyDrop');
-    if (left <= demolition.bricksLeft) this.tryStageEvent('demolition');
-    if (left <= overload.bricksLeft) this.tryStageEvent('overload');
-    if (this.sinceHit >= pulse.idleTime) this.tryStageEvent('pulse');
-    if (left <= hunter.bricksLeft && this.sinceKill >= hunter.idleTime) this.tryStageEvent('hunter');
+    const boss = this.fight !== null;
+    if (left <= supplyDrop.bricksLeft) this.tryLateEvent('supplyDrop');
+    if (left <= demolition.bricksLeft) this.tryLateEvent('demolition');
+    if (left <= overload.bricksLeft) this.tryLateEvent('overload');
+    if (left <= hunter.bricksLeft && (!boss || this.sinceKill >= STAGE_EVENTS.bossHunterIdle)) this.tryLateEvent('hunter');
+    if (this.sinceHit >= pulse.idleTime && (boss || (left > 1 && this.stageEvents.rested))) this.tryStageEvent('pulse');
+    if (this.pulseFinishes && left <= pulse.maxBricks && this.stageEvents.rested) this.fireStageEvent('pulse');
   }
 
   /** Trigger met: roll the event's chance once, then wait for it to re-arm. */
   private tryStageEvent(kind: StageEventKind): void {
     if (this.stageEvents.roll(kind, this.rng)) this.fireStageEvent(kind);
+  }
+
+  /** As `tryStageEvent`, for a brick-count event: it has to wait its turn, bar in a boss room. */
+  private tryLateEvent(kind: StageEventKind): void {
+    const ready = this.fight
+      ? this.stageEvents.firings(kind) === 0
+      : this.stageEvents.rested && this.stageEvents.stalled(kind, this.sinceKill);
+    if (ready) this.tryStageEvent(kind);
+  }
+
+  /** The stage has stalled for so long that a pulse may take its last brick; never in a boss room. */
+  private get pulseFinishes(): boolean {
+    return !this.fight && this.stageEvents.quiet('pulse', this.sinceKill) >= STAGE_EVENTS.kinds.pulse.finishAfter;
   }
 
   private movePaddle(dt: number, input: TickInput): void {
