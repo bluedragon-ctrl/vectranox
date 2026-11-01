@@ -1,22 +1,25 @@
 import { AUDIO } from '../config/audio';
 import type { AudioSettings } from '../core/settings';
 
-type Level = 'master' | 'music' | 'sfx';
+type Level = 'music' | 'sfx';
+type Channel = 'musicOn' | 'sfxOn';
 
-const LEVELS: { key: Level; label: string }[] = [
-  { key: 'master', label: 'MASTER' },
-  { key: 'music', label: 'MUSIC' },
-  { key: 'sfx', label: 'SFX' },
+const LEVELS: { key: Level; channel: Channel; label: string; hotkey: string }[] = [
+  { key: 'music', channel: 'musicOn', label: 'MUSIC', hotkey: 'M' },
+  { key: 'sfx', channel: 'sfxOn', label: 'SFX', hotkey: 'F' },
 ];
 
 /**
- * Audio settings in the menu: a segmented slider per volume (click or drag along it, or
- * use the mouse wheel), a mute toggle, and the current music track, which skips when clicked.
+ * Audio settings in the menu: for music and for effects, a name that switches the channel on and
+ * off and a segmented slider for its volume (click or drag along it, or use the mouse wheel).
+ * Below them the current music track, which skips when clicked.
  */
 export class AudioPanel {
   private syncs: (() => void)[] = [];
   private track: HTMLButtonElement;
   private trackName: HTMLSpanElement;
+  private playing: string | null = null;
+  private waiting = false;
 
   constructor(
     root: HTMLElement,
@@ -24,8 +27,7 @@ export class AudioPanel {
     private onChange: (settings: AudioSettings) => void,
     onSkip: () => void,
   ) {
-    const rows: HTMLElement[] = LEVELS.map((opt) => this.slider(opt.key, opt.label));
-    rows.push(this.muteToggle());
+    const rows: HTMLElement[] = LEVELS.map((opt) => this.slider(opt.key, opt.channel, opt.label, opt.hotkey));
 
     this.track = document.createElement('button');
     this.track.type = 'button';
@@ -42,18 +44,27 @@ export class AudioPanel {
     });
     rows.push(this.track);
     root.replaceChildren(...rows);
+    this.syncs.push(() => this.syncTrack());
   }
 
   /** Shows the playing track; null means there is nothing to play. `waiting`: not started yet. */
   setTrack(name: string | null, waiting = false): void {
-    this.trackName.textContent = name === null ? 'NONE' : waiting ? '--' : `${name} »`;
-    this.track.disabled = name === null || waiting;
-    this.track.classList.toggle('on', name !== null && !waiting);
+    this.playing = name;
+    this.waiting = waiting;
+    this.syncTrack();
   }
 
-  toggleMute(): void {
-    this.settings.mute = !this.settings.mute;
+  toggle(channel: Channel): void {
+    this.settings[channel] = !this.settings[channel];
     this.changed();
+  }
+
+  private syncTrack(): void {
+    const name = this.playing;
+    const idle = this.waiting || !this.settings.musicOn;
+    this.trackName.textContent = name === null ? 'NONE' : idle ? '--' : `${name} »`;
+    this.track.disabled = name === null || idle;
+    this.track.classList.toggle('on', name !== null && !idle);
   }
 
   private changed(): void {
@@ -68,11 +79,18 @@ export class AudioPanel {
     this.changed();
   }
 
-  private slider(key: Level, label: string): HTMLElement {
+  private slider(key: Level, channel: Channel, label: string, hotkey: string): HTMLElement {
     const row = document.createElement('div');
     row.className = 'level';
-    const name = document.createElement('span');
-    name.textContent = label;
+    const name = document.createElement('button');
+    name.type = 'button';
+    name.className = 'toggle';
+    name.textContent = `${label} (${hotkey})`;
+    name.addEventListener('click', () => {
+      // Drop focus so Space/Enter keep starting the game instead of re-toggling.
+      name.blur();
+      this.toggle(channel);
+    });
     const segs = document.createElement('div');
     segs.className = 'segs';
     segs.setAttribute('role', 'slider');
@@ -108,36 +126,15 @@ export class AudioPanel {
 
     const sync = () => {
       const level = this.settings[key];
+      const on = this.settings[channel];
       cells.forEach((cell, i) => cell.classList.toggle('on', i < level));
-      value.textContent = String(level * (100 / AUDIO.steps)).padStart(3, ' ');
+      value.textContent = on ? String(level * (100 / AUDIO.steps)).padStart(3, ' ') : 'OFF';
       segs.setAttribute('aria-valuenow', String(level));
-      row.classList.toggle('muted', this.settings.mute);
+      name.setAttribute('aria-pressed', String(on));
+      row.classList.toggle('muted', !on);
     };
     this.syncs.push(sync);
     sync();
     return row;
-  }
-
-  private muteToggle(): HTMLButtonElement {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'toggle';
-    const name = document.createElement('span');
-    name.textContent = 'MUTE (M)';
-    const value = document.createElement('span');
-    value.className = 'val';
-    btn.append(name, value);
-    btn.addEventListener('click', () => {
-      // Drop focus so Space/Enter keep starting the game instead of re-toggling.
-      btn.blur();
-      this.toggleMute();
-    });
-    const sync = () => {
-      value.textContent = this.settings.mute ? '[ON ]' : '[OFF]';
-      btn.classList.toggle('on', this.settings.mute);
-    };
-    this.syncs.push(sync);
-    sync();
-    return btn;
   }
 }

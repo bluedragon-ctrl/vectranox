@@ -9,10 +9,10 @@ export interface VisualSettings {
 
 /** Player-facing audio options. Levels are slider steps, 0..`AUDIO.steps`. Persisted in localStorage. */
 export interface AudioSettings {
-  master: number;
   music: number;
   sfx: number;
-  mute: boolean;
+  musicOn: boolean;
+  sfxOn: boolean;
 }
 
 const KEY = 'vectranox.video';
@@ -42,10 +42,10 @@ export function loadAudioSettings(): AudioSettings {
   const level = (v: unknown, fallback: number) =>
     typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= AUDIO.steps ? v : fallback;
   return {
-    master: level(saved.master, defaults.master),
     music: level(saved.music, defaults.music),
     sfx: level(saved.sfx, defaults.sfx),
-    mute: typeof saved.mute === 'boolean' ? saved.mute : defaults.mute,
+    musicOn: typeof saved.musicOn === 'boolean' ? saved.musicOn : defaults.musicOn,
+    sfxOn: typeof saved.sfxOn === 'boolean' ? saved.sfxOn : defaults.sfxOn,
   };
 }
 
