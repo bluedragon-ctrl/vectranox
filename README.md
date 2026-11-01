@@ -61,3 +61,23 @@ synthesized and need no files.
 
 Pushing to `main` builds and deploys to GitHub Pages via `.github/workflows/deploy.yml`.
 One-time setup: repo **Settings → Pages → Source: GitHub Actions**.
+
+## Online scores
+
+The world table is a Cloudflare Worker with a D1 database, in `worker/`. Without `VITE_SCORES_URL` at build time the game has the local table alone, and if the Worker can't be reached the local table carries on by itself.
+
+One-time setup:
+
+1. `npx wrangler@4 login`
+2. `npx wrangler@4 d1 create vectranox-scores`, and paste the printed id into `database_id` in `worker/wrangler.toml`.
+3. `npm run worker:schema -- --remote`
+4. `npm run worker:deploy`, and note the `workers.dev` address it prints.
+5. In the GitHub repo, **Settings → Secrets and variables → Actions → Variables**: add `SCORES_URL` with that address, no trailing slash, then rerun the deploy workflow.
+
+To try it locally, run `npm run worker:schema -- --local` once, then `npm run worker:dev`, and put `VITE_SCORES_URL=http://localhost:8787` in `.env.local` before `npm run dev`.
+
+Allowed origins and the rate limit are in `worker/wrangler.toml`. To remove a score:
+
+```bash
+npx wrangler@4 d1 execute vectranox-scores --remote --config worker/wrangler.toml --command "DELETE FROM scores WHERE id = 123"
+```

@@ -15,5 +15,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["src", "editor", "vite.config.ts"]
+  "include": ["src", "editor", "worker", "vite.config.ts"]
 }

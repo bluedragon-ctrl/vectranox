@@ -505,6 +505,33 @@ body {
   text-align: right;
 }
 
+#score-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+#score-tabs.hidden {
+  display: none;
+}
+
+#score-tabs button {
+  padding: 2px 8px;
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid var(--panel-border);
+  cursor: pointer;
+}
+
+#score-tabs button.active {
+  color: var(--cyan);
+  border-color: var(--cyan);
+}
+
 #score-list {
   list-style: none;
   font-size: 16px;

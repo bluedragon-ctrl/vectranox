@@ -12,6 +12,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "editor", "--", "--open", "false"],
       "port": 5174
+    },
+    {
+      "name": "worker",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "worker:dev"],
+      "port": 8787
     }
   ]
 }

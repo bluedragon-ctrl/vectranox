@@ -1,0 +1,21 @@
+name = "vectranox-scores"
+main = "index.ts"
+compatibility_date = "2026-05-01"
+
+[vars]
+# Comma-separated. Add the VPS origin here after the move.
+ALLOWED_ORIGINS = "https://bluedragon-ctrl.github.io,http://localhost:5173"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "vectranox-scores"
+database_id = "9f770ba1-2891-4f73-bb8f-7ae4391e7ff0"
+
+# Per IP, counted per Cloudflare location.
+[[ratelimits]]
+name = "SUBMIT_LIMIT"
+namespace_id = "1001"
+
+  [ratelimits.simple]
+  limit = 5
+  period = 60

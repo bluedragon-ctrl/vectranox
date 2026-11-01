@@ -6,7 +6,8 @@ import { PALETTE } from './config/game';
 import { BACKDROPS, backdropOf, BOSS_ROOM, ELITE, ROOM_LABEL, RUN, threatPips, TIME_BONUS } from './config/run';
 import { RARE_POWER_BANNER } from './config/tuning';
 import { startLoop } from './core/loop';
-import { addScore, formatScore, loadLastName, loadScores, NAME_LENGTH, rankOf, type ScoreEntry } from './core/scores';
+import { fetchScores, ONLINE_SCORES, submitScore } from './core/onlineScores';
+import { addScore, formatScore, loadLastName, loadScores, rankOf, saveLastName, type ScoreEntry } from './core/scores';
 import { loadAudioSettings, loadVisualSettings, saveAudioSettings, saveVisualSettings } from './core/settings';
 import { Game } from './game/Game';
 import type { StageTemplate } from './levels/stages';
@@ -21,6 +22,7 @@ import { NameEntry } from './ui/NameEntry';
 import { Overlay, type OverlayContent } from './ui/Overlay';
 import { PowerHud } from './ui/PowerHud';
 import { RunScreen, type RunAction } from './ui/RunScreen';
+import { ScoreBoard } from './ui/ScoreBoard';
 import { SettingsPanel } from './ui/SettingsPanel';
 
 /**
@@ -43,36 +45,6 @@ function el<T extends HTMLElement = HTMLElement>(id: string): T {
 
 function setText(node: HTMLElement, text: string): void {
   if (node.textContent !== text) node.textContent = text;
-}
-
-/** Fills the table; `highlight` marks the row of the run that just ended. */
-function renderScores(list: HTMLElement, scores: readonly ScoreEntry[], highlight = -1): void {
-  if (scores.length === 0) {
-    const li = document.createElement('li');
-    li.className = 'empty';
-    li.textContent = 'NO SCORES YET';
-    list.replaceChildren(li);
-    return;
-  }
-  list.replaceChildren(
-    ...scores.map((entry, i) => {
-      const name = document.createElement('span');
-      name.className = 'name';
-      name.textContent = entry.name.padEnd(NAME_LENGTH);
-      const rank = document.createElement('span');
-      rank.append(`${String(i + 1).padStart(2)}. `, name);
-      const stage = document.createElement('span');
-      stage.className = entry.won ? 'stage won' : 'stage';
-      stage.textContent = entry.won ? 'WIN' : entry.stage;
-      const points = document.createElement('span');
-      points.className = 'pts';
-      points.textContent = formatScore(entry.score);
-      const li = document.createElement('li');
-      li.classList.toggle('new', i === highlight);
-      li.append(rank, stage, points);
-      return li;
-    }),
-  );
 }
 
 const canvas = el<HTMLCanvasElement>('stage');
@@ -112,13 +84,19 @@ const input = new Input(canvas, renderer);
 const chainPopups = new ChainPopups(el('popups'), el('panel'), (x, y) => renderer.worldToClient(x, y));
 const runScreen = new RunScreen(el('run-screen'), (action) => runAction(action, 'mouse'));
 const bossBar = new BossBar(el('boss-bar'), (x, y) => renderer.worldToClient(x, y));
-const scoreList = el('score-list');
+const scoreBoard = new ScoreBoard(el('score-list'), { world: el<HTMLButtonElement>('score-tab-world'), local: el<HTMLButtonElement>('score-tab-local') }, ONLINE_SCORES);
 const nameEntry = new NameEntry(el<HTMLFormElement>('name-entry'), el<HTMLInputElement>('name-field'), saveScore);
 
 let ui: UiState = 'title';
 let scores = loadScores();
-/** The place the run that just ended took on the table, or -1. */
+/** The online table as last fetched, or null if the server wasn't reached. */
+let worldScores: ScoreEntry[] | null = null;
+/** The place the run that just ended takes on the local table, or -1. */
 let endRank = -1;
+/** The same on the online table as last fetched, or -1. */
+let endWorldRank = -1;
+/** What the server made of the run that just ended, for the end screen. */
+let worldResult = '';
 /** Waiting for the browser to grant pointer lock before play starts in mouse mode. */
 let pendingMouse = false;
 /** Waiting for pointer lock after a click during keyboard play; play goes on meanwhile. */
@@ -171,7 +149,10 @@ function enterPlay(mode: ControlMode): void {
   if (ui === 'ended') {
     game = newGame();
     endRank = -1;
-    renderScores(scoreList, scores);
+    endWorldRank = -1;
+    worldResult = '';
+    scoreBoard.setLocal(scores);
+    void refreshWorldScores();
   }
   input.mode = mode;
   input.reset();
@@ -221,11 +202,20 @@ function runKey(code: string): boolean {
   return true;
 }
 
-/** The run is over: asks for a name if it made the table. A single room from the editor never counts. */
+/** Reloads the online table, keeping the last one shown if the server can't be reached. */
+async function refreshWorldScores(): Promise<void> {
+  const fetched = await fetchScores();
+  if (!fetched) return;
+  worldScores = fetched;
+  scoreBoard.setWorld(worldScores);
+}
+
+/** The run is over: asks for a name if it made either table. A single room from the editor never counts. */
 function endRun(): void {
   releasePointer();
   endRank = playtest ? -1 : rankOf(scores, game.score);
-  if (endRank < 0) {
+  endWorldRank = playtest || !worldScores ? -1 : rankOf(worldScores, game.score);
+  if (endRank < 0 && endWorldRank < 0) {
     ui = 'ended';
     return;
   }
@@ -235,10 +225,33 @@ function endRun(): void {
 
 function saveScore(name: string): void {
   if (ui !== 'naming') return;
-  scores = addScore(scores, { name, score: game.score, stage: String(game.stage.number), won: game.state === 'complete' }, endRank);
-  renderScores(scoreList, scores, endRank);
+  const entry: ScoreEntry = { name, score: game.score, stage: String(game.stage.number), won: game.state === 'complete' };
+  saveLastName(name);
+  if (endRank >= 0) {
+    scores = addScore(scores, entry, endRank);
+    scoreBoard.setLocal(scores, endRank);
+    scoreBoard.show('local');
+  }
   nameEntry.hide();
   ui = 'ended';
+  if (ONLINE_SCORES) void sendScore(entry, game);
+}
+
+/** Puts a finished run on the online table. A new run may have started by the time the answer comes. */
+async function sendScore(entry: ScoreEntry, run: Game): Promise<void> {
+  const result = await submitScore(entry);
+  if (!result) {
+    logUi('scoreFailed', { score: entry.score });
+    if (run === game) worldResult = 'SCORE NOT SENT';
+    return;
+  }
+  logUi('scoreSent', { rank: result.rank + 1 });
+  worldScores = result.scores;
+  const current = run === game;
+  if (current) worldResult = `WORLD #${result.rank + 1}`;
+  const onTable = current && result.rank < result.scores.length;
+  scoreBoard.setWorld(worldScores, onTable ? result.rank : -1);
+  if (onTable) scoreBoard.show('world');
 }
 
 function pause(reason: string): void {
@@ -333,9 +346,9 @@ function overlayContent(): OverlayContent | null {
     case 'paused':
       return { title: 'PAUSED', sub: `${START_HINT}\n\n${CONTROLS_HINT}`, menu: true };
     case 'naming':
-      return { title: endTitle(), sub: `SCORE ${formatScore(game.score)}\nNEW HIGH SCORE  #${endRank + 1}`, menu: true };
+      return { title: endTitle(), sub: `SCORE ${formatScore(game.score)}\nNEW HIGH SCORE  ${namingRanks()}`, menu: true };
     case 'ended':
-      return { title: endTitle(), sub: `SCORE ${formatScore(game.score)}\n\n${START_HINT}`, menu: true };
+      return { title: endTitle(), sub: `SCORE ${formatScore(game.score)}${worldResult && `\n${worldResult}`}\n\n${START_HINT}`, menu: true };
     case 'between':
     case 'playing':
       switch (game.state) {
@@ -358,6 +371,12 @@ function overlayContent(): OverlayContent | null {
           return null;
       }
   }
+}
+
+/** The places the run takes, on the tables it made. */
+function namingRanks(): string {
+  const ranks = [endWorldRank >= 0 ? `WORLD #${endWorldRank + 1}` : '', endRank >= 0 ? `LOCAL #${endRank + 1}` : ''];
+  return ranks.filter(Boolean).join(' · ');
 }
 
 function endTitle(): string {
@@ -397,7 +416,10 @@ function formatChain(g: Game): string {
   return chain >= 2 ? `×${chain} +${g.chainBonus(chain) * g.multiplier}` : '—';
 }
 
-renderScores(scoreList, scores);
+scoreBoard.setLocal(scores);
+void refreshWorldScores().then(() => {
+  if (worldScores) scoreBoard.show('world');
+});
 
 const hudScore = el('hud-score');
 const hudRoom = el('hud-room');
