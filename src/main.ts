@@ -108,7 +108,7 @@ const eventConsole = new EventConsole(el('console'));
 const overlay = new Overlay(el('overlay'), el('overlay-title'), el('overlay-sub'));
 const banner = new EventBanner(el('event-banner'), el('event-title'), el('event-sub'));
 const input = new Input(canvas, renderer);
-const chainPopups = new ChainPopups(el('popups'), (x, y) => renderer.worldToClient(x, y));
+const chainPopups = new ChainPopups(el('popups'), el('panel'), (x, y) => renderer.worldToClient(x, y));
 const runScreen = new RunScreen(el('run-screen'), (action) => runAction(action, 'mouse'));
 const bossBar = new BossBar(el('boss-bar'), (x, y) => renderer.worldToClient(x, y));
 const scoreList = el('score-list');
