@@ -6,6 +6,7 @@ import { lerp } from '../core/math';
 import type { VisualSettings } from '../core/settings';
 import type { Game } from '../game/Game';
 import type { PowerKind, TimedPower } from '../game/types';
+import { AutoQuality } from './AutoQuality';
 import { GameFx } from './fx/GameFx';
 import { PostFx } from './fx/PostFx';
 import { Trails } from './fx/Trails';
@@ -74,7 +75,7 @@ const CAPSULE_LOOK = Object.fromEntries(
  * Everything is instanced SDF quads; effects come from simulation events via GameFx.
  */
 export class Renderer {
-  settings: VisualSettings = { bloom: true, reduceFx: false };
+  settings: VisualSettings = { bloom: true, reduceFx: false, resolution: 'auto' };
 
   private renderer: THREE.WebGLRenderer;
   private camera = new THREE.OrthographicCamera();
@@ -84,6 +85,11 @@ export class Renderer {
   private scene = new THREE.Scene();
   private backdropTarget = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType });
   private post: PostFx;
+  private auto = new AutoQuality();
+  /** Share of the screen's resolution being drawn. */
+  private renderScale = 1;
+  /** The bloom setting, unless auto quality has turned it off. */
+  private bloom = true;
   private trails = new Trails();
   private fx = new GameFx(this.trails);
 
@@ -242,9 +248,21 @@ export class Renderer {
   }
 
   applySettings(settings: VisualSettings): void {
+    if (settings.resolution === 'auto' && this.settings.resolution !== 'auto') this.auto.reset();
     this.settings = { ...settings };
     this.fx.setReduced(settings.reduceFx);
     this.skyUniforms.uTwinkle.value = settings.reduceFx ? 0 : 1;
+    this.applyQuality();
+  }
+
+  private applyQuality(): void {
+    const { bloom, resolution } = this.settings;
+    const auto = resolution === 'auto';
+    this.bloom = bloom && (!auto || this.auto.step.bloom);
+    const scale = auto ? this.auto.step.scale : resolution;
+    if (scale === this.renderScale) return;
+    this.renderScale = scale;
+    this.resize();
   }
 
   /**
@@ -254,10 +272,10 @@ export class Renderer {
   resize(): void {
     const w = window.innerWidth;
     const h = window.innerHeight;
-    const pr = Math.min(window.devicePixelRatio, 2);
+    const pr = Math.min(window.devicePixelRatio, 2) * this.renderScale;
     this.renderer.setPixelRatio(pr);
     this.renderer.setSize(w, h, false);
-    this.post.setSize(w, h, pr);
+    this.post.setSize(w, h, pr, this.renderScale);
     this.backdropTarget.setSize(Math.round(w * pr), Math.round(h * pr));
     this.resolution.value.set(Math.round(w * pr), Math.round(h * pr));
 
@@ -300,6 +318,7 @@ export class Renderer {
 
   /** `frameTime`: wall-clock seconds since the last frame, which drive the effects. */
   render(game: Game, alpha: number, frameTime: number): void {
+    if (this.settings.resolution === 'auto' && this.auto.update(frameTime)) this.applyQuality();
     const dt = Math.min(frameTime, 0.1);
     this.fx.update(dt);
     this.skyTime.value += dt;
@@ -334,7 +353,7 @@ export class Renderer {
     this.renderer.render(this.backdropScene, this.camera);
     this.renderer.setRenderTarget(null);
     this.post.render({
-      bloom: this.settings.bloom,
+      bloom: this.bloom,
       aberration: this.fx.aberration,
       flash: this.fx.flashColor,
       flashAmount: this.fx.flash,

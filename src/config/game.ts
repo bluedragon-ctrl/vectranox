@@ -10,6 +10,26 @@ export const SIM = {
   maxFrameTime: 0.25,
 } as const;
 
+// Menu choices for render resolution, as shares of the screen's: `auto` follows QUALITY.autoSteps.
+export const RESOLUTIONS = ['auto', 1, 0.75, 0.5] as const;
+
+export const QUALITY = {
+  // Tried in order while the frame rate stays below minFps. The game itself never slows down.
+  autoSteps: [
+    { scale: 1, bloom: true },
+    { scale: 0.75, bloom: true },
+    { scale: 0.5, bloom: true },
+    { scale: 0.5, bloom: false },
+  ],
+  minFps: 45,
+  // Seconds of frames averaged per check, and those skipped first so a change can settle.
+  sampleTime: 3,
+  settleTime: 1,
+  // A step must raise the frame rate this much to stay, or it is undone and checks stop. A screen
+  // or browser capped at 30 fps would otherwise lose quality for nothing.
+  minGain: 1.1,
+} as const;
+
 // Paddle position is its centre.
 export const PADDLE = {
   width: 52,

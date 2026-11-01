@@ -1,21 +1,45 @@
-import type { VisualSettings } from '../core/settings';
+import { RESOLUTIONS } from '../config/game';
+import type { Resolution, VisualSettings } from '../core/settings';
 
-const OPTIONS: { key: keyof VisualSettings; label: string }[] = [
+const TOGGLES: { key: 'bloom' | 'reduceFx'; label: string }[] = [
   { key: 'bloom', label: 'BLOOM' },
   { key: 'reduceFx', label: 'REDUCE FLASH/SHAKE' },
 ];
 
-/** On/off toggles for the video settings in the menu. */
+function resolutionText(r: Resolution): string {
+  return `[${r === 'auto' ? 'AUTO' : `${r * 100}%`.padStart(4, ' ')}]`;
+}
+
+/** The video settings in the menu: on/off toggles and a resolution that cycles when clicked. */
 export class SettingsPanel {
   constructor(
     root: HTMLElement,
     private settings: VisualSettings,
     private onChange: (settings: VisualSettings) => void,
   ) {
-    root.replaceChildren(...OPTIONS.map((opt) => this.toggle(opt.key, opt.label)));
+    root.replaceChildren(
+      this.row(
+        'RESOLUTION',
+        () => [resolutionText(this.settings.resolution), true],
+        () => {
+          const next = RESOLUTIONS.indexOf(this.settings.resolution) + 1;
+          this.settings.resolution = RESOLUTIONS[next % RESOLUTIONS.length]!;
+        },
+      ),
+      ...TOGGLES.map(({ key, label }) =>
+        this.row(
+          label,
+          () => [this.settings[key] ? '[ON ]' : '[OFF]', this.settings[key]],
+          () => {
+            this.settings[key] = !this.settings[key];
+          },
+        ),
+      ),
+    );
   }
 
-  private toggle(key: keyof VisualSettings, label: string): HTMLButtonElement {
+  /** `read` gives the row's value text and whether it is lit. */
+  private row(label: string, read: () => [string, boolean], change: () => void): HTMLButtonElement {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'toggle';
@@ -25,11 +49,12 @@ export class SettingsPanel {
     value.className = 'val';
     btn.append(name, value);
     const sync = () => {
-      value.textContent = this.settings[key] ? '[ON ]' : '[OFF]';
-      btn.classList.toggle('on', this.settings[key]);
+      const [text, on] = read();
+      value.textContent = text;
+      btn.classList.toggle('on', on);
     };
     btn.addEventListener('click', () => {
-      this.settings[key] = !this.settings[key];
+      change();
       sync();
       // Drop focus so Space/Enter keep starting the game instead of re-toggling.
       btn.blur();
