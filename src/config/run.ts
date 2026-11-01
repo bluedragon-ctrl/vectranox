@@ -3,6 +3,21 @@
  * Like tuning.ts, everything here is meant to be tweaked by hand.
  */
 
+import { Rng } from '../core/rng';
+
+/**
+ * The backdrops a run can roll, in the renderer's order, each with the song the run starts on (a
+ * track's displayed name, see `TRACKS`).
+ */
+export const BACKDROPS = [{ song: 'NEON SUNSET' }, { song: 'CITY LIGHTS' }, { song: 'RISING TIDE' }] as const;
+/** Keeps the backdrop's pick apart from the run's random streams; it is cosmetic. */
+const BACKDROP_SALT = 0x6c62272e;
+
+/** Index into `BACKDROPS` of a run's backdrop. */
+export function backdropOf(seed: number): number {
+  return Math.floor(new Rng(seed ^ BACKDROP_SALT).next() * BACKDROPS.length);
+}
+
 /**
  * Standard rooms are still layouts, formation rooms move, elite rooms are hard and pay for it,
  * boss rooms are won by destroying the core.

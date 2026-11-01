@@ -3,7 +3,7 @@ import { AudioEngine } from './audio/AudioEngine';
 import { GameSounds } from './audio/GameSounds';
 import { Input, type ControlMode } from './core/input';
 import { PALETTE } from './config/game';
-import { BOSS_ROOM, ELITE, ROOM_LABEL, RUN, threatPips, TIME_BONUS } from './config/run';
+import { BACKDROPS, backdropOf, BOSS_ROOM, ELITE, ROOM_LABEL, RUN, threatPips, TIME_BONUS } from './config/run';
 import { startLoop } from './core/loop';
 import { addScore, formatScore, loadLastName, loadScores, NAME_LENGTH, rankOf, type ScoreEntry } from './core/scores';
 import { loadAudioSettings, loadVisualSettings, saveAudioSettings, saveVisualSettings } from './core/settings';
@@ -132,6 +132,7 @@ function newGame(): Game {
   g.events.on('stageEvent', ({ kind }) => banner.show(kind, g.time));
   g.events.on('bossPhase', ({ phase, phases }) => banner.announce({ label: `PHASE ${phase}/${phases}`, sub: 'CORE SHIELDED', color: PALETTE.yellow }, g.time));
   renderer.attach(g);
+  audio.music.cue(BACKDROPS[backdropOf(g.seed)]!.song);
   sounds.attach(g);
   chainPopups.attach(g);
   g.start();

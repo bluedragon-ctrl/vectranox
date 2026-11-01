@@ -28,7 +28,8 @@ interface Deck {
 
 /**
  * Shuffled playlist on two decks: as a track nears its end the other deck starts the next one and
- * the two crossfade. Tracks stream through media elements, so long files are never decoded whole.
+ * the two crossfade. A run cues its backdrop's song ahead of the shuffle. Tracks stream through
+ * media elements, so long files are never decoded whole.
  */
 export class MusicPlayer {
   /** Called with the new track's name, or null when nothing can play. */
@@ -39,6 +40,8 @@ export class MusicPlayer {
   private active = 0;
   private order: number[] = [];
   private lastPlayed = -1;
+  /** Index of the track to play next, ahead of the shuffle. */
+  private cued: number | null = null;
   private failures = 0;
   private enabled = true;
 
@@ -89,8 +92,25 @@ export class MusicPlayer {
     if (!deck) return;
     window.clearTimeout(deck.stopTimer);
     if (!on) deck.stopTimer = window.setTimeout(() => deck.el.pause(), 100);
-    else if (deck.leaving) this.advance(AUDIO.skipFade);
+    else if (deck.leaving || this.cued !== null) this.advance(AUDIO.skipFade);
     else deck.el.play().catch(() => undefined);
+  }
+
+  /**
+   * Plays a track next, by its displayed name, then goes back to the shuffle. It starts now if
+   * music is playing, otherwise when music starts. A name with no track is ignored.
+   */
+  cue(name: string): void {
+    const index = TRACKS.findIndex((track) => track.name === name);
+    if (index < 0) return;
+    const deck = this.decks[this.active];
+    if (index === this.lastPlayed && deck && !deck.leaving) {
+      this.cued = null;
+      return;
+    }
+    this.cued = index;
+    this.order = this.order.filter((i) => i !== index);
+    if (this.ctx && this.enabled) this.advance(AUDIO.skipFade);
   }
 
   /** Skips to the next track. */
@@ -138,6 +158,11 @@ export class MusicPlayer {
 
   /** Index of the next track: a shuffled pass through the list, never the same track twice in a row. */
   private nextTrack(): number {
+    if (this.cued !== null) {
+      this.lastPlayed = this.cued;
+      this.cued = null;
+      return this.lastPlayed;
+    }
     if (this.order.length === 0) {
       const last = this.lastPlayed;
       this.order = shuffle(TRACKS.map((_, i) => i));

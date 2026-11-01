@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { FIELD, PALETTE } from '../config/game';
-import { RUN } from '../config/run';
+import { backdropOf, RUN } from '../config/run';
 import { BOSS, FOCUS, FORMATION, POWER, POWER_LOOK } from '../config/tuning';
 import { lerp } from '../core/math';
 import type { VisualSettings } from '../core/settings';
@@ -10,7 +10,7 @@ import { AutoQuality } from './AutoQuality';
 import { GameFx } from './fx/GameFx';
 import { PostFx } from './fx/PostFx';
 import { Trails } from './fx/Trails';
-import { FIELD_FRAGMENT, SKY_FRAGMENT } from './materials/backdrop';
+import { CITY_FRAGMENT, FIELD_FRAGMENT, SKY_FRAGMENT, TIDE_FRAGMENT } from './materials/backdrop';
 import { BALL_FRAGMENT } from './materials/ball';
 import { BRICK_FRAGMENT } from './materials/brick';
 import { FULLSCREEN_VERTEX } from './materials/common';
@@ -115,6 +115,27 @@ export class Renderer {
     uGrid: { value: new THREE.Color(PALETTE.magenta).multiplyScalar(0.8) },
     uRidge: { value: COLORS.purple },
   };
+  /** One backdrop per run, in the order of `BACKDROPS`: the sunset, then the alternatives with their own colours. */
+  private skyMaterials = [
+    skyMaterial(SKY_FRAGMENT, this.skyUniforms),
+    skyMaterial(CITY_FRAGMENT, {
+      ...this.skyUniforms,
+      uSkyTop: { value: new THREE.Color(0x05031a) },
+      uSkyHorizon: { value: new THREE.Color(0x1d0f52) },
+      uGrid: { value: new THREE.Color(PALETTE.purple).multiplyScalar(0.6) },
+      uRidge: { value: COLORS.cyan },
+    }),
+    skyMaterial(TIDE_FRAGMENT, {
+      ...this.skyUniforms,
+      uSkyTop: { value: new THREE.Color(0x020a22) },
+      uSkyHorizon: { value: new THREE.Color(0x082a4a) },
+      uSunTop: { value: new THREE.Color(0xa9d8e8) },
+      uSunBottom: { value: COLORS.cyan },
+      uGrid: { value: new THREE.Color(PALETTE.cyan).multiplyScalar(0.35) },
+      uRidge: { value: new THREE.Color(0xe8432a) },
+    }),
+  ];
+  private sky: THREE.Mesh;
   private field = new QuadBatch({
     max: 1,
     pad: 10,
@@ -178,18 +199,8 @@ export class Renderer {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
     this.renderer.setClearColor(PALETTE.bg);
 
-    this.backdropScene.add(
-      fullscreenQuad(
-        new THREE.ShaderMaterial({
-          vertexShader: FULLSCREEN_VERTEX,
-          fragmentShader: SKY_FRAGMENT,
-          uniforms: this.skyUniforms,
-          depthTest: false,
-          depthWrite: false,
-        }),
-      ),
-      this.field.mesh,
-    );
+    this.sky = fullscreenQuad(this.skyMaterials[0]!);
+    this.backdropScene.add(this.sky, this.field.mesh);
 
     const blit = fullscreenQuad(
       new THREE.ShaderMaterial({
@@ -245,6 +256,7 @@ export class Renderer {
   /** Route a (new) game's events to the effects. Call before `game.start()` to catch the first stage. */
   attach(game: Game): void {
     this.fx.attach(game);
+    this.sky.material = this.skyMaterials[backdropOf(game.seed)]!;
   }
 
   applySettings(settings: VisualSettings): void {
@@ -555,6 +567,18 @@ function powerLevel(game: Game, kind: TimedPower): number {
 function focusLevel(game: Game): number {
   if (game.focusLeft > 0) return game.focusLeft / game.focusDuration;
   return 1 - game.focusCooldown / game.focusRest;
+}
+
+function skyMaterial(fragmentShader: string, uniforms: Record<string, THREE.IUniform>): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+    vertexShader: FULLSCREEN_VERTEX,
+    fragmentShader,
+    uniforms,
+    depthTest: false,
+    depthWrite: false,
+    transparent: true,
+    blending: THREE.NoBlending,
+  });
 }
 
 function fullscreenQuad(material: THREE.ShaderMaterial): THREE.Mesh {
