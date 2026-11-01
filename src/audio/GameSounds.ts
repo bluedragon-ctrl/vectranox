@@ -2,6 +2,7 @@ import { AUDIO } from '../config/audio';
 import { FIELD } from '../config/game';
 import { POWER_LOOK } from '../config/tuning';
 import type { Game } from '../game/Game';
+import { RARE_POWERS } from '../game/powers';
 import type { HitSource } from '../game/types';
 import type { AudioEngine } from './AudioEngine';
 import { note, type Synth } from './synth';
@@ -189,7 +190,7 @@ export class GameSounds {
         if (POWER_LOOK[kind].bad) {
           this.play('powerBad', (s) => s.notes([440, 330, 233], 0.07, { type: 'sawtooth', cutoff: 1400, dur: 0.14, gain: 0.12, pan: p }));
         } else {
-          const steps = kind === 'life' ? [0, 4, 7, 12] : [0, 4, 7];
+          const steps = RARE_POWERS.includes(kind) ? [0, 4, 7, 12, 16, 19] : kind === 'life' ? [0, 4, 7, 12] : [0, 4, 7];
           this.play('power', (s) => s.notes(steps.map((n) => note(n, C5)), 0.06, { type: 'square', cutoff: 2600, dur: 0.13, gain: 0.07, pan: p }));
         }
       }),

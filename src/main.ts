@@ -4,6 +4,7 @@ import { GameSounds } from './audio/GameSounds';
 import { Input, type ControlMode } from './core/input';
 import { PALETTE } from './config/game';
 import { BACKDROPS, backdropOf, BOSS_ROOM, ELITE, ROOM_LABEL, RUN, threatPips, TIME_BONUS } from './config/run';
+import { RARE_POWER_BANNER } from './config/tuning';
 import { startLoop } from './core/loop';
 import { addScore, formatScore, loadLastName, loadScores, NAME_LENGTH, rankOf, type ScoreEntry } from './core/scores';
 import { loadAudioSettings, loadVisualSettings, saveAudioSettings, saveVisualSettings } from './core/settings';
@@ -130,6 +131,10 @@ function newGame(): Game {
   const g = new Game(Date.now() >>> 0);
   g.events.onAny((type, payload) => eventConsole.log(g.time, String(type), payload));
   g.events.on('stageEvent', ({ kind }) => banner.show(kind, g.time));
+  g.events.on('powerCollect', ({ kind }) => {
+    const look = RARE_POWER_BANNER[kind];
+    if (look) banner.announce(look, g.time);
+  });
   g.events.on('bossPhase', ({ phase, phases }) => banner.announce({ label: `PHASE ${phase}/${phases}`, sub: 'CORE SHIELDED', color: PALETTE.yellow }, g.time));
   renderer.attach(g);
   audio.music.cue(BACKDROPS[backdropOf(g.seed)]!.song);

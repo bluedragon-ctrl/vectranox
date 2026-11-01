@@ -557,10 +557,10 @@ export class Renderer {
     this.paddle.commit();
   }
 
-  /** During focus, each falling ball's path to the paddle, one quad per straight leg, then its rebound. A caught ball has only the rebound. */
+  /** While aiming, each falling ball's path to the paddle, one quad per straight leg, then its rebound. A caught ball has only the rebound. */
   private drawAimLines(game: Game): void {
     this.aimLines.begin();
-    if (game.focusLeft > 0) {
+    if (game.aiming) {
       this.ballPositions.forEach((pos, i) => {
         const ball = game.balls[i];
         const path = ball && game.ballPath(ball);
