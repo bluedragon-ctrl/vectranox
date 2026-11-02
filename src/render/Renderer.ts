@@ -18,7 +18,7 @@ import { PADDLE_FRAGMENT } from './materials/paddle';
 import { PAD_FRAGMENT, PORTAL_FRAGMENT, TARGET_FRAGMENT } from './materials/pinball';
 import { AIM_FRAGMENT, BARRIER_FRAGMENT, BLAST_FRAGMENT, BOLT_FRAGMENT, CAPSULE_FRAGMENT, SHOT_FRAGMENT } from './materials/power';
 import { glyphMask } from './glyphs';
-import { AIM_COLOR, ballLook, BRICK_GAP, brickTint, CAPSULE_COLORS, COLORS, PAD_COLORS, PORTAL_COLORS, POWER_COLORS, SHOT_COLOR, TARGET_COLOR } from './palette';
+import { AIM_COLOR, ballLook, BRICK_GAP, brickTint, CAPSULE_COLORS, COLORS, PAD_COLORS, PORTAL_COLORS, POWER_COLORS, SHOT_COLOR, TARGET_COLOR, TARGET_LAMP_COLORS } from './palette';
 import { QuadBatch } from './QuadBatch';
 
 /** Screen-space padding (px) between the playfield frame and its area. */
@@ -470,7 +470,7 @@ export class Renderer {
       const flash = Math.max(0, 1 - (game.tick - t.hitTick) / FLASH_TICKS) * this.fx.brickFlash;
       const age = this.fx.bankAge;
       const blink = !this.settings.reduceFx && age < BANK_BLINK.time && ((age * BANK_BLINK.blinks) / BANK_BLINK.time) % 1 < 0.5;
-      this.targets.push(t.x, t.y, t.r * 2, t.r * 2, TARGET_COLOR, 1, t.lit || blink ? 1 : 0, Math.max(flash * flash, blink ? BANK_BLINK.strength : 0));
+      this.targets.push(t.x, t.y, t.r * 2, t.r * 2, TARGET_LAMP_COLORS[t.color], 1, t.lit || blink ? 1 : 0, Math.max(flash * flash, blink ? BANK_BLINK.strength : 0));
     }
     this.targets.commit();
   }

@@ -1,5 +1,5 @@
 import type { MODS } from '../config/mods';
-import type { POWER, STAGE_EVENTS } from '../config/tuning';
+import type { POWER, STAGE_EVENTS, TargetColor } from '../config/tuning';
 
 /** `draft` (the pick between stages) waits for the player's choice. */
 export type GameState = 'serve' | 'play' | 'clear' | 'draft' | 'over' | 'complete';
@@ -89,6 +89,8 @@ export interface Target {
   x: number;
   y: number;
   r: number;
+  /** Lamp colour, for the secret codes (`SECRET_CODES`). */
+  color: TargetColor;
   lit: boolean;
   /** Tick of the last hit, for flash effects. */
   hitTick: number;

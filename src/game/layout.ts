@@ -1,5 +1,5 @@
 import { BRICK, FIELD } from '../config/game';
-import { BRICK_TYPES, PINBALL } from '../config/tuning';
+import { BRICK_TYPES, PINBALL, TARGET_COLORS } from '../config/tuning';
 import type { Brick, BrickKind, Pad, PadKind, Portal, Target } from './types';
 
 export const BRICK_CODES: Partial<Record<string, { kind: BrickKind; hp: number }>> = {
@@ -33,10 +33,16 @@ export interface StagePieces {
   pads: Pad[];
 }
 
-/** Bricks and pinball pieces for a stage layout (see `StageDef`). All its `c` cells make one core of `coreHp`. */
-export function parseLayout(layout: readonly string[], nextId: () => number, coreHp = 1): StagePieces {
+/**
+ * Bricks and pinball pieces for a stage layout (see `StageDef`). All its `c` cells make one core of `coreHp`.
+ * `mirrored`: the layout was flipped from its template, so target colours are handed out right to left,
+ * keeping each lamp's colour as drawn.
+ */
+export function parseLayout(layout: readonly string[], nextId: () => number, coreHp = 1, mirrored = false): StagePieces {
   const bricks: Brick[] = [];
   const targets: Target[] = [];
+  /** Each target's place in the reading order of the layout as drawn. */
+  const targetOrder: number[] = [];
   const pads: Pad[] = [];
   const ends = new Map<string, { x: number; y: number }[]>();
   const coreCells: { row: number; col: number }[] = [];
@@ -55,7 +61,8 @@ export function parseLayout(layout: readonly string[], nextId: () => number, cor
       const cx = col * BRICK.width + BRICK.width / 2;
       const cy = y + BRICK.height / 2;
       if (ch === 'o') {
-        targets.push({ kind: 'target', id: nextId(), x: cx, y: cy, r: PINBALL.target.radius, lit: false, hitTick: -Infinity });
+        targetOrder.push(row * BRICK.cols + (mirrored ? BRICK.cols - 1 - col : col));
+        targets.push({ kind: 'target', id: nextId(), x: cx, y: cy, r: PINBALL.target.radius, color: TARGET_COLORS[0], lit: false, hitTick: -Infinity });
         continue;
       }
       const pad = PAD_CODES[ch];
@@ -96,5 +103,10 @@ export function parseLayout(layout: readonly string[], nextId: () => number, cor
       const r = PINBALL.portal.radius;
       portals.push({ id: ia, ...a, r, exit: ib, pair, warpTick: -Infinity }, { id: ib, ...b, r, exit: ia, pair, warpTick: -Infinity });
     });
+  // Colours go by reading order as drawn; rooms have at most one target per colour (validate.ts).
+  targets
+    .map((t, i) => ({ t, order: targetOrder[i]! }))
+    .sort((a, b) => a.order - b.order)
+    .forEach(({ t }, i) => (t.color = TARGET_COLORS[i % TARGET_COLORS.length]!));
   return { bricks, targets, portals, pads };
 }

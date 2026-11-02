@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import { BRICK, FIELD, PADDLE, PALETTE } from '../src/config/game';
-import { FORMATION, PINBALL } from '../src/config/tuning';
+import { FORMATION, PINBALL, TARGET_COLORS } from '../src/config/tuning';
 import { BRICK_CODES, isPinballCode, PAD_CODES } from '../src/game/layout';
 import type { StageTemplate } from '../src/levels/stages';
 import { formationAt, MAX_ROWS } from '../src/levels/validate';
-import { BRICK_GAP, brickTint, PAD_COLORS, PORTAL_COLORS, TARGET_COLOR } from '../src/render/palette';
+import { BRICK_GAP, brickTint, PAD_COLORS, PORTAL_COLORS, TARGET_LAMP_COLORS } from '../src/render/palette';
 import { cssColor } from '../src/ui/dom';
 
 /** Marks each formation's bricks, and its card in the side panel. */
@@ -99,6 +99,7 @@ function drawBrick(ctx: CanvasRenderingContext2D, ch: string, row: number, col: 
   if (ch !== '1') label(ctx, ch, cellX(col) + BRICK.width / 2, cellY(row) + BRICK.height / 2, '#fff');
 }
 
+/** `pair`: a portal's pair, or a target's place in reading order, which picks its lamp colour. */
 function drawPiece(ctx: CanvasRenderingContext2D, ch: string, row: number, col: number, pair: number, whole: boolean): void {
   const x = cellX(col) + BRICK.width / 2;
   const y = cellY(row) + BRICK.height / 2;
@@ -119,7 +120,7 @@ function drawPiece(ctx: CanvasRenderingContext2D, ch: string, row: number, col: 
   ctx.arc(x, y, portal ? PINBALL.portal.radius : PINBALL.target.radius, 0, Math.PI * 2);
   ctx.lineWidth = 1.5;
   const color = PORTAL_COLORS[pair % PORTAL_COLORS.length];
-  ctx.strokeStyle = !portal ? TARGET_COLOR.getStyle() : whole && color ? color.getStyle() : cssColor(PALETTE.red);
+  ctx.strokeStyle = !portal ? TARGET_LAMP_COLORS[TARGET_COLORS[pair % TARGET_COLORS.length]!].getStyle() : whole && color ? color.getStyle() : cssColor(PALETTE.red);
   ctx.stroke();
   if (portal) label(ctx, ch, x, y, '#fff');
 }
@@ -177,11 +178,13 @@ export function drawField(canvas: HTMLCanvasElement, room: StageTemplate, { sele
 
   const letters = [...new Set(room.layout.join('').replace(/[^A-Z]/g, ''))].sort();
   const text = room.layout.join('');
+  // Targets take their lamp colours in reading order, as in the game.
+  let target = 0;
   room.layout.forEach((line, row) => {
     [...line].forEach((ch, col) => {
       if (ch === '.') return;
       if (isPinballCode(ch)) {
-        drawPiece(ctx, ch, row, col, letters.indexOf(ch), text.split(ch).length === 3);
+        drawPiece(ctx, ch, row, col, ch === 'o' ? target++ : letters.indexOf(ch), text.split(ch).length === 3);
       } else {
         drawBrick(ctx, ch, row, col);
       }

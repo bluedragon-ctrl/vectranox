@@ -8,6 +8,9 @@ import { Particles } from './Particles';
 import { Shake } from './Shake';
 import type { Trails } from './Trails';
 
+/** A secret code flashes the field white. */
+const SECRET_FLASH = new THREE.Color(0xf2e9ff);
+
 const WALL_HIT_SLOTS = 8;
 /** Share of the ball's velocity that shattered glass inherits. */
 const PIECE_PUSH = 0.12;
@@ -187,6 +190,10 @@ export class GameFx {
         this.bankAge = 0;
         this.shake.add(0.2);
         this.pulse(TARGET_COLOR, 0.05, 0.4);
+      }),
+      ev.on('secretCode', () => {
+        this.shake.add(0.25);
+        this.pulse(SECRET_FLASH, 0.08, 0.5);
       }),
       ev.on('stageEvent', ({ kind }) => {
         if (kind !== 'pulse') return;

@@ -1,4 +1,5 @@
 import { FIELD, SCORE } from '../config/game';
+import { SECRET_CODES } from '../config/tuning';
 import { chainBonus, type Game } from '../game/Game';
 
 /** CSS pixels between the badge and the playfield's right wall, or the panel's left edge. */
@@ -7,7 +8,7 @@ const WALL_GAP = 14;
 type ToClient = (x: number, y: number) => { x: number; y: number };
 
 /**
- * Chain bonus and target bank feedback: one badge just outside the playfield's bottom-right corner, clear of
+ * Chain bonus, target bank and secret code feedback: one badge just outside the playfield's bottom-right corner, clear of
  * the ball and paddle; it never goes inside the field. Each bonus brick replaces it with the chain count
  * and that brick's bonus; a finished chain shows its total a little longer. Points shown include the
  * score multiplier, and while it is above ×1 the badge says so. Pure CSS animation; `setPaused` holds it.
@@ -37,6 +38,12 @@ export class ChainPopups {
       }),
       ev.on('targetBank', ({ multiplier, bonus }) => {
         this.show('summary bank', 1, `TARGET BANK +${bonus}`, `×${multiplier}`, 'MULTIPLIER');
+      }),
+      ev.on('secretCode', ({ code, points, multiplier }) => {
+        const { label, award } = SECRET_CODES[code];
+        const value = award.kind === 'points' ? `+${points}` : award.kind === 'multiplier' ? `×${multiplier}` : 'CHARGED';
+        const tag = award.kind === 'points' ? this.multiTag(multiplier) : award.kind === 'multiplier' ? 'MULTIPLIER' : 'DETONATOR';
+        this.show('summary secret', 1, `SECRET · ${label}`, value, tag);
       }),
     ];
   }

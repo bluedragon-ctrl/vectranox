@@ -1,7 +1,7 @@
 import { BALL, BRICK, FIELD, PADDLE, RULES, SCORE, SIM } from '../config/game';
 import { ANCHOR_DROP, DRAFT, LASERPIERCE_CORE, MODS, PRICES, type GrantTrigger } from '../config/mods';
 import { BOSS_ROOM, ELITE, ROOM_CREDITS, TIME_BONUS } from '../config/run';
-import { BOSS, BRICK_TYPES, FOCUS, FORMATION, PINBALL, POWER, STAGE_EVENTS } from '../config/tuning';
+import { BOSS, BRICK_TYPES, FOCUS, FORMATION, PINBALL, POWER, SECRET_CODES, STAGE_EVENTS, type SecretCode, type TargetColor } from '../config/tuning';
 import { EventBus } from '../core/events';
 import { clamp, lerp } from '../core/math';
 import { Rng } from '../core/rng';
@@ -77,6 +77,15 @@ interface Fuse {
   tick: number;
 }
 
+const SECRET_KINDS = Object.keys(SECRET_CODES) as SecretCode[];
+/** Target colours to remember: enough for the longest secret code. */
+const SECRET_LENGTH = Math.max(...SECRET_KINDS.map((kind) => SECRET_CODES[kind].sequence.length));
+
+function endsWith<T>(list: readonly T[], tail: readonly T[]): boolean {
+  const from = list.length - tail.length;
+  return from >= 0 && tail.every((item, i) => list[from + i] === item);
+}
+
 /**
  * Pure simulation. Must not touch three.js, the DOM or Math.random.
  * Advanced by `update` at a fixed rate; everything observable goes out through `events`.
@@ -128,6 +137,8 @@ export class Game {
   score = 0;
   lives: number = RULES.lives;
   tick = 0;
+  /** Colours of the targets hit in this room, oldest first, since the last secret code; only the newest `SECRET_LENGTH` are kept. */
+  private targetColors: TargetColor[] = [];
   /** Position in `PINBALL.multipliers`; a target bank or a flawless room moves it up, `loseMultiplier` down. */
   multiplierStep = 0;
   /** No life lost and no second wind used in this room yet; clearing it so moves the multiplier up. */
@@ -511,7 +522,8 @@ export class Game {
   private loadStage(index: number): void {
     this.stageIndex = index;
     const stage = this.stage;
-    ({ bricks: this.bricks, targets: this.targets, portals: this.portals, pads: this.pads } = parseLayout(stage.layout, () => this.nextId++, stage.boss?.hp));
+    ({ bricks: this.bricks, targets: this.targets, portals: this.portals, pads: this.pads } = parseLayout(stage.layout, () => this.nextId++, stage.boss?.hp, stage.mirrored));
+    this.targetColors = [];
     this.formations = buildFormations(stage.formations, this.bricks, stage.formationPace);
     const core = this.bricks.find((br) => br.kind === 'core');
     this.fight = stage.boss && core ? new BossFight(stage.boss, core) : null;
@@ -1269,6 +1281,7 @@ export class Game {
     tg.lit = true;
     this.score += PINBALL.target.points;
     this.events.emit('targetHit', { id: tg.id, ball: b.id, lit, points: PINBALL.target.points, x: tg.x, y: tg.y });
+    this.playSecret(tg.color);
     if (!lit || !this.targets.every((t) => t.lit)) return;
     for (const t of this.targets) {
       t.lit = false;
@@ -1277,6 +1290,27 @@ export class Game {
     this.raiseMultiplier();
     this.score += PINBALL.bankBonus;
     this.events.emit('targetBank', { multiplier: this.multiplier, bonus: PINBALL.bankBonus });
+  }
+
+  /** Adds a target hit to the colours played; a secret code they now end with pays and starts them afresh. */
+  private playSecret(color: TargetColor): void {
+    const played = this.targetColors;
+    played.push(color);
+    if (played.length > SECRET_LENGTH) played.shift();
+    const code = SECRET_KINDS.find((kind) => endsWith(played, SECRET_CODES[kind].sequence));
+    if (!code) return;
+    played.length = 0;
+    const { award } = SECRET_CODES[code];
+    let points = 0;
+    if (award.kind === 'points') {
+      points = award.points * this.multiplier;
+      this.score += points;
+    } else if (award.kind === 'multiplier') {
+      this.raiseMultiplier();
+    } else {
+      this.chargeBalls(award.charges);
+    }
+    this.events.emit('secretCode', { code, points, multiplier: this.multiplier });
   }
 
   private raiseMultiplier(): void {

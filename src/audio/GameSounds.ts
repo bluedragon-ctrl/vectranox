@@ -175,6 +175,10 @@ export class GameSounds {
       ev.on('targetBank', () => {
         this.play('bank', (s) => s.notes([0, 4, 7, 12, 16].map((n) => note(n, C5)), 0.05, { type: 'square', cutoff: 3200, dur: 0.12, gain: 0.07 }));
       }),
+      ev.on('secretCode', () => {
+        // A rising major-seventh run, longer and brighter than the bank.
+        this.play('secret', (s) => s.notes([0, 4, 7, 11, 12, 16, 19, 23, 24].map((n) => note(n, C5)), 0.045, { type: 'triangle', cutoff: 5000, dur: 0.16, gain: 0.09 }));
+      }),
       ev.on('portalWarp', ({ x }) => {
         // Swallowed and spat out: a sweep down, then up.
         this.play('warp', (s) => {
