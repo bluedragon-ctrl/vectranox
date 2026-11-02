@@ -2,8 +2,8 @@ import { SDF } from './common';
 
 /**
  * Pinball target: a round lamp in a metal bezel, with the same 2.5D shadow as capsules. Dark
- * glass when unlit, a steady glow when lit; hits flash it white. The instance rectangle is its
- * diameter. params: x = lit (0/1), y = hit flash (1 -> 0).
+ * tinted glass in a tinted bezel when unlit, a steady glow when lit; hits flash it white. The
+ * instance rectangle is its diameter. params: x = lit (0/1), y = hit flash (1 -> 0).
  */
 export const TARGET_FRAGMENT = /* glsl */ `
 varying vec2 vLocal;
@@ -23,10 +23,15 @@ void main() {
   float flash = vParams.y;
 
   float face = fill(d + 1.3);
-  vec3 lamp = mix(tint * 0.1, mix(tint, vec3(1.0), 0.35), lit);
-  // Dome highlight, top left.
-  lamp += vec3(0.9, 0.95, 1.0) * (0.12 + 0.18 * lit) * (1.0 - smoothstep(0.0, 0.55, length(p - vec2(-0.35, 0.35) * r) / r));
-  vec3 bezel = vec3(0.55, 0.52, 0.7) * (0.6 + 0.4 * p.y / r) + tint * 0.25 * lit;
+  // Unlit, the glass stays dark but keeps its colour: a tinted face, brighter towards the middle
+  // like a cold filament, so the colours can be told apart before they are lit.
+  float core = 1.0 - smoothstep(0.0, 0.7, length(p) / r);
+  vec3 lamp = mix(tint * (0.22 + 0.25 * core), mix(tint, vec3(1.0), 0.35), lit);
+  // Dome highlight, top left; tinted while unlit, so it doesn't wash the colour out.
+  vec3 shine = mix(tint, vec3(0.9, 0.95, 1.0), 0.4 + 0.6 * lit);
+  lamp += shine * (0.12 + 0.18 * lit) * (1.0 - smoothstep(0.0, 0.55, length(p - vec2(-0.35, 0.35) * r) / r));
+  // The bezel carries the colour too, so a lamp reads at a glance even unlit.
+  vec3 bezel = mix(vec3(0.55, 0.52, 0.7), tint, 0.45) * (0.6 + 0.4 * p.y / r) + tint * 0.25 * lit;
   vec3 body = mix(bezel, lamp, face);
   body = mix(body, vec3(1.0), flash * 0.7);
 
