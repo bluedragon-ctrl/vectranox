@@ -5,6 +5,7 @@ import { BOSS, FOCUS, FORMATION, PINBALL, POWER, POWER_LOOK } from '../config/tu
 import { lerp } from '../core/math';
 import type { VisualSettings } from '../core/settings';
 import type { Game } from '../game/Game';
+import { POWER_KINDS } from '../game/powers';
 import type { Pad, PowerKind, TimedPower } from '../game/types';
 import { AutoQuality } from './AutoQuality';
 import { GameFx } from './fx/GameFx';
@@ -78,7 +79,6 @@ const SHAKE_MARGIN = 12;
 const BRICK_KIND = { normal: 0, steel: 1, explosive: 2, regen: 3, core: 4, turret: 5, spawner: 6, phantom: 7 } as const;
 /** Shadow balls fade out over their last second, and never quite match a real ball's brightness. */
 const SHADOW_LOOK = { fade: 1, alpha: 0.7 } as const;
-const POWER_KINDS = Object.keys(POWER_LOOK) as PowerKind[];
 const CAPSULE_LOOK = Object.fromEntries(
   POWER_KINDS.map((k) => [k, { color: CAPSULE_COLORS[k], mask: glyphMask(POWER_LOOK[k].glyph), bad: POWER_LOOK[k].bad ? 1 : 0 }]),
 ) as Record<PowerKind, { color: THREE.Color; mask: number; bad: number }>;
@@ -196,7 +196,7 @@ export class Renderer {
       uFocusFlash: { value: 0 },
     },
   });
-  private balls =new QuadBatch({ max: MAX_BALLS, pad: 3, fragmentShader: BALL_FRAGMENT, renderOrder: 30 });
+  private balls = new QuadBatch({ max: MAX_BALLS, pad: 3, fragmentShader: BALL_FRAGMENT, renderOrder: 30 });
   private barrier = new QuadBatch({ max: 1, pad: 6, fragmentShader: BARRIER_FRAGMENT, renderOrder: 15 });
   private capsules = new QuadBatch({ max: MAX_CAPSULES, pad: 4, fragmentShader: CAPSULE_FRAGMENT, renderOrder: 22 });
   private bolts = new QuadBatch({ max: MAX_BOLTS, pad: 4, fragmentShader: BOLT_FRAGMENT, renderOrder: 24 });
@@ -429,8 +429,9 @@ export class Renderer {
     // A quick CONTINUE can bring in the next room, pinless, while the surge still fades.
     surge.w = this.settings.reduceFx || pins.length === 0 ? 0 : Math.max(0, 1 - age / BANK_SURGE.time);
     if (surge.w > 0) {
-      surge.x = pins.reduce((sum, t) => sum + t.x, 0) / pins.length;
-      surge.y = pins.reduce((sum, t) => sum + t.y, 0) / pins.length;
+      const mid = centroid(pins);
+      surge.x = mid.x;
+      surge.y = mid.y;
       surge.z = (age / BANK_SURGE.spread) * Math.hypot(FIELD.width, FIELD.height);
     }
     const pressure = game.linePressure;
@@ -446,8 +447,8 @@ export class Renderer {
     b.begin();
     for (const br of game.bricks) {
       if (!br.alive) continue;
-      const flash = Math.max(0, 1 - (game.tick - br.hitTick) / FLASH_TICKS) * this.fx.brickFlash * (this.fx.areaHits.has(br.id) ? AREA_FLASH : 1);
-      const heal = Math.max(0, 1 - (game.tick - br.healTick) / HEAL_FLASH.ticks) * this.fx.brickFlash * HEAL_FLASH.strength;
+      const flash = fadeOut(game.tick - br.hitTick, FLASH_TICKS) * this.fx.brickFlash * (this.fx.areaHits.has(br.id) ? AREA_FLASH : 1);
+      const heal = fadeOut(game.tick - br.healTick, HEAL_FLASH.ticks) * this.fx.brickFlash * HEAL_FLASH.strength;
       b.push(
         lerp(br.px, br.x, alpha) + br.w / 2,
         lerp(br.py, br.y, alpha) + br.h / 2,
@@ -466,10 +467,10 @@ export class Renderer {
 
   private drawTargets(game: Game): void {
     this.targets.begin();
+    const age = this.fx.bankAge;
+    const blink = !this.settings.reduceFx && age < BANK_BLINK.time && ((age * BANK_BLINK.blinks) / BANK_BLINK.time) % 1 < 0.5;
     for (const t of game.targets) {
-      const flash = Math.max(0, 1 - (game.tick - t.hitTick) / FLASH_TICKS) * this.fx.brickFlash;
-      const age = this.fx.bankAge;
-      const blink = !this.settings.reduceFx && age < BANK_BLINK.time && ((age * BANK_BLINK.blinks) / BANK_BLINK.time) % 1 < 0.5;
+      const flash = fadeOut(game.tick - t.hitTick, FLASH_TICKS) * this.fx.brickFlash;
       this.targets.push(t.x, t.y, t.r * 2, t.r * 2, TARGET_LAMP_COLORS[t.color], 1, t.lit || blink ? 1 : 0, Math.max(flash * flash, blink ? BANK_BLINK.strength : 0));
     }
     this.targets.commit();
@@ -502,7 +503,7 @@ export class Renderer {
     this.pads.begin();
     const phase = this.settings.reduceFx ? 0 : this.portalTime;
     for (const p of game.pads) {
-      const flash = Math.max(0, 1 - (game.tick - p.hitTick) / PAD_FLASH_TICKS) * this.fx.brickFlash;
+      const flash = fadeOut(game.tick - p.hitTick, PAD_FLASH_TICKS) * this.fx.brickFlash;
       const charge = p.kind === 'clock' ? 1 - p.recharge / PINBALL.clock.recharge : 1;
       this.pads.push(p.x, p.y, p.r * 2, p.r * 2, PAD_COLORS[p.kind], 1, p.kind === 'boost' ? 0 : 1, flash, charge < 1 ? charge : 1 + this.readyBlink(game, p), phase);
     }
@@ -524,7 +525,7 @@ export class Renderer {
     for (const p of game.portals) {
       const color = PORTAL_COLORS[p.pair % PORTAL_COLORS.length] ?? COLORS.purple;
       const spin = (p.id < p.exit ? 1 : -1) * this.portalTime * PORTAL_SPIN;
-      const flash = Math.max(0, 1 - (game.tick - p.warpTick) / WARP_FLASH_TICKS) * this.fx.brickFlash;
+      const flash = fadeOut(game.tick - p.warpTick, WARP_FLASH_TICKS) * this.fx.brickFlash;
       this.portals.push(p.x, p.y, p.r * 2, p.r * 2, color, 1, spin, flash);
     }
     this.portals.commit();
@@ -638,15 +639,30 @@ export class Renderer {
   }
 }
 
-/** 1 while a power runs, fading to 0 over its last second. */
+/** 1 at `age` 0, falling to 0 over `span` (both in the same unit, ticks here). */
+function fadeOut(age: number, span: number): number {
+  return Math.max(0, 1 - age / span);
+}
+
+/** The average of the points; they must not be empty. */
+function centroid(points: readonly { x: number; y: number }[]): { x: number; y: number } {
+  let x = 0;
+  let y = 0;
+  for (const p of points) {
+    x += p.x;
+    y += p.y;
+  }
+  return { x: x / points.length, y: y / points.length };
+}
+
 /** The pins in order round their middle, back to the first, or just the two ends of a pair. */
 function bankLoop(pins: readonly { x: number; y: number }[]): { x: number; y: number }[] {
-  const cx = pins.reduce((sum, p) => sum + p.x, 0) / pins.length;
-  const cy = pins.reduce((sum, p) => sum + p.y, 0) / pins.length;
+  const { x: cx, y: cy } = centroid(pins);
   const loop = [...pins].sort((a, b) => Math.atan2(a.y - cy, a.x - cx) - Math.atan2(b.y - cy, b.x - cx));
   return loop.length > 2 ? [...loop, loop[0]!] : loop;
 }
 
+/** 1 while a power runs, fading to 0 over its last `POWER_FADE` seconds. */
 function powerLevel(game: Game, kind: TimedPower): number {
   return Math.min(1, game.timers[kind] / POWER_FADE);
 }

@@ -3,6 +3,7 @@ import { ROOM_LABEL, ROOM_TIME, type RoomKind } from '../src/config/run';
 import { FORMATION } from '../src/config/tuning';
 import type { BossDef, FormationDef, StageTemplate } from '../src/levels/stages';
 import { checkRoom, checkRun, isBossDef, MAX_ROWS, roomFile, type Problem } from '../src/levels/validate';
+import { byId } from '../src/ui/dom';
 import type { RoomChange, RoomsState, SaveResult } from './api';
 import { cellAt, drawField, fitField, FORMATION_COLORS, type Cell } from './field';
 import { formatRoom } from './format';
@@ -48,12 +49,6 @@ const TOOLS: readonly { tool: Tool; label: string; title: string }[] = [
   { tool: PORTAL, label: 'Portal', title: 'Portal end (p); pairs up with the next one placed' },
   { tool: ERASE, label: 'Erase', title: 'Erase (e), or drag with the right button' },
 ];
-
-function byId<T extends HTMLElement = HTMLElement>(id: string): T {
-  const node = document.getElementById(id);
-  if (!node) throw new Error(`Missing #${id}`);
-  return node as T;
-}
 
 function make<K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLElementTagNameMap[K]> = {}, ...children: (Node | string)[]): HTMLElementTagNameMap[K] {
   const node = document.createElement(tag);
