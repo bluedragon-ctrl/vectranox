@@ -44,7 +44,7 @@ npm run editor
 
 Or double-click `room-editor.bat` on Windows. Opens at <http://localhost:5174/editor/>. Rooms are one JSON file each in `src/levels/rooms/`; the editor reads them from GitHub (the open room PR if there is one, otherwise `main`), so `git` and a logged-in `gh` are needed.
 
-- Pick a tool and drag on the grid; the right button erases. Keys: `1 2 3 # * r o` bricks and targets, `p` portal, `e` erase, `m` symmetry, Ctrl+Z / Ctrl+Y undo and redo.
+- Pick a tool and drag on the grid; the right button erases. Keys: `1 2 3 # * r o` bricks and targets, `f` booster and `+` clock pads, `p` portal, `e` erase, `m` symmetry, Ctrl+Z / Ctrl+Y undo and redo.
 - Formations are outlined in their colour, a rotation with its orbit. **Drag area** sets a formation's rows and columns from the grid.
 - **Time** is the room's time limit for the time bonus, in seconds. Left empty, the room takes the limit of its kind, shown greyed out.
 - **Play this room** opens the game on the room as it stands, unsaved edits included. Every new game there starts on it.

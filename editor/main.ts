@@ -43,6 +43,8 @@ const TOOLS: readonly { tool: Tool; label: string; title: string }[] = [
   { tool: 's', label: 's', title: 'Boss spawner: sends bricks down to the line' },
   { tool: 'g', label: 'g', title: 'Boss phantom: releases shadow balls' },
   { tool: 'o', label: 'o', title: 'Pinball target' },
+  { tool: 'f', label: 'f', title: 'Booster: speeds up each ball passing through by 20%, for good' },
+  { tool: '+', label: '+', title: 'Clock: a ball passing through adds 10 s to the time limit while any is left, then it recharges for 10 s' },
   { tool: PORTAL, label: 'Portal', title: 'Portal end (p); pairs up with the next one placed' },
   { tool: ERASE, label: 'Erase', title: 'Erase (e), or drag with the right button' },
 ];

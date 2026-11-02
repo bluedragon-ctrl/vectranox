@@ -1,6 +1,6 @@
 import { BRICK, FIELD } from '../config/game';
 import { BRICK_TYPES, PINBALL } from '../config/tuning';
-import type { Brick, BrickKind, Portal, Target } from './types';
+import type { Brick, BrickKind, Pad, PadKind, Portal, Target } from './types';
 
 export const BRICK_CODES: Partial<Record<string, { kind: BrickKind; hp: number }>> = {
   '1': { kind: 'normal', hp: 1 },
@@ -15,16 +15,29 @@ export const BRICK_CODES: Partial<Record<string, { kind: BrickKind; hp: number }
   g: { kind: 'phantom', hp: 2 },
 };
 
+/** Layout codes of the pads (see `PINBALL`). */
+export const PAD_CODES: Partial<Record<string, PadKind>> = {
+  f: 'boost',
+  '+': 'clock',
+};
+
+export const isPortalCode = (ch: string): boolean => ch >= 'A' && ch <= 'Z';
+
+/** Targets, portal ends and pads: pinball pieces, which aren't bricks and never move. */
+export const isPinballCode = (ch: string): boolean => ch === 'o' || isPortalCode(ch) || PAD_CODES[ch] !== undefined;
+
 export interface StagePieces {
   bricks: Brick[];
   targets: Target[];
   portals: Portal[];
+  pads: Pad[];
 }
 
 /** Bricks and pinball pieces for a stage layout (see `StageDef`). All its `c` cells make one core of `coreHp`. */
 export function parseLayout(layout: readonly string[], nextId: () => number, coreHp = 1): StagePieces {
   const bricks: Brick[] = [];
   const targets: Target[] = [];
+  const pads: Pad[] = [];
   const ends = new Map<string, { x: number; y: number }[]>();
   const coreCells: { row: number; col: number }[] = [];
   const addBrick = (row: number, col: number, kind: BrickKind, hp: number, w: number, h: number, y: number): void => {
@@ -45,7 +58,12 @@ export function parseLayout(layout: readonly string[], nextId: () => number, cor
         targets.push({ kind: 'target', id: nextId(), x: cx, y: cy, r: PINBALL.target.radius, lit: false, hitTick: -Infinity });
         continue;
       }
-      if (ch >= 'A' && ch <= 'Z') {
+      const pad = PAD_CODES[ch];
+      if (pad) {
+        pads.push({ kind: pad, id: nextId(), x: cx, y: cy, r: PINBALL[pad].radius, recharge: 0, hitTick: -Infinity });
+        continue;
+      }
+      if (isPortalCode(ch)) {
         const list = ends.get(ch) ?? [];
         list.push({ x: cx, y: cy });
         ends.set(ch, list);
@@ -78,5 +96,5 @@ export function parseLayout(layout: readonly string[], nextId: () => number, cor
       const r = PINBALL.portal.radius;
       portals.push({ id: ia, ...a, r, exit: ib, pair, warpTick: -Infinity }, { id: ib, ...b, r, exit: ia, pair, warpTick: -Infinity });
     });
-  return { bricks, targets, portals };
+  return { bricks, targets, portals, pads };
 }

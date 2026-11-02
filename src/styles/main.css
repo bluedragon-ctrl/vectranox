@@ -480,6 +480,24 @@ body {
   text-shadow: none;
 }
 
+/* A clock pad added time: a gold flash. */
+#hud-time.gain {
+  animation: time-gain 0.9s ease-out;
+}
+
+@keyframes time-gain {
+  from {
+    color: var(--yellow);
+    text-shadow: 0 0 14px rgba(255, 210, 63, 0.9);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #hud-time.gain {
+    animation: none;
+  }
+}
+
 .block h2 {
   font-family: var(--display);
   font-weight: 500;

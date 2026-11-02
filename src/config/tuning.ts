@@ -202,12 +202,20 @@ export const STAGE_EVENT_LOOK = {
  *
  * Portals come in pairs: a ball whose centre gets within `capture` of one comes out of the other
  * with the same velocity, and ignores that exit until it has left its radius.
+ *
+ * Pads are passed through, not bounced off: a ball whose centre gets within `capture` of one sets
+ * it off, and it ignores that ball until the ball has left its radius. A booster multiplies that
+ * ball's speed by `scale` for good (up to `BALL.maxSpeed`), every time it goes through. A clock adds
+ * `seconds` to the room's time limit while some is left, then needs `recharge` seconds of play
+ * before it works again; one that finds the time already out does nothing and stays charged.
  */
 export const PINBALL = {
   target: { radius: 5, points: 25 },
   bankBonus: 500,
   multipliers: [1, 2, 3, 4, 5],
   portal: { radius: 10, capture: 5 },
+  boost: { radius: 7, capture: 6, scale: 1.2 },
+  clock: { radius: 7, capture: 6, seconds: 10, recharge: 10 },
 } as const;
 
 /**

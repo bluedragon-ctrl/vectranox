@@ -26,6 +26,7 @@ import type {
   GameState,
   HitSource,
   ModKind,
+  Pad,
   Paddle,
   Portal,
   PowerDef,
@@ -93,6 +94,7 @@ export class Game {
   bricks: Brick[] = [];
   targets: Target[] = [];
   portals: Portal[] = [];
+  pads: Pad[] = [];
   capsules: Capsule[] = [];
   bolts: Bolt[] = [];
   shots: Shot[] = [];
@@ -249,6 +251,7 @@ export class Game {
         // Everything but the paddle runs on world time, so focus slows it all alike; the paddle has its own pace.
         const world = this.focusLeft > 0 ? dt * FOCUS.scale : dt;
         this.tickRoomTime(world);
+        this.tickPads(world);
         this.movePaddle(dt, input);
         this.tickPowers(world);
         this.handleButtons(world, input);
@@ -508,7 +511,7 @@ export class Game {
   private loadStage(index: number): void {
     this.stageIndex = index;
     const stage = this.stage;
-    ({ bricks: this.bricks, targets: this.targets, portals: this.portals } = parseLayout(stage.layout, () => this.nextId++, stage.boss?.hp));
+    ({ bricks: this.bricks, targets: this.targets, portals: this.portals, pads: this.pads } = parseLayout(stage.layout, () => this.nextId++, stage.boss?.hp));
     this.formations = buildFormations(stage.formations, this.bricks, stage.formationPace);
     const core = this.bricks.find((br) => br.kind === 'core');
     this.fight = stage.boss && core ? new BossFight(stage.boss, core) : null;
@@ -605,6 +608,7 @@ export class Game {
       chain: 0,
       chainPoints: 0,
       inPortal: null,
+      inPad: null,
       charges: 0,
     };
     this.balls.push(ball);
@@ -1182,6 +1186,52 @@ export class Game {
     b.x = clamp(b.x, b.r, FIELD.width - b.r);
     b.y = Math.min(b.y, FIELD.height - b.r);
     this.checkPortals(b);
+    this.checkPads(b);
+  }
+
+  /** A ball whose centre comes within a pad's reach sets it off, once each time it goes through. */
+  private checkPads(b: Ball): void {
+    if (b.inPad !== null) {
+      const pad = this.pads.find((p) => p.id === b.inPad);
+      if (pad && (b.x - pad.x) ** 2 + (b.y - pad.y) ** 2 <= pad.r ** 2) return;
+      b.inPad = null;
+    }
+    for (const pad of this.pads) {
+      if ((b.x - pad.x) ** 2 + (b.y - pad.y) ** 2 >= PINBALL[pad.kind].capture ** 2) continue;
+      b.inPad = pad.id;
+      if (pad.kind === 'boost') this.boostBall(pad, b);
+      else this.windClock(pad, b);
+      return;
+    }
+  }
+
+  /** Booster: the ball keeps the extra speed until it is lost. */
+  private boostBall(pad: Pad, b: Ball): void {
+    // Under the same top speed as brick hits, dampener included.
+    const max = BALL.maxSpeed * (1 - this.modValue('dampener'));
+    b.speed = Math.min(max, Math.max(b.speed, b.speed * PINBALL.boost.scale));
+    normalizeVelocity(b, this.ballSpeed(b));
+    pad.hitTick = this.tick;
+    this.events.emit('padBoost', { id: b.id, pad: pad.id, speed: b.speed, x: pad.x, y: pad.y });
+  }
+
+  /** Clock: more time while some is left, then a rest before it works again. */
+  private windClock(pad: Pad, b: Ball): void {
+    if (pad.recharge > 0 || this.timeLeft === 0) return;
+    const { seconds, recharge } = PINBALL.clock;
+    this.timeLeft += seconds;
+    pad.recharge = recharge;
+    pad.hitTick = this.tick;
+    this.events.emit('padClock', { id: b.id, pad: pad.id, seconds, x: pad.x, y: pad.y });
+  }
+
+  /** Recharges used clocks; runs with the room's clock, while a ball is in play. */
+  private tickPads(dt: number): void {
+    for (const pad of this.pads) {
+      if (pad.recharge === 0) continue;
+      pad.recharge = Math.max(0, pad.recharge - dt);
+      if (pad.recharge === 0) this.events.emit('padReady', { pad: pad.id, x: pad.x, y: pad.y });
+    }
   }
 
   /** A ball that reaches a portal's centre comes out of the other end, moving the same way. */
@@ -1475,6 +1525,7 @@ export class Game {
       chain: 0,
       chainPoints: 0,
       inPortal: src.inPortal,
+      inPad: src.inPad,
       charges,
     };
     normalizeVelocity(ball, this.ballSpeed(ball));

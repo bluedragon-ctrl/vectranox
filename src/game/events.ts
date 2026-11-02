@@ -68,6 +68,12 @@ export type GameEvents = {
   targetBank: { multiplier: number; bonus: number };
   /** Ball `id` went into portal `from` and came out of portal `to` at (x, y). */
   portalWarp: { id: number; from: number; to: number; x: number; y: number };
+  /** Ball `id` went through booster `pad` at (x, y); `speed` is its base speed now (it may already have been at the top). */
+  padBoost: { id: number; pad: number; speed: number; x: number; y: number };
+  /** Ball `id` went through clock `pad` at (x, y), adding `seconds` to the room's time limit. */
+  padClock: { id: number; pad: number; seconds: number; x: number; y: number };
+  /** Clock `pad` has recharged and works again. */
+  padReady: { pad: number; x: number; y: number };
   powerDrop: { id: number; kind: PowerKind; x: number; y: number };
   powerCollect: { id: number; kind: PowerKind };
   powerMissed: { id: number; kind: PowerKind };
