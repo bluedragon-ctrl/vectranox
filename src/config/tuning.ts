@@ -227,12 +227,12 @@ export const PINBALL = {
  * is unaffected, bar the steel breaker mod. Charged balls work the same way, and the blast
  * radius, steel breaker and cluster charge mods apply to both.
  *
- * Regenerating: takes `hp` hits and wins one back after `delay` seconds without a hit, again
- * every `delay` until it is whole.
+ * Regenerating: takes `hp` hits and wins one back after `delay` seconds of play without a hit,
+ * again every `delay` until it is whole. Time spent waiting to serve doesn't count.
  */
 export const BRICK_TYPES = {
   explosive: { radius: 22, damage: 1, fuse: 0.08 },
-  regen: { hp: 2, delay: 4 },
+  regen: { hp: 2, delay: 8 },
 } as const;
 
 /**
