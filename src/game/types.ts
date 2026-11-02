@@ -1,5 +1,5 @@
 import type { MODS } from '../config/mods';
-import type { POWER, STAGE_EVENTS } from '../config/tuning';
+import type { POWER, STAGE_EVENTS, TargetColor } from '../config/tuning';
 
 /** `draft` (the pick between stages) waits for the player's choice. */
 export type GameState = 'serve' | 'play' | 'clear' | 'draft' | 'over' | 'complete';
@@ -54,7 +54,8 @@ export interface Paddle {
   h: number;
 }
 
-export interface Ball {
+/** Something that flies freely: position, where it was at the previous tick, and velocity. */
+interface Mover {
   id: number;
   x: number;
   y: number;
@@ -62,6 +63,9 @@ export interface Ball {
   py: number;
   vx: number;
   vy: number;
+}
+
+export interface Ball extends Mover {
   r: number;
   /** Base speed; the slow/fast powers scale it. */
   speed: number;
@@ -89,6 +93,8 @@ export interface Target {
   x: number;
   y: number;
   r: number;
+  /** Lamp colour, for the secret codes (`SECRET_CODES`). */
+  color: TargetColor;
   lit: boolean;
   /** Tick of the last hit, for flash effects. */
   hitTick: number;
@@ -131,29 +137,14 @@ export interface Pad {
  * Decoy from a phantom brick: bounces like a ball but breaks nothing, and losing it costs nothing.
  * Kept out of `Game.balls`, so no ball rule ever applies to it.
  */
-export interface ShadowBall {
-  id: number;
-  x: number;
-  y: number;
-  px: number;
-  py: number;
-  vx: number;
-  vy: number;
+export interface ShadowBall extends Mover {
   r: number;
   /** Seconds until it fades away. */
   life: number;
 }
 
 /** Boss shot, stuns the paddle it reaches. Position is the centre. */
-export interface Shot {
-  id: number;
-  x: number;
-  y: number;
-  px: number;
-  py: number;
-  vx: number;
-  vy: number;
-}
+export type Shot = Mover;
 
 /** Falling power-up. Position is the centre. */
 export interface Capsule {

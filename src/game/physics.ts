@@ -1,7 +1,14 @@
 import { BALL, FIELD } from '../config/game';
-import type { SweepHit } from './collision';
+import { sweepBox, type SweepHit } from './collision';
 import type { WallSide } from './events';
 import type { Ball } from './types';
+
+/** Distance a ball is pushed off a surface after a bounce, so the next sweep starts outside it. */
+export const SKIN = 0.01;
+/** How far along the paddle a caught ball can stick, as a share of its half width. */
+export const CATCH_EDGE = 0.9;
+/** Bounces resolved per ball per tick; leftover motion is dropped (only matters in tight corners). */
+export const MAX_BOUNCES = 4;
 
 /** Whether `h` is a hit that comes before `best` (or the first one). */
 export function closer(h: SweepHit | null, best: SweepHit | null): h is SweepHit {
@@ -23,6 +30,24 @@ export function sweepWalls(b: Pick<Ball, 'x' | 'y' | 'r'>, dx: number, dy: numbe
     if (t <= 1 && (!best || t < best.t)) best = { t, nx: 0, ny: -1, side: 'top' };
   }
   return best;
+}
+
+/** Sweeps a ball moving by (dx, dy) against a box (bottom-left corner, size), grown by the ball's radius. */
+export function sweepRect(b: Pick<Ball, 'x' | 'y' | 'r'>, dx: number, dy: number, box: { x: number; y: number; w: number; h: number }): SweepHit | null {
+  return sweepBox(b.x, b.y, dx, dy, box.x - b.r, box.y - b.r, box.x + box.w + b.r, box.y + box.h + b.r);
+}
+
+/** Mirrors velocity about the unit normal (nx, ny): a bounce off a round surface. */
+export function reflect(b: Pick<Ball, 'vx' | 'vy'>, nx: number, ny: number): void {
+  const dot = b.vx * nx + b.vy * ny;
+  b.vx -= 2 * dot * nx;
+  b.vy -= 2 * dot * ny;
+}
+
+/** A bounce off a flat side: each axis the normal (nx, ny) has turns to point along it. */
+export function bounceFlat(b: Pick<Ball, 'vx' | 'vy'>, nx: number, ny: number): void {
+  if (nx !== 0) b.vx = Math.abs(b.vx) * nx;
+  if (ny !== 0) b.vy = Math.abs(b.vy) * ny;
 }
 
 /**
@@ -61,4 +86,13 @@ export function normalizeVelocity(b: Pick<Ball, 'vx' | 'vy'>, speed: number): vo
   }
   b.vx = vx;
   b.vy = vy;
+}
+
+/** Where a ball is headed; a caught ball by the angle it would launch at, a resting one straight up. */
+export function ballDirection(b: Ball): [number, number] {
+  if (b.stuck !== null) {
+    const a = b.stuck * BALL.maxBounceAngle;
+    return [Math.sin(a), Math.cos(a)];
+  }
+  return b.vx === 0 && b.vy === 0 ? [0, 1] : [b.vx, b.vy];
 }

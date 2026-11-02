@@ -3,7 +3,7 @@ import { AudioEngine } from './audio/AudioEngine';
 import { GameSounds } from './audio/GameSounds';
 import { Input, type ControlMode } from './core/input';
 import { PALETTE } from './config/game';
-import { BACKDROPS, backdropOf, BOSS_ROOM, ELITE, ROOM_LABEL, RUN, threatPips, TIME_BONUS } from './config/run';
+import { BACKDROPS, backdropOf, clearBonus, ROOM_LABEL, RUN, threatPips, TIME_BONUS } from './config/run';
 import { RARE_POWER_BANNER } from './config/tuning';
 import { startLoop } from './core/loop';
 import { fetchScores, ONLINE_SCORES, submitScore } from './core/onlineScores';
@@ -16,6 +16,7 @@ import { AudioPanel } from './ui/AudioPanel';
 import { BossBar } from './ui/BossBar';
 import { ChainPopups } from './ui/ChainPopups';
 import { EventBanner } from './ui/EventBanner';
+import { byId } from './ui/dom';
 import { EventConsole, type UiEvent } from './ui/EventConsole';
 import { ModHud } from './ui/ModHud';
 import { NameEntry } from './ui/NameEntry';
@@ -37,21 +38,15 @@ const END_DELAY = 1.5;
 const START_HINT = 'CLICK / ENTER TO START';
 const CONTROLS_HINT = 'MOVE  ← → / A D / MOUSE\nLAUNCH · FIRE  SPACE / CLICK\nHOLD TO SLOW  X / RIGHT CLICK\nPAUSE  P / ESC\nMUSIC  M · SFX  F';
 
-function el<T extends HTMLElement = HTMLElement>(id: string): T {
-  const node = document.getElementById(id);
-  if (!node) throw new Error(`Missing #${id}`);
-  return node as T;
-}
-
 function setText(node: HTMLElement, text: string): void {
   if (node.textContent !== text) node.textContent = text;
 }
 
-const canvas = el<HTMLCanvasElement>('stage');
-const renderer = new Renderer(canvas, el('field-area'));
+const canvas = byId<HTMLCanvasElement>('stage');
+const renderer = new Renderer(canvas, byId('field-area'));
 const videoSettings = loadVisualSettings();
 renderer.applySettings(videoSettings);
-new SettingsPanel(el('video-toggles'), videoSettings, (settings) => {
+new SettingsPanel(byId('video-toggles'), videoSettings, (settings) => {
   renderer.applySettings(settings);
   saveVisualSettings(settings);
   logUi('settings', { ...settings });
@@ -60,7 +55,7 @@ const audioSettings = loadAudioSettings();
 const audio = new AudioEngine(audioSettings);
 const sounds = new GameSounds(audio);
 const audioPanel = new AudioPanel(
-  el('audio-controls'),
+  byId('audio-controls'),
   audioSettings,
   (settings) => {
     audio.apply(settings);
@@ -77,15 +72,15 @@ audio.music.onTrack = (name) => {
 // Browsers only start audio from a user gesture; the first click or key press anywhere unlocks it.
 window.addEventListener('pointerdown', () => audio.unlock(), { capture: true });
 window.addEventListener('keydown', () => audio.unlock(), { capture: true });
-const eventConsole = new EventConsole(el('console'));
-const overlay = new Overlay(el('overlay'), el('overlay-title'), el('overlay-sub'));
-const banner = new EventBanner(el('event-banner'), el('event-title'), el('event-sub'));
+const eventConsole = new EventConsole(byId('console'));
+const overlay = new Overlay(byId('overlay'), byId('overlay-title'), byId('overlay-sub'));
+const banner = new EventBanner(byId('event-banner'), byId('event-title'), byId('event-sub'));
 const input = new Input(canvas, renderer);
-const chainPopups = new ChainPopups(el('popups'), el('panel'), (x, y) => renderer.worldToClient(x, y));
-const runScreen = new RunScreen(el('run-screen'), (action) => runAction(action, 'mouse'));
-const bossBar = new BossBar(el('boss-bar'), (x, y) => renderer.worldToClient(x, y));
-const scoreBoard = new ScoreBoard(el('score-list'));
-const nameEntry = new NameEntry(el<HTMLFormElement>('name-entry'), el<HTMLInputElement>('name-field'), saveScore);
+const chainPopups = new ChainPopups(byId('popups'), byId('panel'), (x, y) => renderer.worldToClient(x, y));
+const runScreen = new RunScreen(byId('run-screen'), (action) => runAction(action, 'mouse'));
+const bossBar = new BossBar(byId('boss-bar'), (x, y) => renderer.worldToClient(x, y));
+const scoreBoard = new ScoreBoard(byId('score-list'));
+const nameEntry = new NameEntry(byId<HTMLFormElement>('name-entry'), byId<HTMLInputElement>('name-field'), saveScore);
 
 let ui: UiState = 'title';
 /** The table in play: online as last fetched (null until the server answers), or local in a build without a server. */
@@ -142,6 +137,11 @@ function requestStart(mode: ControlMode): void {
     return;
   }
   pendingMouse = true;
+  lockPointer();
+}
+
+/** Asks for pointer lock; the answer comes as pointerlockchange or pointerlockerror. */
+function lockPointer(): void {
   // Chrome returns a promise (rejects e.g. right after Esc); Firefox returns nothing and fires pointerlockerror.
   const request = canvas.requestPointerLock() as Promise<void> | undefined;
   request?.catch(() => undefined);
@@ -270,8 +270,7 @@ canvas.addEventListener('mousedown', (e) => {
   } else if (input.mode === 'keyboard' && !pendingSwitch) {
     // The click itself still launches or fires; steering moves to the mouse once locked.
     pendingSwitch = true;
-    const request = canvas.requestPointerLock() as Promise<void> | undefined;
-    request?.catch(() => undefined);
+    lockPointer();
   }
 });
 
@@ -380,7 +379,8 @@ function endTitle(): string {
 
 /** What the room just cleared paid: an elite or boss bonus, the time bonus, the flawless multiplier, then its credits. */
 function clearSub(g: Game): string {
-  const bonus = g.stage.room === 'boss' ? `BOSS BONUS +${BOSS_ROOM.clearBonus}` : g.stage.room === 'elite' ? `ELITE BONUS +${ELITE.clearBonus}` : '';
+  const paid = clearBonus(g.stage.room);
+  const bonus = paid > 0 ? `${g.stage.room === 'boss' ? 'BOSS' : 'ELITE'} BONUS +${paid}` : '';
   const time = g.timeLeft > 0 ? `TIME BONUS +${TIME_BONUS.score}` : '';
   const flawless = g.flawless ? `FLAWLESS  MULTIPLIER ×${g.multiplier}` : '';
   const pay = g.roomCredits;
@@ -414,17 +414,17 @@ function formatChain(g: Game): string {
 if (ONLINE_SCORES) void refreshScores();
 else scoreBoard.show(scores);
 
-const hudScore = el('hud-score');
-const hudRoom = el('hud-room');
-const hudTime = el('hud-time');
-const hudLives = el('hud-lives');
-const hudCredits = el('hud-credits');
-const hudChain = el('hud-chain');
-const hudMult = el('hud-mult');
-const powerHud = new PowerHud(el('power-list'));
-const modHud = new ModHud(el('mod-list'));
-const sysFps = el('sys-fps');
-const sysBalls = el('sys-balls');
+const hudScore = byId('hud-score');
+const hudRoom = byId('hud-room');
+const hudTime = byId('hud-time');
+const hudLives = byId('hud-lives');
+const hudCredits = byId('hud-credits');
+const hudChain = byId('hud-chain');
+const hudMult = byId('hud-mult');
+const powerHud = new PowerHud(byId('power-list'));
+const modHud = new ModHud(byId('mod-list'));
+const sysFps = byId('sys-fps');
+const sysBalls = byId('sys-balls');
 let fps = 60;
 
 startLoop({

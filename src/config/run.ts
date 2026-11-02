@@ -106,6 +106,11 @@ export const BOSS_ROOM = {
 } as const;
 
 /** How each room kind is named on screen; standard rooms go by their stage name alone. */
+/** What clearing a room of this kind pays on top (no multiplier): elite and boss rooms only. */
+export function clearBonus(room: RoomKind): number {
+  return room === 'boss' ? BOSS_ROOM.clearBonus : room === 'elite' ? ELITE.clearBonus : 0;
+}
+
 export const ROOM_LABEL: Record<RoomKind, string> = {
   standard: '',
   formation: 'FORMATION',

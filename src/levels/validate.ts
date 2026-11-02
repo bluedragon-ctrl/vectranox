@@ -1,6 +1,6 @@
 import { BRICK, FIELD } from '../config/game';
 import { ROOM_LABEL } from '../config/run';
-import { BOSS, FORMATION, PINBALL } from '../config/tuning';
+import { BOSS, FORMATION, PINBALL, TARGET_COLORS } from '../config/tuning';
 import { within } from '../game/formation';
 import { BRICK_CODES, isPinballCode, isPortalCode, PAD_CODES } from '../game/layout';
 import type { BossDef, FormationDef, StageTemplate } from './stages';
@@ -43,8 +43,11 @@ function checkLayout(room: StageTemplate): Problem[] {
 
   const portals = new Map<string, number>();
   let breakable = 0;
+  let targets = 0;
   for (const { row, col, ch } of cells(room)) {
-    if (isPortalCode(ch)) {
+    if (ch === 'o') {
+      targets++;
+    } else if (isPortalCode(ch)) {
       portals.set(ch, (portals.get(ch) ?? 0) + 1);
     } else if (!isPinballCode(ch)) {
       const code = BRICK_CODES[ch];
@@ -56,6 +59,8 @@ function checkLayout(room: StageTemplate): Problem[] {
     if (count !== 2) problems.push(error(`Portal ${letter} needs exactly two ends, has ${count}.`));
   }
   if (breakable === 0) problems.push(error('Needs at least one breakable brick, or the room can never be cleared.'));
+  // One target per lamp colour.
+  if (targets > TARGET_COLORS.length) problems.push(error(`At most ${TARGET_COLORS.length} targets, has ${targets}.`));
   return problems;
 }
 

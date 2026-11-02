@@ -1,4 +1,5 @@
 import type { RoomKind } from '../config/run';
+import type { SecretCode } from '../config/tuning';
 import type { FirePattern } from '../levels/stages';
 import type { BrickKind, ExplosionSource, HitSource, ModKind, PowerKind, StageEventKind, TimedPower } from './types';
 
@@ -66,6 +67,8 @@ export type GameEvents = {
   targetHit: { id: number; ball: number; lit: boolean; points: number; x: number; y: number };
   /** Every target lit: the bank paid `bonus` and the score multiplier is now `multiplier`. */
   targetBank: { multiplier: number; bonus: number };
+  /** Target hits played secret `code`; `points` it paid (0 if its award isn't points), `multiplier` the score multiplier now. */
+  secretCode: { code: SecretCode; points: number; multiplier: number };
   /** Ball `id` went into portal `from` and came out of portal `to` at (x, y). */
   portalWarp: { id: number; from: number; to: number; x: number; y: number };
   /** Ball `id` went through booster `pad` at (x, y); `speed` is its base speed now (it may already have been at the top). */

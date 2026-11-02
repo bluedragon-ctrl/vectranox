@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { PALETTE } from '../config/game';
-import { POWER_LOOK } from '../config/tuning';
+import { POWER_LOOK, type TargetColor } from '../config/tuning';
 import type { Ball, BrickKind, PadKind, PowerKind } from '../game/types';
 
 /** A boss's shots and a stunned paddle, linear. */
@@ -101,6 +101,16 @@ export function ballLook(ball: Pick<Ball, 'charges'>, pierce: number): BallLook 
 
 /** Pinball target lamp, linear and capped like glass so a lit bank doesn't flood the bloom. */
 export const TARGET_COLOR = capBrightness(new THREE.Color(0x2dffb4));
+
+/** Each target's own lamp colour (see `TARGET_COLORS`), capped the same way; green is the bank's colour. */
+export const TARGET_LAMP_COLORS = {
+  green: TARGET_COLOR,
+  red: capBrightness(new THREE.Color(PALETTE.red)),
+  blue: capBrightness(new THREE.Color(PALETTE.blue)),
+  yellow: capBrightness(new THREE.Color(PALETTE.yellow)),
+  magenta: capBrightness(new THREE.Color(PALETTE.magenta)),
+  cyan: capBrightness(new THREE.Color(PALETTE.cyan)),
+} as const satisfies Record<TargetColor, THREE.Color>;
 
 /** Focus aim lines, linear: laser green, a colour nothing that hurts or breaks uses. */
 export const AIM_COLOR = new THREE.Color(0x39ff14);
