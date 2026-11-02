@@ -26,6 +26,11 @@ export const isPortalCode = (ch: string): boolean => ch >= 'A' && ch <= 'Z';
 /** Targets, portal ends and pads: pinball pieces, which aren't bricks and never move. */
 export const isPinballCode = (ch: string): boolean => ch === 'o' || isPortalCode(ch) || PAD_CODES[ch] !== undefined;
 
+/** A brick still standing that counts towards clearing the stage: anything but steel. */
+export function isBreakable(br: Brick): boolean {
+  return br.alive && br.kind !== 'steel';
+}
+
 export interface StagePieces {
   bricks: Brick[];
   targets: Target[];

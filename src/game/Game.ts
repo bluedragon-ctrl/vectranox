@@ -1,7 +1,7 @@
 import { BALL, FIELD, PADDLE, RULES, SCORE, SIM } from '../config/game';
 import { ANCHOR_DROP, DRAFT, MODS, PRICES, type GrantTrigger } from '../config/mods';
 import { clearBonus, ELITE, ROOM_CREDITS, TIME_BONUS } from '../config/run';
-import { BOSS, BRICK_TYPES, FOCUS, FORMATION, PINBALL, POWER, STAGE_EVENTS } from '../config/tuning';
+import { BOSS, BRICK_TYPES, FOCUS, FORMATION, PINBALL, POWER } from '../config/tuning';
 import { EventBus } from '../core/events';
 import { clamp, lerp } from '../core/math';
 import { Rng } from '../core/rng';
@@ -13,13 +13,13 @@ import { BossRoom } from './bossRoom';
 import { sweepBox, sweepCircle, type SweepHit } from './collision';
 import type { GameEvents, WallSide } from './events';
 import { buildFormations, type Formation } from './formation';
-import { parseLayout } from './layout';
+import { isBreakable, parseLayout } from './layout';
 import { epicChance, laserPay, MOD_GRANTS, MOD_KINDS, rollMods } from './mods';
 import { aim, ballDirection, bounceFlat, CATCH_EDGE, closer, MAX_BOUNCES, normalizeVelocity, pushOut, reflect, SKIN, sweepRect, sweepWalls } from './physics';
 import { Pinball } from './pinball';
 import { PowerUps } from './powerUps';
-import { GOOD_POWERS, rollPower, TIMED_POWERS } from './powers';
-import { StageEventTracker } from './stageEvents';
+import { TIMED_POWERS } from './powers';
+import { StageEvents } from './stageEvents';
 import type {
   Ball,
   Bolt,
@@ -35,7 +35,6 @@ import type {
   PowerKind,
   ShadowBall,
   Shot,
-  StageEventDef,
   StageEventKind,
   Target,
   TickInput,
@@ -131,12 +130,13 @@ export class Game {
   timeLeft = 0;
 
   /*
-   * Shared with the game's systems below (bossRoom.ts, pinball.ts, powerUps.ts, aim.ts), as are the
-   * methods further down without `private`: not for the UI.
+   * Shared with the game's systems below (bossRoom.ts, pinball.ts, powerUps.ts, stageEvents.ts,
+   * aim.ts), as are the methods further down without `private`: not for the UI.
    */
   readonly boss = new BossRoom(this);
   readonly pinball = new Pinball(this);
   readonly powers = new PowerUps(this);
+  readonly stageEvents = new StageEvents(this);
   /** The stage's random stream. */
   readonly rng: Rng;
   /** Breakable bricks still standing (the core counts; steel and falling bricks don't). */
@@ -147,10 +147,6 @@ export class Game {
   /** Rooms added by the rollback mod. */
   private roomRng: Rng;
   private nextId = 1;
-  /** Seconds of play since a breakable brick was last hit / destroyed. */
-  private sinceHit = 0;
-  private sinceKill = 0;
-  private readonly stageEvents = new StageEventTracker();
   /** The next launch is the stage's first (for the multi start mod). */
   private openingServe = false;
   /** Second wind mod uses spent this stage. */
@@ -268,7 +264,7 @@ export class Game {
         this.burnFuses(this.tick);
         this.healBricks();
         this.resolveStage();
-        if (this.state === 'play') this.checkStageEvents(world);
+        if (this.state === 'play') this.stageEvents.update(world);
         break;
       }
       case 'clear':
@@ -304,24 +300,7 @@ export class Game {
    * console can try them (`vnx.game.fireStageEvent('overload')`).
    */
   fireStageEvent(kind: StageEventKind): void {
-    const spareLast = !this.fight && !this.pulseFinishes;
-    this.stageEvents.fired(kind);
-    this.events.emit('stageEvent', { kind, bricks: this.breakableLeft });
-    const { power, duration }: StageEventDef = STAGE_EVENTS.kinds[kind];
-    if (power) this.powers.apply(power, duration);
-    switch (kind) {
-      case 'supplyDrop': {
-        const bricks = this.bricks.filter(isBreakable);
-        const br = bricks[Math.floor(this.rng.next() * bricks.length)];
-        if (br) this.powers.dropCapsule(rollPower(this.rng, GOOD_POWERS), br.x + br.w / 2, br.y + br.h / 2);
-        break;
-      }
-      case 'pulse': {
-        const { maxBricks, damage } = STAGE_EVENTS.kinds.pulse;
-        this.pulseBricks(Math.min(maxBricks, this.breakableLeft - (spareLast ? 1 : 0)), damage);
-        break;
-      }
-    }
+    this.stageEvents.fire(kind);
   }
 
   /** Aim lines are up: focus or the oracle power is running. */
@@ -525,9 +504,7 @@ export class Game {
     };
     this.balls.push(ball);
     this.events.emit('ballSpawn', { id: ball.id, x, y });
-    this.sinceHit = this.sinceKill = 0;
-    this.stageEvents.arm('safetyNet');
-    if (!this.fight) this.stageEvents.refund(STAGE_EVENTS.perBalls);
+    this.stageEvents.serve();
     this.setState('serve');
   }
 
@@ -550,8 +527,7 @@ export class Game {
     this.openingServe = false;
     this.breached = false;
     this.setState('play');
-    const net = STAGE_EVENTS.kinds.safetyNet;
-    if (this.lives <= net.lives && this.breakableLeft <= net.bricksLeft) this.tryStageEvent('safetyNet');
+    this.stageEvents.launch();
   }
 
   private launchBall(b: Ball, angle: number): void {
@@ -564,40 +540,6 @@ export class Game {
     if (this.timeLeft === 0) return;
     this.timeLeft = Math.max(0, this.timeLeft - dt);
     if (this.timeLeft === 0) this.events.emit('timeUp', { stage: this.stage.number });
-  }
-
-  /** Runs every play tick, after the stage was resolved. Triggers for the ongoing events. */
-  private checkStageEvents(dt: number): void {
-    this.sinceHit += dt;
-    this.sinceKill += dt;
-    this.stageEvents.tick(dt);
-    const { supplyDrop, overload, pulse, hunter, demolition } = STAGE_EVENTS.kinds;
-    const left = this.breakableLeft;
-    const boss = this.fight !== null;
-    if (left <= supplyDrop.bricksLeft) this.tryLateEvent('supplyDrop');
-    if (left <= demolition.bricksLeft) this.tryLateEvent('demolition');
-    if (left <= overload.bricksLeft) this.tryLateEvent('overload');
-    if (left <= hunter.bricksLeft && (!boss || this.sinceKill >= STAGE_EVENTS.bossHunterIdle)) this.tryLateEvent('hunter');
-    if (this.sinceHit >= pulse.idleTime && (boss || (left > 1 && this.stageEvents.rested))) this.tryStageEvent('pulse');
-    if (this.pulseFinishes && left <= pulse.maxBricks && this.stageEvents.rested) this.fireStageEvent('pulse');
-  }
-
-  /** Trigger met: roll the event's chance once, then wait for it to re-arm. */
-  private tryStageEvent(kind: StageEventKind): void {
-    if (this.stageEvents.roll(kind, this.rng)) this.fireStageEvent(kind);
-  }
-
-  /** As `tryStageEvent`, for a brick-count event: it has to wait its turn, bar in a boss room. */
-  private tryLateEvent(kind: StageEventKind): void {
-    const ready = this.fight
-      ? this.stageEvents.firings(kind) === 0
-      : this.stageEvents.rested && this.stageEvents.stalled(kind, this.sinceKill);
-    if (ready) this.tryStageEvent(kind);
-  }
-
-  /** The stage has stalled for so long that a pulse may take its last brick; never in a boss room. */
-  private get pulseFinishes(): boolean {
-    return !this.fight && this.stageEvents.quiet('pulse', this.sinceKill) >= STAGE_EVENTS.kinds.pulse.finishAfter;
   }
 
   private movePaddle(dt: number, input: TickInput): void {
@@ -1031,15 +973,6 @@ export class Game {
     this.events.emit('focusStart', {});
   }
 
-  /** The lowest `count` breakable bricks take `damage` hits each, struck from below. */
-  private pulseBricks(count: number, damage: number): void {
-    const targets = this.bricks
-      .filter(isBreakable)
-      .sort((a, b) => a.y - b.y || a.x - b.x)
-      .slice(0, count);
-    for (const br of targets) this.damageBrick(br, 'pulse', br.x + br.w / 2, br.y, damage);
-  }
-
   /**
    * Ball struck a brick; it speeds up a little. A brick that survives takes the heavy ball's extra
    * hit. A charged ball then explodes, whatever the brick was.
@@ -1062,7 +995,7 @@ export class Game {
   }
 
   /** Up to `hits` hits, stopping once the brick breaks. */
-  private damageBrick(br: Brick, by: HitSource, ix: number, iy: number, hits: number): void {
+  damageBrick(br: Brick, by: HitSource, ix: number, iy: number, hits: number): void {
     for (let i = 0; i < hits && br.alive; i++) this.hitBrick(br, by, ix, iy);
   }
 
@@ -1081,8 +1014,7 @@ export class Game {
       return;
     }
 
-    this.sinceHit = 0;
-    this.stageEvents.arm('pulse');
+    this.stageEvents.brickHit();
     if (br.kind === 'core') {
       this.boss.hitCore(br, by, ix, iy);
       return;
@@ -1102,8 +1034,7 @@ export class Game {
       return;
     }
     this.breakableLeft--;
-    this.sinceKill = 0;
-    this.stageEvents.arm('supplyDrop', 'overload', 'hunter', 'demolition');
+    this.stageEvents.brickKilled();
     const chain = ball ? ++ball.chain : 0;
     const multiplier = this.multiplier;
     const bonus = this.chainBonus(chain) * multiplier;
@@ -1126,10 +1057,6 @@ export class Game {
     this.events.emit('brickDestroyed', { id: br.id, kind: br.kind, points, chain: 0, bonus: 0, multiplier, by: 'explosion', x, y, ix, iy, vx: 0, vy: 0 });
     this.powers.maybeDrop(x, y, 1);
   }
-}
-
-function isBreakable(br: Brick): boolean {
-  return br.alive && br.kind !== 'steel';
 }
 
 /** A ball can't pierce it, and hitting it doesn't speed the ball up. */
