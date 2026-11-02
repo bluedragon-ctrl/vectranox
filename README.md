@@ -18,6 +18,7 @@ npm run dev
 | | Mouse | Keyboard |
 |---|---|---|
 | Start / resume | click the playfield (locks the pointer) | Enter |
+| Title / end screen: run or challenge | click RUN / CHALLENGE | C |
 | Move | mouse | ← → or A D |
 | Launch / release caught ball | click | Space |
 | Fire laser | hold button | hold Space |
@@ -35,6 +36,10 @@ Both live in `src/config/tuning.ts`, together with drop chances, weights, durati
 `vnx.game.applyMod('heavy')` adds a mod stack (any kind from `MODS`). Mods, their rarity and the
 lives card live in `src/config/mods.ts`; run length, room mix, depth scaling and the time bonus in `src/config/run.ts`.
 `vnx.game.tryStage('PINWHEEL')` swaps the current stage for any room from `src/levels/rooms/`.
+
+## Challenge mode
+
+Picked on the title or end screen instead of a run: one challenge room (`"room": "challenge"`, never in a run), chosen at random, on the normal rules (3 lives, capsules, stage events) but with no mods and no pick. The room's time limit, 5:00 unless the room sets its own, ends the game when it runs out; clearing the room or losing the last life ends it too. Challenge scores have their own table, shared by all challenge rooms. In the editor, **Play this room** on a challenge room plays it as a challenge.
 
 ## Room editor
 
@@ -73,6 +78,8 @@ One-time setup:
 3. `npm run worker:schema -- --remote`
 4. `npm run worker:deploy`, and note the `workers.dev` address it prints.
 5. In the GitHub repo, **Settings → Secrets and variables → Actions → Variables**: add `SCORES_URL` with that address, no trailing slash, then rerun the deploy workflow.
+
+The challenge table came later: on a database set up before it, run `npm run worker:schema -- --remote` and `npm run worker:deploy` again (the schema only adds what is missing).
 
 To try it locally, run `npm run worker:schema -- --local` once, then `npm run worker:dev`, and put `VITE_SCORES_URL=http://localhost:8787` in `.env.local` before `npm run dev`.
 

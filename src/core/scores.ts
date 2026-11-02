@@ -1,12 +1,16 @@
+import type { GameMode } from '../config/run';
 import { readJson, writeJson } from './settings';
 
-/** One finished run on the local table. */
+/** One finished game on a table: a run, or a challenge on the challenge table. */
 export interface ScoreEntry {
   name: string;
   score: number;
-  /** The room the run ended in (`sector-number` on scores from before sectors went). */
+  /**
+   * The room the run ended in (`sector-number` on scores from before sectors went), or the
+   * challenge room's name.
+   */
   stage: string;
-  /** Cleared the whole run. */
+  /** Cleared the whole run, or the challenge room. */
   won: boolean;
 }
 
@@ -14,7 +18,11 @@ export const NAME_LENGTH = 6;
 
 const TABLE_SIZE = 10;
 const FALLBACK_NAME = 'PLAYER';
-const KEY = 'vectranox.scores';
+/** Each mode keeps its own table. */
+const KEYS: Readonly<Record<GameMode, string>> = {
+  run: 'vectranox.scores',
+  challenge: 'vectranox.challengeScores',
+};
 const NAME_KEY = 'vectranox.name';
 
 export function isEntry(v: unknown): v is ScoreEntry {
@@ -34,9 +42,9 @@ export function formatScore(score: number): string {
   return String(score).padStart(6, '0');
 }
 
-/** The saved table, best first. */
-export function loadScores(): ScoreEntry[] {
-  const saved = readJson(KEY);
+/** The saved table of the mode, best first. */
+export function loadScores(mode: GameMode): ScoreEntry[] {
+  const saved = readJson(KEYS[mode]);
   if (!Array.isArray(saved)) return [];
   return saved
     .filter(isEntry)
@@ -52,10 +60,10 @@ export function rankOf(scores: readonly ScoreEntry[], score: number): number {
   return rank < TABLE_SIZE ? rank : -1;
 }
 
-/** Saves the entry at its rank and returns the new table. */
-export function addScore(scores: readonly ScoreEntry[], entry: ScoreEntry, rank: number): ScoreEntry[] {
+/** Saves the entry at its rank on the mode's table and returns the new table. */
+export function addScore(mode: GameMode, scores: readonly ScoreEntry[], entry: ScoreEntry, rank: number): ScoreEntry[] {
   const next = [...scores.slice(0, rank), entry, ...scores.slice(rank)].slice(0, TABLE_SIZE);
-  writeJson(KEY, next);
+  writeJson(KEYS[mode], next);
   return next;
 }
 

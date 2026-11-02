@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { FIELD, PALETTE, SIM } from '../config/game';
-import { backdropOf, RUN } from '../config/run';
+import { backdropOf } from '../config/run';
 import { BOSS, FOCUS, FORMATION, PINBALL, POWER, POWER_LOOK } from '../config/tuning';
 import { lerp } from '../core/math';
 import type { VisualSettings } from '../core/settings';
@@ -397,9 +397,9 @@ export class Renderer {
     });
   }
 
-  /** The sun's height follows the rooms left, so a room added to the run moves it back up. */
+  /** The sun's height follows the rooms left, so a room added to the run moves it back up; in a challenge, the clock. */
   private setSun(game: Game, dt: number): void {
-    const target = game.roomsLeft / RUN.rooms;
+    const target = game.daylight;
     const daylight = this.skyUniforms.uDaylight;
     daylight.value = this.settings.reduceFx ? target : lerp(daylight.value, target, 1 - Math.exp(-dt * SUN.settleRate));
   }

@@ -1,11 +1,11 @@
 import { BALL, FIELD, PADDLE, RULES, SCORE, SIM } from '../config/game';
 import { ANCHOR_DROP, DRAFT, MODS, PRICES, type GrantTrigger } from '../config/mods';
-import { clearBonus, ELITE, ROOM_CREDITS, TIME_BONUS } from '../config/run';
+import { clearBonus, ELITE, ROOM_CREDITS, RUN, TIME_BONUS, type GameMode } from '../config/run';
 import { BOSS, BRICK_TYPES, FOCUS, FORMATION, PINBALL, POWER } from '../config/tuning';
 import { EventBus } from '../core/events';
 import { clamp, lerp } from '../core/math';
 import { Rng } from '../core/rng';
-import { assembleRun, buildStage, extraRoom } from '../levels/assemble';
+import { assembleRun, buildStage, challengeStage, extraRoom } from '../levels/assemble';
 import { TEMPLATES, type StageDef, type StageTemplate } from '../levels/stages';
 import { aimPath, aimRebound, type Point } from './aim';
 import { BossFight } from './boss';
@@ -158,8 +158,12 @@ export class Game {
   /** Reused by `paddleBox`. */
   private readonly box: Box = { minX: 0, minY: 0, maxX: 0, maxY: 0 };
 
-  constructor(readonly seed: number) {
-    this.stages = assembleRun(seed);
+  /** A run's rooms, or a challenge's one room (see `GameMode`). */
+  constructor(
+    readonly seed: number,
+    readonly mode: GameMode = 'run',
+  ) {
+    this.stages = mode === 'challenge' ? [challengeStage(seed)] : assembleRun(seed);
     if (this.stages.length === 0) throw new Error('Game needs at least one stage');
     this.rng = new Rng(seed);
     this.offerRng = new Rng(seed ^ OFFER_SALT);
@@ -176,6 +180,21 @@ export class Game {
   get roomsLeft(): number {
     const cleared = this.state === 'draft' || this.state === 'complete' ? 1 : 0;
     return this.stages.length - this.stageIndex - cleared;
+  }
+
+  /**
+   * How much of the game is left, 1 to 0, which the sun sets by: the rooms of a run, or the clock of
+   * a challenge, which ends at 0 either way.
+   */
+  get daylight(): number {
+    if (this.mode === 'run') return this.roomsLeft / RUN.rooms;
+    if (this.state === 'complete') return 0;
+    return Math.min(1, this.timeLeft / this.stage.timeLimit);
+  }
+
+  /** A challenge ran out of time. */
+  get timedOut(): boolean {
+    return this.mode === 'challenge' && this.state === 'over' && this.timeLeft === 0;
   }
 
   /** Score multiplier for brick points. */
@@ -218,7 +237,7 @@ export class Game {
   }
 
   start(): void {
-    this.events.emit('runStart', { seed: this.seed });
+    this.events.emit('runStart', { seed: this.seed, mode: this.mode });
     this.loadStage(0);
   }
 
@@ -249,6 +268,8 @@ export class Game {
         // Everything but the paddle runs on world time, so focus slows it all alike; the paddle has its own pace.
         const world = this.focusLeft > 0 ? dt * FOCUS.scale : dt;
         this.tickRoomTime(world);
+        // A challenge's clock ran out.
+        if (this.state !== 'play') break;
         this.pinball.tickPads(world);
         this.movePaddle(dt, input);
         this.powers.tick(world);
@@ -535,11 +556,13 @@ export class Game {
     this.events.emit('ballLaunch', { id: b.id, angle: (angle * 180) / Math.PI });
   }
 
-  /** Runs the room's clock down; running out loses the time bonus and nothing else. */
+  /** Runs the room's clock down; running out loses the time bonus, and in a challenge ends the game. */
   private tickRoomTime(dt: number): void {
     if (this.timeLeft === 0) return;
     this.timeLeft = Math.max(0, this.timeLeft - dt);
-    if (this.timeLeft === 0) this.events.emit('timeUp', { stage: this.stage.number });
+    if (this.timeLeft > 0) return;
+    this.events.emit('timeUp', { stage: this.stage.number });
+    if (this.mode === 'challenge') this.endGame();
   }
 
   private movePaddle(dt: number, input: TickInput): void {
@@ -743,9 +766,14 @@ export class Game {
     if (this.lives > 0) {
       this.serve();
     } else {
-      this.setState('over');
-      this.events.emit('gameOver', { stage: this.stage.number, score: this.score });
+      this.endGame();
     }
+  }
+
+  /** Out of lives, or a challenge out of time. */
+  private endGame(): void {
+    this.setState('over');
+    this.events.emit('gameOver', { stage: this.stage.number, score: this.score });
   }
 
   /** Moves a ball for one tick, resolving bounces in time order (swept, so nothing tunnels). */

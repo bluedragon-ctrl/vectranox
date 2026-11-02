@@ -351,6 +351,43 @@ body {
   display: grid;
 }
 
+/* Run or challenge, on the title and end screens. */
+#mode-select {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 12px;
+  pointer-events: auto;
+}
+
+#mode-select.hidden {
+  display: none;
+}
+
+#mode-select button {
+  padding: 6px 14px;
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: 0.2em;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid var(--panel-border);
+  cursor: pointer;
+}
+
+#mode-select button:hover,
+#mode-select button:focus-visible {
+  color: var(--text);
+  outline: none;
+}
+
+#mode-select button.on {
+  color: var(--cyan);
+  border-color: var(--cyan);
+  box-shadow: 0 0 10px rgba(45, 226, 255, 0.35);
+}
+
 /* The field on the end screen for a run that made the table. */
 #name-entry {
   display: flex;
