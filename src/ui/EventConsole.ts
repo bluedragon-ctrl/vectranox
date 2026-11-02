@@ -35,6 +35,7 @@ const POWER_EVENTS: ReadonlySet<string> = new Set<LogEvent>([
   'focusReady',
   'explosion',
   'targetBank',
+  'secretCode',
   'padClock',
   'modBuy',
   'livesBuy',

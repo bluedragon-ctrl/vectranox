@@ -247,6 +247,18 @@ body {
   --c: var(--mint);
 }
 
+/* Secret code played: white, its text running through the lamp colours. */
+.popup.secret {
+  --c: #f2e9ff;
+}
+
+.popup.secret b {
+  background: linear-gradient(90deg, var(--mint), #ff3b30, #3d8bff, var(--yellow), var(--magenta), var(--cyan));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
 @keyframes popup-bonus {
   from {
     opacity: 0;

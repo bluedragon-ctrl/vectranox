@@ -219,6 +219,31 @@ export const PINBALL = {
 } as const;
 
 /**
+ * Target lamp colours, handed out in the room's reading order as drawn (top row first, left to
+ * right, before any mirroring), so a room's lamps always look the same. A room has at most one
+ * target of each colour, which is why `validate.ts` caps a room at this many targets.
+ */
+export const TARGET_COLORS = ['green', 'red', 'blue', 'yellow', 'magenta', 'cyan'] as const;
+export type TargetColor = (typeof TARGET_COLORS)[number];
+
+/** What a secret code gives: points (scaled by the score multiplier), a multiplier step, or detonator charges on every ball. */
+export type SecretAward = { kind: 'points'; points: number } | { kind: 'multiplier' } | { kind: 'charge'; charges: number };
+
+/**
+ * Secret codes: hitting targets so that their colours, in order, end with `sequence` pays `award`.
+ * Every target hit counts, lit or not, from any ball, so another hit in between breaks the code.
+ * The colours hit are remembered for the whole room; a match clears them, and a code can be
+ * played again in the same room. A room without a colour a code needs can't play it. Nothing in
+ * the game lists them: they show only when one fires.
+ */
+export const SECRET_CODES = {
+  spectrum: { label: 'SPECTRUM', sequence: ['red', 'green', 'blue'], award: { kind: 'points', points: 1000 } },
+  reverse: { label: 'REVERSE', sequence: ['blue', 'green', 'red'], award: { kind: 'multiplier' } },
+  greenlight: { label: 'GREEN LIGHT', sequence: ['green', 'green', 'green'], award: { kind: 'charge', charges: 1 } },
+} as const satisfies Record<string, { label: string; sequence: readonly TargetColor[]; award: SecretAward }>;
+export type SecretCode = keyof typeof SECRET_CODES;
+
+/**
  * Special bricks.
  *
  * Explosive: `fuse` seconds after it breaks, it goes off as an explosion of this `radius` and

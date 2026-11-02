@@ -89,6 +89,7 @@ export function buildStage(template: StageTemplate, depth: number, mirror: boole
     name: template.name,
     room,
     layout: scaleLayout(template.layout, depth, flipped, rng),
+    mirrored: flipped,
     formations: flipped ? formations.map((f) => (f.cols ? { ...f, cols: mirrorCols(f.cols) } : f)) : formations,
     formationPace: 1 + RUN.depth.formationPerStage * depth,
     boss,

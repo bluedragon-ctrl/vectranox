@@ -73,6 +73,8 @@ export interface StageDef {
   name: string;
   room: RoomKind;
   layout: readonly string[];
+  /** The layout is the template's flipped left to right. */
+  mirrored: boolean;
   formations: readonly FormationDef[];
   /** Scales the formations' speed. */
   formationPace: number;
