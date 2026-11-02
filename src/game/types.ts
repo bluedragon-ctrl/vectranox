@@ -185,6 +185,8 @@ export interface Brick {
   hitTick: number;
   /** Tick a regenerating brick last won back a hit. */
   healTick: number;
+  /** Seconds of play left before a damaged regenerating brick wins back a hit. */
+  healIn: number;
   /** Sent by a spawner: falls to the line, pays nothing and doesn't count towards the clear. */
   falling: boolean;
   /** How far an emitter has wound up towards acting, 0..1. */

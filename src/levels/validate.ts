@@ -1,8 +1,8 @@
 import { BRICK, FIELD } from '../config/game';
 import { ROOM_LABEL } from '../config/run';
-import { BOSS, FORMATION, TARGET_COLORS } from '../config/tuning';
+import { BOSS, FORMATION, PINBALL, TARGET_COLORS } from '../config/tuning';
 import { within } from '../game/formation';
-import { BRICK_CODES, isPinballCode, isPortalCode } from '../game/layout';
+import { BRICK_CODES, isPinballCode, isPortalCode, PAD_CODES } from '../game/layout';
 import type { BossDef, FormationDef, StageTemplate } from './stages';
 
 /** Rows of bricks that fit above the formation line. */
@@ -175,13 +175,48 @@ function checkFormation(room: StageTemplate, def: FormationDef, index: number): 
     }
   }
 
+  const pieces = all.filter((c) => isPinballCode(c.ch));
   const rows = members.map((c) => c.row);
   const top = Math.min(...rows);
   const bottom = def.motion === 'march' ? Infinity : Math.max(...rows);
-  if (all.some((c) => isPinballCode(c.ch) && c.row >= top && c.row <= bottom)) {
+  const covered =
+    def.motion === 'hold' ? false : def.motion === 'rotate' ? rotationCovers(members, pieces) : pieces.some((c) => c.row >= top && c.row <= bottom);
+  if (covered) {
     problems.push(warning(`${label} moves through a pinball piece, which stays where it is.`));
   }
   return problems;
+}
+
+type Cell = { row: number; col: number; ch: string };
+
+const cellCentre = (c: Cell): { x: number; y: number } => ({ x: (c.col + 0.5) * BRICK.width, y: (c.row + 0.5) * BRICK.height });
+
+function pieceRadius(ch: string): number {
+  if (isPortalCode(ch)) return PINBALL.portal.radius;
+  const pad = PAD_CODES[ch];
+  return pad ? PINBALL[pad].radius : PINBALL.target.radius;
+}
+
+/**
+ * Whether a rotating formation passes over a pinball piece. Each brick circles the middle of the
+ * formation (as `Formation` turns it), so it sweeps a ring; a piece is covered when it reaches into
+ * one of the rings.
+ */
+function rotationCovers(members: readonly Cell[], pieces: readonly Cell[]): boolean {
+  const cols = members.map((c) => c.col);
+  const rows = members.map((c) => c.row);
+  const pivotX = ((Math.min(...cols) + Math.max(...cols) + 1) * BRICK.width) / 2;
+  const pivotY = ((Math.min(...rows) + Math.max(...rows) + 1) * BRICK.height) / 2;
+  const distance = (c: Cell): number => {
+    const { x, y } = cellCentre(c);
+    return Math.hypot(x - pivotX, y - pivotY);
+  };
+  const halfDiagonal = Math.hypot(BRICK.width, BRICK.height) / 2;
+  const rings = members.map(distance);
+  return pieces.some((p) => {
+    const d = distance(p);
+    return rings.some((r) => Math.abs(d - r) < halfDiagonal + pieceRadius(p.ch));
+  });
 }
 
 /** What is wrong with one room on its own. */

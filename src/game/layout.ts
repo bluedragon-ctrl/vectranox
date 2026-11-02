@@ -53,7 +53,7 @@ export function parseLayout(layout: readonly string[], nextId: () => number, cor
   const coreCells: { row: number; col: number }[] = [];
   const addBrick = (row: number, col: number, kind: BrickKind, hp: number, w: number, h: number, y: number): void => {
     const x = col * BRICK.width;
-    bricks.push({ id: nextId(), row, col, x, y, px: x, py: y, w, h, kind, hp, maxHp: hp, alive: true, hitTick: -Infinity, healTick: -Infinity, falling: false, charge: 0 });
+    bricks.push({ id: nextId(), row, col, x, y, px: x, py: y, w, h, kind, hp, maxHp: hp, alive: true, hitTick: -Infinity, healTick: -Infinity, healIn: 0, falling: false, charge: 0 });
   };
   layout.forEach((line, row) => {
     if (line.length !== BRICK.cols) {

@@ -262,7 +262,7 @@ export class Game {
         this.boss.updateShots(world);
         this.powers.updateCapsules(world);
         this.burnFuses(this.tick);
-        this.healBricks();
+        this.healBricks(world);
         this.resolveStage();
         if (this.state === 'play') this.stageEvents.update(world);
         break;
@@ -677,14 +677,18 @@ export class Game {
     return best;
   }
 
-  /** Regenerating bricks left alone long enough win back a hit. */
-  private healBricks(): void {
-    const delay = BRICK_TYPES.regen.delay * SIM.tickRate;
+  /**
+   * Regenerating bricks left alone long enough win back a hit. Counted on world time during play
+   * only, so serving and focus don't give them time.
+   */
+  private healBricks(world: number): void {
     for (const br of this.bricks) {
       if (br.kind !== 'regen' || !br.alive || br.hp >= br.maxHp) continue;
-      if (this.tick - Math.max(br.hitTick, br.healTick) < delay) continue;
+      br.healIn -= world;
+      if (br.healIn > 0) continue;
       br.hp++;
       br.healTick = this.tick;
+      br.healIn = BRICK_TYPES.regen.delay;
       this.events.emit('brickHeal', { id: br.id, hp: br.hp });
     }
   }
@@ -1020,6 +1024,7 @@ export class Game {
       return;
     }
     br.hp--;
+    br.healIn = BRICK_TYPES.regen.delay;
     if (br.hp > 0) {
       this.score += this.paid(SCORE.hit * this.multiplier, by);
       this.events.emit('brickHit', { id: br.id, kind: br.kind, hp: br.hp, by, x, y, ix, iy });
