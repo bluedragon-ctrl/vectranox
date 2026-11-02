@@ -3,12 +3,12 @@ import { AudioEngine } from './audio/AudioEngine';
 import { GameSounds } from './audio/GameSounds';
 import { Input, type ControlMode } from './core/input';
 import { PALETTE } from './config/game';
-import { BACKDROPS, backdropOf, clearBonus, ROOM_LABEL, RUN, threatPips, TIME_BONUS } from './config/run';
+import { BACKDROPS, backdropOf, clearBonus, ROOM_LABEL, RUN, threatPips, TIME_BONUS, type GameMode } from './config/run';
 import { RARE_POWER_BANNER } from './config/tuning';
 import { startLoop } from './core/loop';
 import { fetchScores, ONLINE_SCORES, submitScore } from './core/onlineScores';
 import { addScore, formatScore, loadLastName, loadScores, rankOf, saveLastName, type ScoreEntry } from './core/scores';
-import { loadAudioSettings, loadVisualSettings, saveAudioSettings, saveVisualSettings } from './core/settings';
+import { loadAudioSettings, loadMode, loadVisualSettings, saveAudioSettings, saveMode, saveVisualSettings } from './core/settings';
 import { Game } from './game/Game';
 import type { StageTemplate } from './levels/stages';
 import { Renderer } from './render/Renderer';
@@ -18,6 +18,7 @@ import { ChainPopups } from './ui/ChainPopups';
 import { EventBanner } from './ui/EventBanner';
 import { byId } from './ui/dom';
 import { EventConsole, type UiEvent } from './ui/EventConsole';
+import { ModeSelect } from './ui/ModeSelect';
 import { ModHud } from './ui/ModHud';
 import { NameEntry } from './ui/NameEntry';
 import { Overlay, type OverlayContent } from './ui/Overlay';
@@ -36,6 +37,7 @@ type UiState = 'title' | 'playing' | 'paused' | 'between' | 'naming' | 'ended';
 /** Seconds the final banner stays up in-game before the end screen accepts input. */
 const END_DELAY = 1.5;
 const START_HINT = 'CLICK / ENTER TO START';
+const MODE_HINT = 'C  RUN / CHALLENGE';
 const CONTROLS_HINT = 'MOVE  ← → / A D / MOUSE\nLAUNCH · FIRE  SPACE / CLICK\nHOLD TO SLOW  X / RIGHT CLICK\nPAUSE  P / ESC\nMUSIC  M · SFX  F';
 
 function setText(node: HTMLElement, text: string): void {
@@ -79,12 +81,17 @@ const input = new Input(canvas, renderer);
 const chainPopups = new ChainPopups(byId('popups'), byId('panel'), (x, y) => renderer.worldToClient(x, y));
 const runScreen = new RunScreen(byId('run-screen'), (action) => runAction(action, 'mouse'));
 const bossBar = new BossBar(byId('boss-bar'), (x, y) => renderer.worldToClient(x, y));
-const scoreBoard = new ScoreBoard(byId('score-list'));
+const scoreBoard = new ScoreBoard(byId('scores-title'), byId('score-list'));
 const nameEntry = new NameEntry(byId<HTMLFormElement>('name-entry'), byId<HTMLInputElement>('name-field'), saveScore);
 
 let ui: UiState = 'title';
-/** The table in play: online as last fetched (null until the server answers), or local in a build without a server. */
-let scores: ScoreEntry[] | null = ONLINE_SCORES ? null : loadScores();
+/** What a new game is, as picked on the title or end screen. */
+let mode: GameMode = loadMode();
+/** Each mode's table: online as last fetched (null until the server answers), or local in a build without a server. */
+const tables: Record<GameMode, ScoreEntry[] | null> = {
+  run: ONLINE_SCORES ? null : loadScores('run'),
+  challenge: ONLINE_SCORES ? null : loadScores('challenge'),
+};
 /** The place the run that just ended takes on the table, or -1. */
 let endRank = -1;
 /** What the server made of the run that just ended, for the end screen. */
@@ -98,7 +105,9 @@ const playtest = import.meta.env.DEV ? new URLSearchParams(location.search).get(
 let game = newGame();
 
 function newGame(): Game {
-  const g = new Game(Date.now() >>> 0);
+  // The editor's challenge rooms play as a challenge, its other rooms in a run.
+  const tried = playtest ? (JSON.parse(playtest) as StageTemplate) : null;
+  const g = new Game(Date.now() >>> 0, tried ? (tried.room === 'challenge' ? 'challenge' : 'run') : mode);
   g.events.onAny((type, payload) => eventConsole.log(g.time, String(type), payload));
   g.events.on('stageEvent', ({ kind }) => banner.show(kind, g.time));
   g.events.on('powerCollect', ({ kind }) => {
@@ -117,7 +126,7 @@ function newGame(): Game {
   sounds.attach(g);
   chainPopups.attach(g);
   g.start();
-  if (playtest) g.tryTemplate(JSON.parse(playtest) as StageTemplate);
+  if (tried) g.tryTemplate(tried);
   return g;
 }
 
@@ -147,21 +156,21 @@ function lockPointer(): void {
   request?.catch(() => undefined);
 }
 
-function enterPlay(mode: ControlMode): void {
+function enterPlay(control: ControlMode): void {
   const resumed = ui === 'paused' || ui === 'between';
   if (ui === 'ended') {
     game = newGame();
     endRank = -1;
     worldResult = '';
-    scoreBoard.show(scores);
-    void refreshScores();
+    scoreBoard.show(mode, tables[mode]);
+    void refreshScores(mode);
   }
-  input.mode = mode;
+  input.mode = control;
   input.reset();
   pendingSwitch = false;
   ui = 'playing';
   audio.setMuffled(false);
-  logUi(resumed ? 'resume' : 'play', { mode });
+  logUi(resumed ? 'resume' : 'play', { mode: control });
 }
 
 /** A keyboard player reached for the mouse: hand steering over without pausing. */
@@ -204,11 +213,31 @@ function runKey(code: string): boolean {
   return true;
 }
 
-/** Reloads the online table, keeping the last one if the server can't be reached. */
-async function refreshScores(): Promise<void> {
+/** Reloads a mode's online table, keeping the last one if the server can't be reached. */
+async function refreshScores(of: GameMode): Promise<void> {
   if (!ONLINE_SCORES) return;
-  scores = (await fetchScores()) ?? scores;
-  scoreBoard.show(scores);
+  tables[of] = (await fetchScores(of)) ?? tables[of];
+  if (of === mode) scoreBoard.show(mode, tables[mode]);
+}
+
+/** Whether the screen up offers the choice of mode. */
+function choosingMode(): boolean {
+  return ui === 'title' || ui === 'ended';
+}
+
+/** Picks what a new game is, on the title or end screen: a fresh game of that mode waits behind it. */
+function setMode(next: GameMode): void {
+  if (!choosingMode() || next === mode) return;
+  mode = next;
+  saveMode(mode);
+  modeSelect.select(mode);
+  game = newGame();
+  ui = 'title';
+  endRank = -1;
+  worldResult = '';
+  scoreBoard.show(mode, tables[mode]);
+  void refreshScores(mode);
+  logUi('mode', { mode });
 }
 
 /**
@@ -217,7 +246,7 @@ async function refreshScores(): Promise<void> {
  */
 function endRun(): void {
   releasePointer();
-  endRank = playtest ? -1 : rankOf(scores ?? [], game.score);
+  endRank = playtest ? -1 : rankOf(tables[game.mode] ?? [], game.score);
   if (endRank < 0) {
     ui = 'ended';
     return;
@@ -228,7 +257,8 @@ function endRun(): void {
 
 function saveScore(name: string): void {
   if (ui !== 'naming') return;
-  const entry: ScoreEntry = { name, score: game.score, stage: String(game.stage.number), won: game.state === 'complete' };
+  const stage = game.mode === 'challenge' ? game.stage.name : String(game.stage.number);
+  const entry: ScoreEntry = { name, score: game.score, stage, won: game.state === 'complete' };
   saveLastName(name);
   nameEntry.hide();
   ui = 'ended';
@@ -236,23 +266,23 @@ function saveScore(name: string): void {
     void sendScore(entry, game);
     return;
   }
-  scores = addScore(scores ?? [], entry, endRank);
-  scoreBoard.show(scores, endRank);
+  tables[game.mode] = addScore(game.mode, tables[game.mode] ?? [], entry, endRank);
+  scoreBoard.show(game.mode, tables[game.mode], endRank);
 }
 
-/** Puts a finished run on the online table. A new run may have started by the time the answer comes. */
+/** Puts a finished game on its mode's online table. A new game may have started by the time the answer comes. */
 async function sendScore(entry: ScoreEntry, run: Game): Promise<void> {
-  const result = await submitScore(entry);
+  const result = await submitScore(run.mode, entry);
   if (!result) {
     logUi('scoreFailed', { score: entry.score });
     if (run === game) worldResult = 'SCORE NOT SENT';
     return;
   }
   logUi('scoreSent', { rank: result.rank + 1 });
-  scores = result.scores;
+  tables[run.mode] = result.scores;
   const current = run === game;
   if (current) worldResult = `WORLD #${result.rank + 1}`;
-  scoreBoard.show(scores, current ? result.rank : -1);
+  if (run.mode === mode) scoreBoard.show(mode, result.scores, current ? result.rank : -1);
 }
 
 function pause(reason: string): void {
@@ -330,6 +360,10 @@ window.addEventListener(
       }
       return;
     }
+    if (e.code === 'KeyC' && choosingMode()) {
+      setMode(mode === 'run' ? 'challenge' : 'run');
+      return;
+    }
     if (e.code === 'Enter' || e.code === 'NumpadEnter' || e.code === 'Space' || (ui === 'paused' && e.code === 'KeyP')) {
       e.preventDefault();
       e.stopImmediatePropagation();
@@ -342,21 +376,21 @@ window.addEventListener(
 function overlayContent(): OverlayContent | null {
   switch (ui) {
     case 'title':
-      return { title: 'READY', sub: START_HINT, menu: true };
+      return { title: 'READY', sub: `${modeLine(game)}\n${START_HINT}\n${MODE_HINT}`, menu: true };
     case 'paused':
       return { title: 'PAUSED', sub: `${START_HINT}\n\n${CONTROLS_HINT}`, menu: true };
     case 'naming':
-      return { title: endTitle(), sub: `SCORE ${formatScore(game.score)}\n${scores ? `NEW HIGH SCORE  #${endRank + 1}` : 'NAME YOUR SCORE'}`, menu: true };
+      return { title: endTitle(), sub: `SCORE ${formatScore(game.score)}\n${tables[game.mode] ? `NEW HIGH SCORE  #${endRank + 1}` : 'NAME YOUR SCORE'}`, menu: true };
     case 'ended':
-      return { title: endTitle(), sub: `SCORE ${formatScore(game.score)}${worldResult && `\n${worldResult}`}\n\n${START_HINT}`, menu: true };
+      return { title: endTitle(), sub: `SCORE ${formatScore(game.score)}${worldResult && `\n${worldResult}`}\n\n${START_HINT}\n${MODE_HINT}`, menu: true };
     case 'between':
     case 'playing':
       switch (game.state) {
         case 'serve':
           if (game.breached) return { title: 'LINE BREACHED', sub: 'FORMATION PUSHED BACK\nCLICK / SPACE TO LAUNCH' };
           return {
-            title: `ROOM ${roomCount(game)}  ${threatPips(game.stage.threat)}`,
-            sub: `${stageLabel(game)}\nCLICK / SPACE TO LAUNCH`,
+            title: `${game.mode === 'challenge' ? 'CHALLENGE' : `ROOM ${roomCount(game)}`}  ${threatPips(game.stage.threat)}`,
+            sub: `${game.mode === 'challenge' ? game.stage.name : stageLabel(game)}\nCLICK / SPACE TO LAUNCH`,
           };
         case 'clear':
           return { title: game.stage.room === 'boss' ? 'BOSS DESTROYED' : 'STAGE CLEAR', sub: clearSub(game) };
@@ -364,9 +398,8 @@ function overlayContent(): OverlayContent | null {
         case 'draft':
           return null;
         case 'over':
-          return { title: 'GAME OVER' };
         case 'complete':
-          return { title: 'RUN COMPLETE' };
+          return { title: endTitle() };
         case 'play':
           return null;
       }
@@ -374,7 +407,13 @@ function overlayContent(): OverlayContent | null {
 }
 
 function endTitle(): string {
-  return game.state === 'complete' ? 'RUN COMPLETE' : 'GAME OVER';
+  if (game.state === 'complete') return game.mode === 'challenge' ? 'CHALLENGE CLEAR' : 'RUN COMPLETE';
+  return game.timedOut ? 'TIME UP' : 'GAME OVER';
+}
+
+/** What a new game of the mode picked is. */
+function modeLine(g: Game): string {
+  return g.mode === 'challenge' ? `CHALLENGE · ONE ROOM · ${formatTime(g.stage.timeLimit)} · NO MODS` : `RUN · ${RUN.rooms} ROOMS`;
 }
 
 /** What the room just cleared paid: an elite or boss bonus, the time bonus, the flawless multiplier, then its credits. */
@@ -393,9 +432,9 @@ function formatTime(seconds: number): string {
   return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`;
 }
 
-/** This room out of the run's total. */
+/** This room out of the run's total; a challenge is its one room. */
 function roomCount(g: Game): string {
-  return `${g.stage.number}/${RUN.rooms}`;
+  return g.mode === 'challenge' ? '1/1' : `${g.stage.number}/${RUN.rooms}`;
 }
 
 /** The stage's name, after its room kind unless it is a standard room. */
@@ -411,8 +450,9 @@ function formatChain(g: Game): string {
   return chain >= 2 ? `×${chain} +${g.chainBonus(chain) * g.multiplier}` : '—';
 }
 
-if (ONLINE_SCORES) void refreshScores();
-else scoreBoard.show(scores);
+const modeSelect = new ModeSelect(byId('mode-select'), mode, setMode);
+scoreBoard.show(mode, tables[mode]);
+void refreshScores(mode);
 
 const hudScore = byId('hud-score');
 const hudRoom = byId('hud-room');
@@ -450,6 +490,7 @@ startLoop({
     const content = overlayContent();
     overlay.show(content);
     runScreen.update(ui === 'between' ? game : null);
+    modeSelect.show(choosingMode());
     bossBar.update(ui === 'title' || ui === 'naming' || ui === 'ended' ? null : game);
     // Menus and stage banners take over the field; a stage event banner never shares it.
     if (content || ui === 'between') banner.hide();

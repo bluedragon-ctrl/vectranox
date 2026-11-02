@@ -191,6 +191,7 @@ export function checkRoom(room: StageTemplate): Problem[] {
   if (![1, 2, 3].includes(room.tier)) problems.push(error(`Tier must be 1, 2 or 3, is ${String(room.tier)}.`));
   if (room.threat !== undefined && ![1, 2, 3].includes(room.threat)) problems.push(error(`Threat must be 1, 2 or 3, is ${String(room.threat)}.`));
   if (room.room && !(room.room in ROOM_LABEL)) problems.push(error(`Unknown room kind '${String(room.room)}'.`));
+  if (room.opener && room.room === 'challenge') problems.push(error('A challenge room never opens a run.'));
   if (room.timeLimit !== undefined && !(room.timeLimit > 0)) problems.push(error(`Time limit must be above 0 seconds, is ${String(room.timeLimit)}.`));
   problems.push(...checkLayout(room), ...checkBoss(room));
   const defs = room.formations ?? [];
@@ -199,7 +200,7 @@ export function checkRoom(room: StageTemplate): Problem[] {
   return problems;
 }
 
-/** What is wrong with the rooms as a set: every kind a run can roll must have a room. */
+/** What is wrong with the rooms as a set: every kind a run can roll, and the challenge, must have a room. */
 export function checkRun(rooms: readonly StageTemplate[]): Problem[] {
   const problems: Problem[] = [];
   const files = new Map<string, string[]>();

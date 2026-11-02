@@ -1,5 +1,6 @@
 import { AUDIO } from '../config/audio';
 import { RESOLUTIONS } from '../config/game';
+import type { GameMode } from '../config/run';
 
 export type Resolution = (typeof RESOLUTIONS)[number];
 
@@ -21,6 +22,16 @@ export interface AudioSettings {
 
 const KEY = 'vectranox.video';
 const AUDIO_KEY = 'vectranox.audio';
+const MODE_KEY = 'vectranox.mode';
+
+/** The mode picked last on the title screen; a run unless it was a challenge. */
+export function loadMode(): GameMode {
+  return readJson(MODE_KEY) === 'challenge' ? 'challenge' : 'run';
+}
+
+export function saveMode(mode: GameMode): void {
+  writeJson(MODE_KEY, mode);
+}
 
 export function loadVisualSettings(): VisualSettings {
   const defaults: VisualSettings = {

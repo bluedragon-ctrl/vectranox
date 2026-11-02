@@ -20,9 +20,19 @@ export function backdropOf(seed: number): number {
 
 /**
  * Standard rooms are still layouts, formation rooms move, elite rooms are hard and pay for it,
- * boss rooms are won by destroying the core.
+ * boss rooms are won by destroying the core. Challenge rooms are never in a run: they are the
+ * challenge mode's rooms (see `CHALLENGE`).
  */
-export type RoomKind = 'standard' | 'formation' | 'elite' | 'boss';
+export type RoomKind = 'standard' | 'formation' | 'elite' | 'boss' | 'challenge';
+
+/**
+ * What a game is: a run of rooms, or a challenge. A challenge is one room, picked at random from
+ * the challenge rooms, on the normal rules (lives, capsules, stage events) but with no mods and no
+ * pick. The room's time limit (`ROOM_TIME.challenge` unless the room sets its own) ends the game
+ * when it runs out, so bonuses can't be farmed for ever; clearing the room or losing the last life
+ * ends it too. Challenge scores have a table of their own.
+ */
+export type GameMode = 'run' | 'challenge';
 
 /**
  * A run is `rooms` rooms, assembled from the stage templates when the run starts (see
@@ -71,18 +81,20 @@ export const ROOM_CREDITS: Readonly<Record<RoomKind, number>> = {
   formation: 1,
   elite: 2,
   boss: 4,
+  challenge: 0,
 };
 
 /**
  * Seconds a room gives to earn the time bonus when it doesn't set its own `timeLimit` (the room
  * editor's Time field), by kind. The clock only runs while a ball is in play, and running out
- * loses the bonus and nothing else.
+ * loses the bonus and nothing else; in a challenge it ends the game.
  */
 export const ROOM_TIME: Readonly<Record<RoomKind, number>> = {
   standard: 60,
   formation: 60,
   elite: 60,
   boss: 120,
+  challenge: 300,
 };
 
 /** Clearing a room inside its limit pays `score` (no multiplier) and `credits` on top of its `ROOM_CREDITS`. */
@@ -116,6 +128,7 @@ export const ROOM_LABEL: Record<RoomKind, string> = {
   formation: 'FORMATION',
   elite: 'ELITE',
   boss: 'BOSS',
+  challenge: 'CHALLENGE',
 };
 
 /** A room's threat rating as shown on screen: one pip per point. */

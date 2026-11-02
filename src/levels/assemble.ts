@@ -32,6 +32,17 @@ export function assembleRun(seed: number): StageDef[] {
 }
 
 /**
+ * A challenge's one stage: a random challenge room, from the seed alone, at the depth of a run's
+ * first room.
+ */
+export function challengeStage(seed: number): StageDef {
+  const rng = new Rng(seed ^ LAYOUT_SALT);
+  const rooms = TEMPLATES.filter((t) => t.room === 'challenge');
+  const template = rooms[Math.floor(rng.next() * rooms.length)] ?? noTemplate('challenge');
+  return buildStage(template, 0, rng.next() < RUN.depth.mirrorChance, rng);
+}
+
+/**
  * A room for a run under way, as stage `depth` (0-based), for the rollback mod. Only standard or
  * formation: elites and bosses stay where the run rolled them. Templates don't repeat while unused
  * ones are left.

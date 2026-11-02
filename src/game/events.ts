@@ -1,4 +1,4 @@
-import type { RoomKind } from '../config/run';
+import type { GameMode, RoomKind } from '../config/run';
 import type { SecretCode } from '../config/tuning';
 import type { FirePattern } from '../levels/stages';
 import type { BrickKind, ExplosionSource, HitSource, ModKind, PowerKind, StageEventKind, TimedPower } from './types';
@@ -7,7 +7,7 @@ export type WallSide = 'left' | 'right' | 'top';
 
 /** Every event the simulation can emit. Payloads must be plain data. */
 export type GameEvents = {
-  runStart: { seed: number };
+  runStart: { seed: number; mode: GameMode };
   /** `stage` counts through the run (1-based). */
   stageStart: { stage: number; name: string; room: RoomKind; bricks: number };
   ballSpawn: { id: number; x: number; y: number };
