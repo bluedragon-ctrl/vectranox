@@ -60,7 +60,7 @@ export function parseLayout(layout: readonly string[], nextId: () => number, cor
       }
       const pad = PAD_CODES[ch];
       if (pad) {
-        pads.push({ kind: pad, id: nextId(), x: cx, y: cy, r: PINBALL[pad].radius, recharge: 0, hitTick: -Infinity });
+        pads.push({ kind: pad, id: nextId(), x: cx, y: cy, r: PINBALL[pad].radius, recharge: 0, hitTick: -Infinity, readyTick: -Infinity });
         continue;
       }
       if (isPortalCode(ch)) {

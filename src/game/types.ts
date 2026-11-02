@@ -123,6 +123,8 @@ export interface Pad {
   recharge: number;
   /** Tick it last went off, for flash effects. */
   hitTick: number;
+  /** Tick it last finished recharging, for the ready blink. */
+  readyTick: number;
 }
 
 /**

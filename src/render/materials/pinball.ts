@@ -79,12 +79,13 @@ void main() {
 
 /**
  * Pad: a dark glass disc the ball passes over. The instance rectangle is its diameter.
- * params: x = kind (0 booster, 1 clock), y = trigger flash (1 -> 0), z = charge (0..1, 1 is
- * ready), w = animation phase (seconds).
+ * params: x = kind (0 booster, 1 clock), y = trigger flash (1 -> 0), z = charge (0..1 while a
+ * clock recharges; once ready, 1 plus the ready blink, 0..1), w = animation phase (seconds).
  *
  * Booster: a rim and two chevrons pointing up, a wave climbing through them. Clock: a dial with
  * four ticks and a hand that sweeps while it is ready; while it recharges the hand and the lit
- * part of the rim show how far it has come, and the rest is dim. A trigger sends a ring out.
+ * part of the rim show how far it has come, and the rest is dim; it blinks once it is ready again.
+ * A trigger sends a ring out.
  */
 export const PAD_FRAGMENT = /* glsl */ `
 varying vec2 vLocal;
@@ -100,7 +101,8 @@ void main() {
   float r = length(p);
   vec3 tint = vColor.rgb;
   float flash = vParams.y;
-  float charge = vParams.z;
+  float charge = min(vParams.z, 1.0);
+  float blink = max(vParams.z - 1.0, 0.0);
   float t = vParams.w;
   float ready = step(0.999, charge);
 
@@ -134,11 +136,13 @@ void main() {
     glow += fill(r - 0.9) * 0.8;
   }
 
-  vec3 col = mix(tint, vec3(1.0), 0.3 * flash) * glow * disc * (1.0 + flash);
+  // The ready blink lights the whole face, as a lit target does.
+  glow += blink * 0.6 * disc;
+  vec3 col = mix(tint, vec3(1.0), 0.3 * flash + 0.35 * blink) * glow * disc * (1.0 + flash + blink);
   // Trigger ring, spreading past the rim as the flash fades.
   float wave = stroke(r - R - (1.0 - flash) * 5.0, 0.6) * flash;
   col += tint * wave;
-  col += tint * exp(-max(r - R, 0.0) * 0.9) * (0.08 + 0.1 * ready + 0.3 * flash) * (1.0 - disc);
+  col += tint * exp(-max(r - R, 0.0) * 0.9) * (0.08 + 0.1 * ready + 0.3 * flash + 0.4 * blink) * (1.0 - disc);
 
   float alpha = max(disc * 0.6, wave * 0.5);
   gl_FragColor = vec4(col, alpha);

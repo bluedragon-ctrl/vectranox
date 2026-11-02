@@ -1230,7 +1230,9 @@ export class Game {
     for (const pad of this.pads) {
       if (pad.recharge === 0) continue;
       pad.recharge = Math.max(0, pad.recharge - dt);
-      if (pad.recharge === 0) this.events.emit('padReady', { pad: pad.id, x: pad.x, y: pad.y });
+      if (pad.recharge > 0) continue;
+      pad.readyTick = this.tick;
+      this.events.emit('padReady', { pad: pad.id, x: pad.x, y: pad.y });
     }
   }
 
