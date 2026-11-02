@@ -1,6 +1,6 @@
 import { BALL, BRICK, FIELD, PADDLE, RULES, SCORE, SIM } from '../config/game';
 import { ANCHOR_DROP, DRAFT, LASERPIERCE_CORE, MODS, PRICES, type GrantTrigger } from '../config/mods';
-import { BOSS_ROOM, ELITE, ROOM_CREDITS, TIME_BONUS } from '../config/run';
+import { clearBonus, ELITE, ROOM_CREDITS, TIME_BONUS } from '../config/run';
 import { BOSS, BRICK_TYPES, FOCUS, FORMATION, PINBALL, POWER, SECRET_CODES, STAGE_EVENTS, type SecretCode, type TargetColor } from '../config/tuning';
 import { EventBus } from '../core/events';
 import { clamp, lerp } from '../core/math';
@@ -13,7 +13,7 @@ import type { GameEvents, WallSide } from './events';
 import { buildFormations, type Formation } from './formation';
 import { parseLayout } from './layout';
 import { epicChance, laserPay, MOD_GRANTS, MOD_KINDS, powerSeconds, rollMods, splitInto } from './mods';
-import { aim, closer, normalizeVelocity, pushOut, sweepWalls } from './physics';
+import { aim, bounceFlat, closer, normalizeVelocity, pushOut, reflect, sweepRect, sweepWalls } from './physics';
 import { COMMON_POWERS, GOOD_POWERS, RARE_POWERS, rollPower, TIMED_POWERS } from './powers';
 import { StageEventTracker } from './stageEvents';
 import type {
@@ -379,14 +379,8 @@ export class Game {
       probe.x += dx * hit.t + hit.nx * SKIN;
       probe.y += dy * hit.t + hit.ny * SKIN;
       path.push({ x: probe.x, y: probe.y });
-      if (round) {
-        const dot = probe.vx * hit.nx + probe.vy * hit.ny;
-        probe.vx -= 2 * dot * hit.nx;
-        probe.vy -= 2 * dot * hit.ny;
-      } else {
-        if (hit.nx !== 0) probe.vx = Math.abs(probe.vx) * hit.nx;
-        if (hit.ny !== 0) probe.vy = Math.abs(probe.vy) * hit.ny;
-      }
+      if (round) reflect(probe, hit.nx, hit.ny);
+      else bounceFlat(probe, hit.nx, hit.ny);
       normalizeVelocity(probe, speed);
       if (probe.vy >= 0) return null;
     }
@@ -417,7 +411,7 @@ export class Game {
     let portal = false;
     for (const br of this.bricks) {
       if (!br.alive || this.pierces(br)) continue;
-      const h = sweepBox(x, y, dx, dy, br.x - r, br.y - r, br.x + br.w + r, br.y + br.h + r);
+      const h = sweepRect(ball, dx, dy, br);
       if (closer(h, hit)) hit = h;
     }
     for (const tg of this.targets) {
@@ -427,10 +421,9 @@ export class Game {
         round = true;
       }
     }
-    const capture = this.fight ? BOSS.portalCapture : PINBALL.portal.capture;
     for (const p of this.portals) {
       if (p.id === inPortal) continue;
-      const h = sweepCircle(x, y, dx, dy, p.x, p.y, capture);
+      const h = sweepCircle(x, y, dx, dy, p.x, p.y, this.portalCapture);
       if (closer(h, hit)) {
         hit = h;
         portal = true;
@@ -829,7 +822,7 @@ export class Game {
       let hit: SweepHit | null = sweepWalls(s, dx, dy);
       for (const br of this.bricks) {
         if (!br.alive) continue;
-        const h = sweepBox(s.x, s.y, dx, dy, br.x - s.r, br.y - s.r, br.x + br.w + s.r, br.y + br.h + s.r);
+        const h = sweepRect(s, dx, dy, br);
         if (closer(h, hit)) hit = h;
       }
       let onPaddle = false;
@@ -849,8 +842,7 @@ export class Game {
       s.x += dx * hit.t + hit.nx * SKIN;
       s.y += dy * hit.t + hit.ny * SKIN;
       remaining *= 1 - hit.t;
-      if (hit.nx !== 0) s.vx = Math.abs(s.vx) * hit.nx;
-      if (hit.ny !== 0) s.vy = Math.abs(s.vy) * hit.ny;
+      bounceFlat(s, hit.nx, hit.ny);
       if (onPaddle) aim(s, (clamp((s.x - this.paddle.x) / (this.paddle.w / 2), -1, 1)) * BALL.maxBounceAngle, speed);
       normalizeVelocity(s, speed);
     }
@@ -937,16 +929,20 @@ export class Game {
   private killCore(core: Brick, x: number, y: number): void {
     core.alive = false;
     this.breakableLeft--;
-    const multiplier = this.multiplier;
     this.events.emit('bossDown', { x, y });
-    this.events.emit('brickDestroyed', { id: core.id, kind: core.kind, points: 0, chain: 0, bonus: 0, multiplier, by: 'explosion', x, y, ix: x, iy: y, vx: 0, vy: 0 });
+    this.shatter(core);
     for (const br of this.bricks) {
       if (!br.alive) continue;
       br.alive = false;
-      const cx = br.x + br.w / 2;
-      const cy = br.y + br.h / 2;
-      this.events.emit('brickDestroyed', { id: br.id, kind: br.kind, points: 0, chain: 0, bonus: 0, multiplier, by: 'explosion', x: cx, y: cy, ix: cx, iy: cy, vx: 0, vy: 0 });
+      this.shatter(br);
     }
+  }
+
+  /** A broken brick that pays nothing: it goes from its centre, as if by an explosion there. */
+  private shatter(br: Brick): void {
+    const x = br.x + br.w / 2;
+    const y = br.y + br.h / 2;
+    this.events.emit('brickDestroyed', { id: br.id, kind: br.kind, points: 0, chain: 0, bonus: 0, multiplier: this.multiplier, by: 'explosion', x, y, ix: x, iy: y, vx: 0, vy: 0 });
   }
 
   /**
@@ -1048,8 +1044,7 @@ export class Game {
       // Whatever is still burning has nothing left to break, but it should still be seen.
       this.burnFuses(Infinity);
       this.bricks = this.bricks.filter((br) => br.alive);
-      const { room } = this.stage;
-      const bonus = room === 'boss' ? BOSS_ROOM.clearBonus : room === 'elite' ? ELITE.clearBonus : 0;
+      const bonus = clearBonus(this.stage.room);
       const timeBonus = this.timeLeft > 0 ? TIME_BONUS.score : 0;
       this.score += bonus + timeBonus;
       if (this.flawless) this.raiseMultiplier();
@@ -1112,7 +1107,7 @@ export class Game {
       let target: HitTarget | null = wall ? wall.side : null;
       for (const br of this.bricks) {
         if (!br.alive) continue;
-        const h = sweepBox(b.x, b.y, dx, dy, br.x - b.r, br.y - b.r, br.x + br.w + b.r, br.y + br.h + b.r);
+        const h = sweepRect(b, dx, dy, br);
         if (closer(h, hit)) {
           hit = h;
           target = br;
@@ -1155,9 +1150,7 @@ export class Game {
         b.x += dx * hit.t + hit.nx * SKIN;
         b.y += dy * hit.t + hit.ny * SKIN;
         remaining *= 1 - hit.t;
-        const dot = b.vx * hit.nx + b.vy * hit.ny;
-        b.vx -= 2 * dot * hit.nx;
-        b.vy -= 2 * dot * hit.ny;
+        reflect(b, hit.nx, hit.ny);
         this.hitTarget(target, b);
         normalizeVelocity(b, this.ballSpeed(b));
         continue;
@@ -1186,8 +1179,7 @@ export class Game {
           continue;
         }
       }
-      if (hit.nx !== 0) b.vx = Math.abs(b.vx) * hit.nx;
-      if (hit.ny !== 0) b.vy = Math.abs(b.vy) * hit.ny;
+      bounceFlat(b, hit.nx, hit.ny);
 
       if (target === 'paddle') {
         if (this.paddleContact(b, hit.ny > 0)) return;
@@ -1220,8 +1212,7 @@ export class Game {
   /** Booster: the ball keeps the extra speed until it is lost. */
   private boostBall(pad: Pad, b: Ball): void {
     // Under the same top speed as brick hits, dampener included.
-    const max = BALL.maxSpeed * (1 - this.modValue('dampener'));
-    b.speed = Math.min(max, Math.max(b.speed, b.speed * PINBALL.boost.scale));
+    b.speed = Math.min(this.maxBallSpeed, Math.max(b.speed, b.speed * PINBALL.boost.scale));
     normalizeVelocity(b, this.ballSpeed(b));
     pad.hitTick = this.tick;
     this.events.emit('padBoost', { id: b.id, pad: pad.id, speed: b.speed, x: pad.x, y: pad.y });
@@ -1255,7 +1246,7 @@ export class Game {
       if (!from || (b.x - from.x) ** 2 + (b.y - from.y) ** 2 > from.r ** 2) b.inPortal = null;
       return;
     }
-    const capture = (this.fight ? BOSS.portalCapture : PINBALL.portal.capture) ** 2;
+    const capture = this.portalCapture ** 2;
     for (const p of this.portals) {
       if ((b.x - p.x) ** 2 + (b.y - p.y) ** 2 >= capture) continue;
       const exit = this.portals.find((q) => q.id === p.exit);
@@ -1395,6 +1386,16 @@ export class Game {
       any = true;
     }
     return any;
+  }
+
+  /** Top base speed for a ball; the dampener mod cuts it too, so hits and boosters don't win back what it takes. */
+  private get maxBallSpeed(): number {
+    return BALL.maxSpeed * (1 - this.modValue('dampener'));
+  }
+
+  /** How close a ball has to come to a portal's centre to go through. */
+  private get portalCapture(): number {
+    return this.fight ? BOSS.portalCapture : PINBALL.portal.capture;
   }
 
   private ballSpeed(b: Ball): number {
@@ -1609,9 +1610,7 @@ export class Game {
    * hit. A charged ball then explodes, whatever the brick was.
    */
   private ballHitsBrick(br: Brick, b: Ball): void {
-    // The dampener mod cuts the top speed too, so hits don't win back what it takes.
-    const max = BALL.maxSpeed * (1 - this.modValue('dampener'));
-    if (!isSolid(br)) b.speed = Math.min(max, b.speed + BALL.hitSpeedStep);
+    if (!isSolid(br)) b.speed = Math.min(this.maxBallSpeed, b.speed + BALL.hitSpeedStep);
     const ix = clamp(b.x, br.x, br.x + br.w);
     const iy = clamp(b.y, br.y, br.y + br.h);
     this.hitBrick(br, 'ball', ix, iy, b);
@@ -1661,8 +1660,10 @@ export class Game {
     }
 
     br.alive = false;
+    const vx = ball?.vx ?? 0;
+    const vy = ball?.vy ?? 0;
     if (br.falling) {
-      this.events.emit('brickDestroyed', { id: br.id, kind: br.kind, points: 0, chain: 0, bonus: 0, multiplier: this.multiplier, by, x, y, ix, iy, vx: ball?.vx ?? 0, vy: ball?.vy ?? 0 });
+      this.events.emit('brickDestroyed', { id: br.id, kind: br.kind, points: 0, chain: 0, bonus: 0, multiplier: this.multiplier, by, x, y, ix, iy, vx, vy });
       return;
     }
     this.breakableLeft--;
@@ -1674,8 +1675,6 @@ export class Game {
     if (ball) ball.chainPoints += bonus;
     const points = this.paid(brickPoints(br) * multiplier + bonus, by);
     this.score += points;
-    const vx = ball?.vx ?? 0;
-    const vy = ball?.vy ?? 0;
     this.events.emit('brickDestroyed', { id: br.id, kind: br.kind, points, chain, bonus, multiplier, by, x, y, ix, iy, vx, vy });
     if (br.kind === 'explosive') this.fuses.push({ x, y, tick: this.tick + Math.round(BRICK_TYPES.explosive.fuse * SIM.tickRate) });
     this.maybeDrop(x, y);

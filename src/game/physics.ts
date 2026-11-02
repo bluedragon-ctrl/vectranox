@@ -1,5 +1,5 @@
 import { BALL, FIELD } from '../config/game';
-import type { SweepHit } from './collision';
+import { sweepBox, type SweepHit } from './collision';
 import type { WallSide } from './events';
 import type { Ball } from './types';
 
@@ -23,6 +23,24 @@ export function sweepWalls(b: Pick<Ball, 'x' | 'y' | 'r'>, dx: number, dy: numbe
     if (t <= 1 && (!best || t < best.t)) best = { t, nx: 0, ny: -1, side: 'top' };
   }
   return best;
+}
+
+/** Sweeps a ball moving by (dx, dy) against a box (bottom-left corner, size), grown by the ball's radius. */
+export function sweepRect(b: Pick<Ball, 'x' | 'y' | 'r'>, dx: number, dy: number, box: { x: number; y: number; w: number; h: number }): SweepHit | null {
+  return sweepBox(b.x, b.y, dx, dy, box.x - b.r, box.y - b.r, box.x + box.w + b.r, box.y + box.h + b.r);
+}
+
+/** Mirrors velocity about the unit normal (nx, ny): a bounce off a round surface. */
+export function reflect(b: Pick<Ball, 'vx' | 'vy'>, nx: number, ny: number): void {
+  const dot = b.vx * nx + b.vy * ny;
+  b.vx -= 2 * dot * nx;
+  b.vy -= 2 * dot * ny;
+}
+
+/** A bounce off a flat side: each axis the normal (nx, ny) has turns to point along it. */
+export function bounceFlat(b: Pick<Ball, 'vx' | 'vy'>, nx: number, ny: number): void {
+  if (nx !== 0) b.vx = Math.abs(b.vx) * nx;
+  if (ny !== 0) b.vy = Math.abs(b.vy) * ny;
 }
 
 /**
