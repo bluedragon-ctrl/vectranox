@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { PALETTE } from '../config/game';
 import { POWER_LOOK } from '../config/tuning';
-import type { Ball, BrickKind, PowerKind } from '../game/types';
+import type { Ball, BrickKind, PadKind, PowerKind } from '../game/types';
 
 /** A boss's shots and a stunned paddle, linear. */
 export const SHOT_COLOR = new THREE.Color(0xe0000f);
@@ -107,3 +107,9 @@ export const AIM_COLOR = new THREE.Color(0x39ff14);
 
 /** Accretion-disk colour of each portal pair, in layout order (repeats past the end). */
 export const PORTAL_COLORS = [PALETTE.purple, PALETTE.cyan, PALETTE.orange].map((hex) => new THREE.Color(hex));
+
+/** Pad colours, linear and capped like the target lamps: a hot booster, a gold clock. */
+export const PAD_COLORS = {
+  boost: capBrightness(new THREE.Color(PALETTE.orange)),
+  clock: capBrightness(new THREE.Color(PALETTE.yellow)),
+} as const satisfies Record<PadKind, THREE.Color>;

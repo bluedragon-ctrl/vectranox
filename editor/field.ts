@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import { BRICK, FIELD, PADDLE, PALETTE } from '../src/config/game';
 import { FORMATION, PINBALL } from '../src/config/tuning';
-import { BRICK_CODES } from '../src/game/layout';
+import { BRICK_CODES, isPinballCode, PAD_CODES } from '../src/game/layout';
 import type { StageTemplate } from '../src/levels/stages';
 import { formationAt, MAX_ROWS } from '../src/levels/validate';
-import { BRICK_GAP, brickTint, PORTAL_COLORS, TARGET_COLOR } from '../src/render/palette';
+import { BRICK_GAP, brickTint, PAD_COLORS, PORTAL_COLORS, TARGET_COLOR } from '../src/render/palette';
 import { cssColor } from '../src/ui/dom';
 
 /** Marks each formation's bricks, and its card in the side panel. */
@@ -102,6 +102,18 @@ function drawBrick(ctx: CanvasRenderingContext2D, ch: string, row: number, col: 
 function drawPiece(ctx: CanvasRenderingContext2D, ch: string, row: number, col: number, pair: number, whole: boolean): void {
   const x = cellX(col) + BRICK.width / 2;
   const y = cellY(row) + BRICK.height / 2;
+  const pad = PAD_CODES[ch];
+  if (pad) {
+    ctx.beginPath();
+    ctx.arc(x, y, PINBALL[pad].radius, 0, Math.PI * 2);
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([2, 1.5]);
+    ctx.strokeStyle = PAD_COLORS[pad].getStyle();
+    ctx.stroke();
+    ctx.setLineDash([]);
+    label(ctx, ch, x, y, '#fff');
+    return;
+  }
   const portal = ch !== 'o';
   ctx.beginPath();
   ctx.arc(x, y, portal ? PINBALL.portal.radius : PINBALL.target.radius, 0, Math.PI * 2);
@@ -118,7 +130,7 @@ function drawFormations(ctx: CanvasRenderingContext2D, room: StageTemplate, sele
   const members = defs.map((): Cell[] => []);
   room.layout.forEach((line, row) => {
     [...line].forEach((ch, col) => {
-      if (ch === '.' || ch === 'o' || (ch >= 'A' && ch <= 'Z')) return;
+      if (ch === '.' || isPinballCode(ch)) return;
       members[formationAt(defs, row, col)]?.push({ row, col });
     });
   });
@@ -168,7 +180,7 @@ export function drawField(canvas: HTMLCanvasElement, room: StageTemplate, { sele
   room.layout.forEach((line, row) => {
     [...line].forEach((ch, col) => {
       if (ch === '.') return;
-      if (ch === 'o' || (ch >= 'A' && ch <= 'Z')) {
+      if (isPinballCode(ch)) {
         drawPiece(ctx, ch, row, col, letters.indexOf(ch), text.split(ch).length === 3);
       } else {
         drawBrick(ctx, ch, row, col);

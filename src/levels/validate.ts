@@ -2,7 +2,7 @@ import { BRICK, FIELD } from '../config/game';
 import { ROOM_LABEL } from '../config/run';
 import { BOSS, FORMATION } from '../config/tuning';
 import { within } from '../game/formation';
-import { BRICK_CODES } from '../game/layout';
+import { BRICK_CODES, isPinballCode, isPortalCode } from '../game/layout';
 import type { BossDef, FormationDef, StageTemplate } from './stages';
 
 /** Rows of bricks that fit above the formation line. */
@@ -27,10 +27,6 @@ export function formationAt(defs: readonly FormationDef[], row: number, col: num
   return defs.findIndex((def) => within(row, def.rows) && within(col, def.cols));
 }
 
-function isPinball(ch: string): boolean {
-  return ch === 'o' || (ch >= 'A' && ch <= 'Z');
-}
-
 function cells(room: StageTemplate): { row: number; col: number; ch: string }[] {
   return room.layout.flatMap((line, row) =>
     [...line].flatMap((ch, col) => (ch === '.' ? [] : [{ row, col, ch }])),
@@ -48,9 +44,9 @@ function checkLayout(room: StageTemplate): Problem[] {
   const portals = new Map<string, number>();
   let breakable = 0;
   for (const { row, col, ch } of cells(room)) {
-    if (ch >= 'A' && ch <= 'Z') {
+    if (isPortalCode(ch)) {
       portals.set(ch, (portals.get(ch) ?? 0) + 1);
-    } else if (ch !== 'o') {
+    } else if (!isPinballCode(ch)) {
       const code = BRICK_CODES[ch];
       if (!code) problems.push(error(`Unknown brick code '${ch}' at row ${row}, column ${col}.`));
       else if (code.kind !== 'steel') breakable++;
@@ -71,7 +67,7 @@ function coreReachable(room: StageTemplate): boolean {
   const defs = room.formations ?? [];
   const at = (row: number, col: number): string | undefined => (col >= 0 && col < BRICK.cols ? (room.layout[row]?.charAt(col) ?? (row >= 0 && row < MAX_ROWS ? '.' : undefined)) : undefined);
   const wall = (row: number, col: number): boolean => at(row, col) === '#' && defs[formationAt(defs, row, col)]?.motion !== 'rotate';
-  const ends = cells(room).filter((c) => c.ch >= 'A' && c.ch <= 'Z');
+  const ends = cells(room).filter((c) => isPortalCode(c.ch));
 
   const seen = new Set<string>();
   const queue = Array.from({ length: BRICK.cols }, (_, col) => ({ row: MAX_ROWS - 1, col }));
@@ -139,7 +135,7 @@ function checkBoss(room: StageTemplate): Problem[] {
   if (vault) {
     problems.push(...checkRange('Vault', 'rows', vault.rows, MAX_ROWS), ...checkRange('Vault', 'columns', vault.cols, BRICK.cols));
     const inside = (c: { row: number; col: number }): boolean => within(c.row, vault.rows) && within(c.col, vault.cols);
-    if (!cells(room).some((c) => c.ch >= 'A' && c.ch <= 'Z' && !inside(c))) problems.push(error('A vault needs a portal outside it to throw balls out through.'));
+    if (!cells(room).some((c) => isPortalCode(c.ch) && !inside(c))) problems.push(error('A vault needs a portal outside it to throw balls out through.'));
   }
   return problems;
 }
@@ -158,7 +154,7 @@ function checkFormation(room: StageTemplate, def: FormationDef, index: number): 
 
   const defs = room.formations ?? [];
   const all = cells(room);
-  const members = all.filter((c) => !isPinball(c.ch) && formationAt(defs, c.row, c.col) === index);
+  const members = all.filter((c) => !isPinballCode(c.ch) && formationAt(defs, c.row, c.col) === index);
   if (members.length === 0) {
     problems.push(warning(`${label} moves no bricks.`));
     return problems;
@@ -177,7 +173,7 @@ function checkFormation(room: StageTemplate, def: FormationDef, index: number): 
   const rows = members.map((c) => c.row);
   const top = Math.min(...rows);
   const bottom = def.motion === 'march' ? Infinity : Math.max(...rows);
-  if (all.some((c) => isPinball(c.ch) && c.row >= top && c.row <= bottom)) {
+  if (all.some((c) => isPinballCode(c.ch) && c.row >= top && c.row <= bottom)) {
     problems.push(warning(`${label} moves through a pinball piece, which stays where it is.`));
   }
   return problems;

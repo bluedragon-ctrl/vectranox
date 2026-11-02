@@ -1,11 +1,11 @@
 import * as THREE from 'three';
-import { FIELD, PALETTE } from '../config/game';
+import { FIELD, PALETTE, SIM } from '../config/game';
 import { backdropOf, RUN } from '../config/run';
-import { BOSS, FOCUS, FORMATION, POWER, POWER_LOOK } from '../config/tuning';
+import { BOSS, FOCUS, FORMATION, PINBALL, POWER, POWER_LOOK } from '../config/tuning';
 import { lerp } from '../core/math';
 import type { VisualSettings } from '../core/settings';
 import type { Game } from '../game/Game';
-import type { PowerKind, TimedPower } from '../game/types';
+import type { Pad, PowerKind, TimedPower } from '../game/types';
 import { AutoQuality } from './AutoQuality';
 import { GameFx } from './fx/GameFx';
 import { PostFx } from './fx/PostFx';
@@ -15,10 +15,10 @@ import { BALL_FRAGMENT } from './materials/ball';
 import { BRICK_FRAGMENT } from './materials/brick';
 import { FULLSCREEN_VERTEX } from './materials/common';
 import { PADDLE_FRAGMENT } from './materials/paddle';
-import { PORTAL_FRAGMENT, TARGET_FRAGMENT } from './materials/pinball';
+import { PAD_FRAGMENT, PORTAL_FRAGMENT, TARGET_FRAGMENT } from './materials/pinball';
 import { AIM_FRAGMENT, BARRIER_FRAGMENT, BLAST_FRAGMENT, BOLT_FRAGMENT, CAPSULE_FRAGMENT, SHOT_FRAGMENT } from './materials/power';
 import { glyphMask } from './glyphs';
-import { AIM_COLOR, ballLook, BRICK_GAP, brickTint, CAPSULE_COLORS, COLORS, PORTAL_COLORS, POWER_COLORS, SHOT_COLOR, TARGET_COLOR } from './palette';
+import { AIM_COLOR, ballLook, BRICK_GAP, brickTint, CAPSULE_COLORS, COLORS, PAD_COLORS, PORTAL_COLORS, POWER_COLORS, SHOT_COLOR, TARGET_COLOR } from './palette';
 import { QuadBatch } from './QuadBatch';
 
 /** Screen-space padding (px) between the playfield frame and its area. */
@@ -34,6 +34,14 @@ const MAX_PORTALS = 16;
 const PORTAL_SPIN = 2.2;
 /** Ticks a portal stays bright after a ball goes through it. */
 const WARP_FLASH_TICKS = 30;
+const MAX_PADS = 32;
+/** Ticks a pad's trigger ring takes to spread and fade. */
+const PAD_FLASH_TICKS = 40;
+/**
+ * A recharged clock blinks this many times over `time` seconds, at this strength, like a completed
+ * target bank. Reduce-FX gives one soft flash that fades instead.
+ */
+const PAD_READY_BLINK = { time: 1, blinks: 3, strength: 0.8, reduced: 0.3 } as const;
 /** Seconds over which a power's visuals fade out before it ends. */
 const POWER_FADE = 1;
 /** Ticks a brick stays lit after a hit. */
@@ -197,6 +205,7 @@ export class Renderer {
   private targets = new QuadBatch({ max: MAX_TARGETS, pad: 6, fragmentShader: TARGET_FRAGMENT, renderOrder: 11 });
   private bankLines = new QuadBatch({ max: MAX_TARGETS, pad: 3, fragmentShader: AIM_FRAGMENT, renderOrder: 12 });
   private portals = new QuadBatch({ max: MAX_PORTALS, pad: 6, fragmentShader: PORTAL_FRAGMENT, renderOrder: 9 });
+  private pads = new QuadBatch({ max: MAX_PADS, pad: 7, fragmentShader: PAD_FRAGMENT, renderOrder: 10 });
   /** Drives the portals' spin. */
   private portalTime = 0;
   private aimLines = new QuadBatch({ max: POWER.maxBalls * (FOCUS.aimBounces + 1), pad: 3, fragmentShader: AIM_FRAGMENT, renderOrder: 24 });
@@ -226,6 +235,7 @@ export class Renderer {
     this.scene.add(
       blit,
       this.portals.mesh,
+      this.pads.mesh,
       this.targets.mesh,
       this.bankLines.mesh,
       this.bricks.mesh,
@@ -361,6 +371,7 @@ export class Renderer {
 
     this.drawField(game);
     this.drawPortals(game);
+    this.drawPads(game);
     this.drawTargets(game);
     this.drawBankCircuit(game);
     this.drawBricks(game, alpha);
@@ -484,6 +495,27 @@ export class Renderer {
       });
     }
     this.bankLines.commit();
+  }
+
+  /** Boosters and clocks; a recharging clock shows how far along it is. Reduce-FX keeps them still. */
+  private drawPads(game: Game): void {
+    this.pads.begin();
+    const phase = this.settings.reduceFx ? 0 : this.portalTime;
+    for (const p of game.pads) {
+      const flash = Math.max(0, 1 - (game.tick - p.hitTick) / PAD_FLASH_TICKS) * this.fx.brickFlash;
+      const charge = p.kind === 'clock' ? 1 - p.recharge / PINBALL.clock.recharge : 1;
+      this.pads.push(p.x, p.y, p.r * 2, p.r * 2, PAD_COLORS[p.kind], 1, p.kind === 'boost' ? 0 : 1, flash, charge < 1 ? charge : 1 + this.readyBlink(game, p), phase);
+    }
+    this.pads.commit();
+  }
+
+  /** How bright a clock's ready blink is now, 0..1. */
+  private readyBlink(game: Game, p: Pad): number {
+    const age = (game.tick - p.readyTick) / SIM.tickRate;
+    const { time, blinks, strength, reduced } = PAD_READY_BLINK;
+    if (!(age < time)) return 0;
+    if (this.settings.reduceFx) return reduced * (1 - age / time) * this.fx.brickFlash;
+    return ((age * blinks) / time) % 1 < 0.5 ? strength : 0;
   }
 
   /** Each pair has its own colour; the two ends of a pair spin opposite ways (in and out). */

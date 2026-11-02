@@ -182,6 +182,24 @@ export class GameSounds {
           s.tone({ type: 'triangle', freq: 160, to: 1100, at: 0.1, dur: 0.14, gain: 0.1, pan: pan(x) });
         });
       }),
+      ev.on('padBoost', ({ x }) => {
+        // A quick whoosh up: the ball kicks forward.
+        this.play('boost', (s) => {
+          s.noise({ filter: 'bandpass', freq: 1400, q: 1.5, dur: 0.12, gain: 0.08, pan: pan(x) });
+          s.tone({ type: 'sawtooth', freq: 220, to: 880, dur: 0.12, gain: 0.06, cutoff: 2400, pan: pan(x) });
+        });
+      }),
+      ev.on('padClock', ({ x }) => {
+        // Two ticks and a chime.
+        this.play('clock', (s) => {
+          s.tone({ type: 'square', freq: 2200, dur: 0.02, gain: 0.05, pan: pan(x) });
+          s.tone({ type: 'square', freq: 1800, at: 0.08, dur: 0.02, gain: 0.05, pan: pan(x) });
+          s.notes([note(7, C5), note(12, C5)], 0.07, { at: 0.14, dur: 0.25, gain: 0.08 });
+        });
+      }),
+      ev.on('padReady', ({ x }) => {
+        this.play('clockReady', (s) => s.tone({ freq: note(12, C5), dur: 0.1, gain: 0.04, pan: pan(x) }));
+      }),
       ev.on('powerDrop', ({ x }) => {
         this.play('drop', (s) => s.tone({ freq: 1180, to: 900, dur: 0.06, gain: 0.05, pan: pan(x) }));
       }),

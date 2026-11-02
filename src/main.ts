@@ -110,6 +110,12 @@ function newGame(): Game {
     const look = RARE_POWER_BANNER[kind];
     if (look) banner.announce(look, g.time);
   });
+  g.events.on('padClock', () => {
+    // Restarts the flash if it is still running.
+    hudTime.classList.remove('gain');
+    void hudTime.offsetWidth;
+    hudTime.classList.add('gain');
+  });
   g.events.on('bossPhase', ({ phase, phases }) => banner.announce({ label: `PHASE ${phase}/${phases}`, sub: 'CORE SHIELDED', color: PALETTE.yellow }, g.time));
   renderer.attach(g);
   audio.music.cue(BACKDROPS[backdropOf(g.seed)]!.song);

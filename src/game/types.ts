@@ -75,6 +75,8 @@ export interface Ball {
   chainPoints: number;
   /** Id of the portal the ball just came out of; that portal ignores it until it has left. */
   inPortal: number | null;
+  /** Id of the pad the ball is passing through; that pad ignores it until it has left. */
+  inPad: number | null;
   /** Bricks it will still explode on (detonator). */
   charges: number;
 }
@@ -104,6 +106,25 @@ export interface Portal {
   pair: number;
   /** Tick a ball last went through it, either way, for flash effects. */
   warpTick: number;
+}
+
+/** What a pad does to a ball passing through it: speeds it up, or adds time to the room's limit. */
+export type PadKind = 'boost' | 'clock';
+
+/** Pinball pad: the ball passes through it and sets it off (see `PINBALL`). Position is the centre. */
+export interface Pad {
+  /** Tells pads apart from bricks and targets. */
+  kind: PadKind;
+  id: number;
+  x: number;
+  y: number;
+  r: number;
+  /** Seconds of play until it works again; 0 is ready. Only clocks recharge. */
+  recharge: number;
+  /** Tick it last went off, for flash effects. */
+  hitTick: number;
+  /** Tick it last finished recharging, for the ready blink. */
+  readyTick: number;
 }
 
 /**

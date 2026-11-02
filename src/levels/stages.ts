@@ -6,7 +6,8 @@ import type { FORMATION } from '../config/tuning';
  * A run is assembled from these (see assemble.ts). One string per brick row, top row first, 13 columns.
  * `1` / `2` / `3` normal (hits to break) · `#` steel (indestructible) · `.` empty
  * `*` explosive · `r` regenerating (see `BRICK_TYPES`)
- * Pinball pieces (see `PINBALL`): `o` target · `A`–`Z` portal, each letter used exactly twice (its two ends).
+ * Pinball pieces (see `PINBALL`): `o` target · `A`–`Z` portal, each letter used exactly twice (its two ends) ·
+ * `f` booster (speeds the ball up) · `+` clock (adds time to the limit).
  * Boss rooms only: `c` core, a filled rectangle of cells that makes one big brick · `t` turret ·
  * `s` spawner · `g` phantom (see `BOSS`).
  *
