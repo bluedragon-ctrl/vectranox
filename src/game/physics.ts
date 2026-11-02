@@ -3,6 +3,13 @@ import { sweepBox, type SweepHit } from './collision';
 import type { WallSide } from './events';
 import type { Ball } from './types';
 
+/** Distance a ball is pushed off a surface after a bounce, so the next sweep starts outside it. */
+export const SKIN = 0.01;
+/** How far along the paddle a caught ball can stick, as a share of its half width. */
+export const CATCH_EDGE = 0.9;
+/** Bounces resolved per ball per tick; leftover motion is dropped (only matters in tight corners). */
+export const MAX_BOUNCES = 4;
+
 /** Whether `h` is a hit that comes before `best` (or the first one). */
 export function closer(h: SweepHit | null, best: SweepHit | null): h is SweepHit {
   return h !== null && (best === null || h.t < best.t);
@@ -79,4 +86,13 @@ export function normalizeVelocity(b: Pick<Ball, 'vx' | 'vy'>, speed: number): vo
   }
   b.vx = vx;
   b.vy = vy;
+}
+
+/** Where a ball is headed; a caught ball by the angle it would launch at, a resting one straight up. */
+export function ballDirection(b: Ball): [number, number] {
+  if (b.stuck !== null) {
+    const a = b.stuck * BALL.maxBounceAngle;
+    return [Math.sin(a), Math.cos(a)];
+  }
+  return b.vx === 0 && b.vy === 0 ? [0, 1] : [b.vx, b.vy];
 }
