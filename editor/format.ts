@@ -1,6 +1,6 @@
 import type { BossDef, FormationDef, StageTemplate } from '../src/levels/stages';
 
-/** A room as it goes in its file: one row per line, a formation or boss phase per line, defaults left out. */
+/** A room as it goes in its file: one row per line, a formation, boss phase or emitters block per line, defaults left out. */
 export function formatRoom(room: StageTemplate): string {
   const fields = [`  "name": ${JSON.stringify(room.name)}`, `  "tier": ${room.tier}`];
   if (room.threat && room.threat !== room.tier) fields.push(`  "threat": ${room.threat}`);
@@ -11,6 +11,7 @@ export function formatRoom(room: StageTemplate): string {
   const formations = room.formations ?? [];
   if (formations.length > 0) fields.push(list('formations', formations.map(formatFormation)));
   if (room.boss) fields.push(formatBoss(room.boss));
+  if (room.emitters) fields.push(`  "emitters": ${inline(room.emitters)}`);
   return `{\n${fields.join(',\n')}\n}\n`;
 }
 

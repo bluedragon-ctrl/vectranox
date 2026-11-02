@@ -1,8 +1,8 @@
 import { BRICK } from '../src/config/game';
 import { ROOM_LABEL, ROOM_TIME, type RoomKind } from '../src/config/run';
 import { FORMATION } from '../src/config/tuning';
-import type { BossDef, FormationDef, StageTemplate } from '../src/levels/stages';
-import { checkRoom, checkRun, isBossDef, MAX_ROWS, roomFile, type Problem } from '../src/levels/validate';
+import type { BossDef, EmitterTimings, FormationDef, StageTemplate } from '../src/levels/stages';
+import { checkRoom, checkRun, isBossDef, isEmitterTimings, MAX_ROWS, roomFile, type Problem } from '../src/levels/validate';
 import { byId } from '../src/ui/dom';
 import type { RoomChange, RoomsState, SaveResult } from './api';
 import { cellAt, drawField, fitField, FORMATION_COLORS, type Cell } from './field';
@@ -31,6 +31,7 @@ const EMPTY_ROW = '.'.repeat(BRICK.cols);
 const KINDS = Object.keys(ROOM_LABEL) as RoomKind[];
 const MOTIONS = Object.keys(FORMATION.motions) as FormationDef['motion'][];
 const NEW_BOSS: BossDef = { hp: 16, phases: [{ at: 1, fire: 'straight', turret: 2.5 }] };
+const NEW_EMITTERS: EmitterTimings = { fire: 'straight', turret: 3, spawner: 14, phantom: 8 };
 
 const TOOLS: readonly { tool: Tool; label: string; title: string }[] = [
   { tool: '1', label: '1', title: 'Normal, 1 hit' },
@@ -40,9 +41,9 @@ const TOOLS: readonly { tool: Tool; label: string; title: string }[] = [
   { tool: '*', label: '*', title: 'Explosive' },
   { tool: 'r', label: 'r', title: 'Regenerating' },
   { tool: 'c', label: 'c', title: 'Boss core: its cells make one brick, so fill a rectangle' },
-  { tool: 't', label: 't', title: 'Boss turret' },
-  { tool: 's', label: 's', title: 'Boss spawner: sends bricks down to the line' },
-  { tool: 'g', label: 'g', title: 'Boss phantom: releases shadow balls' },
+  { tool: 't', label: 't', title: 'Turret (boss and challenge rooms)' },
+  { tool: 's', label: 's', title: 'Spawner: sends bricks down to the line (boss and challenge rooms)' },
+  { tool: 'g', label: 'g', title: 'Phantom: releases shadow balls (boss and challenge rooms)' },
   { tool: 'o', label: 'o', title: 'Pinball target' },
   { tool: 'f', label: 'f', title: 'Booster: speeds up each ball passing through by 20%, for good' },
   { tool: '+', label: '+', title: 'Clock: a ball passing through adds 10 s to the time limit while any is left, then it recharges for 10 s' },
@@ -444,9 +445,11 @@ function renderForm(): void {
   const kind = make('select', {}, ...options(KINDS, room.room ?? 'standard'));
   kind.onchange = () => {
     if (!current?.room) return;
-    const { room: _old, boss, ...rest } = current.room;
+    const { room: _old, boss, emitters, ...rest } = current.room;
     const next = kind.value === 'standard' ? rest : { ...rest, room: kind.value as RoomKind };
-    change(kind.value === 'boss' ? { ...next, boss: boss ?? NEW_BOSS } : next);
+    if (kind.value === 'boss') change({ ...next, boss: boss ?? NEW_BOSS });
+    else if (kind.value === 'challenge' && emitters) change({ ...next, emitters });
+    else change(next);
     renderForm();
   };
   const opener = make('input', { type: 'checkbox', checked: room.opener === true });
@@ -499,6 +502,31 @@ function renderForm(): void {
     showMessage('');
   };
 
+  // A challenge room's emitters, hand-edited like a boss phase. Emptied, the room has none that act.
+  const emittersBlock = make('textarea', { rows: 4, spellcheck: false, placeholder: JSON.stringify(NEW_EMITTERS), value: room.emitters ? JSON.stringify(room.emitters) : '' });
+  emittersBlock.onchange = () => {
+    if (!current?.room) return;
+    const { emitters: _old, ...rest } = current.room;
+    if (emittersBlock.value.trim() === '') {
+      change(rest);
+      showMessage('');
+      return;
+    }
+    let emitters: unknown;
+    try {
+      emitters = JSON.parse(emittersBlock.value);
+    } catch {
+      showMessage('The emitters block is not valid JSON.', true);
+      return;
+    }
+    if (!isEmitterTimings(emitters)) {
+      showMessage('The emitters block needs seconds for turret, spawner and phantom, and a fire pattern.', true);
+      return;
+    }
+    change({ ...rest, emitters });
+    showMessage('');
+  };
+
   revertButton = make('button', { onclick: revert, disabled: !current.base || !isChanged(current) }, 'Revert');
   formPanel.replaceChildren(
     field('Name', name),
@@ -518,6 +546,7 @@ function renderForm(): void {
     ...(room.formations ?? []).map(formationCard),
     add,
     ...(room.room === 'boss' ? [make('h2', {}, 'BOSS'), bossBlock] : []),
+    ...(room.room === 'challenge' ? [make('h2', {}, 'EMITTERS'), emittersBlock] : []),
   );
 }
 

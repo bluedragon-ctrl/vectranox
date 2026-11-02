@@ -39,7 +39,7 @@ lives card live in `src/config/mods.ts`; run length, room mix, depth scaling and
 
 ## Challenge mode
 
-Picked on the title or end screen instead of a run: one challenge room (`"room": "challenge"`, never in a run), chosen at random, on the normal rules (3 lives, capsules, stage events) but with no mods and no pick. The room's time limit, 5:00 unless the room sets its own, ends the game when it runs out; clearing the room or losing the last life ends it too. Challenge scores have their own table, shared by all challenge rooms. In the editor, **Play this room** on a challenge room plays it as a challenge.
+Picked on the title or end screen instead of a run: one challenge room (`"room": "challenge"`, never in a run), chosen at random, on the normal rules (3 lives, capsules, stage events) but with no mods and no pick. The room's time limit, 5:00 unless the room sets its own, ends the game when it runs out; clearing the room or losing the last life ends it too. Challenge scores have their own table, shared by all challenge rooms. Challenge rooms can also have turrets, spawners and phantoms (not a core): their **EMITTERS** field in the editor sets the seconds between each kind's actions and the turrets' fire pattern, like a boss phase, e.g. `{"fire": "aimed", "turret": 3, "spawner": 14, "phantom": 8}`. In the editor, **Play this room** on a challenge room plays it as a challenge.
 
 ## Room editor
 
