@@ -8,7 +8,7 @@ import { Rng } from '../core/rng';
 import { assembleRun, buildStage, challengeStage, extraRoom } from '../levels/assemble';
 import { TEMPLATES, type StageDef, type StageTemplate } from '../levels/stages';
 import { aimPath, aimRebound, type Point } from './aim';
-import { BossFight } from './boss';
+import { BossFight, Emitters } from './boss';
 import { BossRoom } from './bossRoom';
 import { sweepBox, sweepCircle, type SweepHit } from './collision';
 import type { GameEvents, WallSide } from './events';
@@ -95,6 +95,8 @@ export class Game {
   formations: Formation[] = [];
   /** Set in boss rooms. */
   fight: BossFight | null = null;
+  /** The emitters' turns: the boss fight's, or a challenge room's own; null when nothing emits. */
+  emitters: Emitters | null = null;
   /** Seconds the paddle can't move for yet. */
   stun = 0;
   /** Real seconds of focus left; 0 is off. */
@@ -276,7 +278,8 @@ export class Game {
         this.powers.handleButtons(world, input);
         this.updateFormations(world);
         this.boss.moveFallers(world);
-        this.fight?.update(world, this.bricks, (kind, br) => this.boss.emitterActs(kind, br));
+        if (this.fight) this.fight.update(world, this.bricks, (kind, br) => this.boss.emitterActs(kind, br));
+        else this.emitters?.update(world, this.bricks, (kind, br) => this.boss.emitterActs(kind, br));
         this.updateBalls(world);
         this.boss.updateShadows(world);
         this.powers.updateBolts(world);
@@ -427,6 +430,7 @@ export class Game {
     this.formations = buildFormations(stage.formations, this.bricks, stage.formationPace);
     const core = this.bricks.find((br) => br.kind === 'core');
     this.fight = stage.boss && core ? new BossFight(stage.boss, core) : null;
+    this.emitters = this.fight?.emitters ?? (stage.emitters ? new Emitters(stage.emitters) : null);
     this.boss.paceFormations();
     this.breakableLeft = this.bricks.filter(isBreakable).length;
     this.breached = false;

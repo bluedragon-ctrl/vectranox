@@ -8,8 +8,8 @@ import type { FORMATION } from '../config/tuning';
  * `*` explosive · `r` regenerating (see `BRICK_TYPES`)
  * Pinball pieces (see `PINBALL`): `o` target · `A`–`Z` portal, each letter used exactly twice (its two ends) ·
  * `f` booster (speeds the ball up) · `+` clock (adds time to the limit).
- * Boss rooms only: `c` core, a filled rectangle of cells that makes one big brick · `t` turret ·
- * `s` spawner · `g` phantom (see `BOSS`).
+ * Boss rooms only: `c` core, a filled rectangle of cells that makes one big brick. Boss and
+ * challenge rooms: `t` turret · `s` spawner · `g` phantom (see `BOSS`).
  *
  * `room` is the kind of room it fills (standard unless given); `tier` says how deep in a run it
  * tends to appear (see `RUN.tierWeights`), and for bosses their order. `threat` is the 1 to 3 pips
@@ -29,6 +29,8 @@ export interface StageTemplate {
   formations?: readonly FormationDef[];
   /** What a boss room's core and emitters do; required for one. */
   boss?: BossDef;
+  /** How a challenge room's emitters act; needed for them to act at all. */
+  emitters?: EmitterTimings;
 }
 
 /** How a turret aims: down, at the paddle, or three down in a spread. */
@@ -45,13 +47,17 @@ export interface BossDef {
   vault?: { rows: readonly [number, number]; cols: readonly [number, number] };
 }
 
-/** Seconds between `turret`, `spawner` and `phantom` actions (left out: that kind stays idle). `pace` speeds the formations. */
-export interface BossPhase {
-  at: number;
+/** Seconds between `turret`, `spawner` and `phantom` actions (left out: that kind stays idle), and how turrets fire. */
+export interface EmitterTimings {
   fire?: FirePattern;
   turret?: number;
   spawner?: number;
   phantom?: number;
+}
+
+/** A boss phase's emitters; `pace` speeds the formations. */
+export interface BossPhase extends EmitterTimings {
+  at: number;
   pace?: number;
 }
 
@@ -80,6 +86,8 @@ export interface StageDef {
   formationPace: number;
   /** Set in boss rooms. */
   boss: BossDef | null;
+  /** Set in challenge rooms whose emitters act. */
+  emitters: EmitterTimings | null;
   /** Pips announcing the room. */
   threat: number;
   /** Seconds of play to earn the time bonus. */

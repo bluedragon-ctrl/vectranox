@@ -3,7 +3,7 @@ import { ROOM_LABEL } from '../config/run';
 import { BOSS, FORMATION, PINBALL, TARGET_COLORS } from '../config/tuning';
 import { within } from '../game/formation';
 import { BRICK_CODES, isPinballCode, isPortalCode, PAD_CODES } from '../game/layout';
-import type { BossDef, FormationDef, StageTemplate } from './stages';
+import type { BossDef, EmitterTimings, FormationDef, StageTemplate } from './stages';
 
 /** Rows of bricks that fit above the formation line. */
 export const MAX_ROWS = Math.floor((FIELD.height - BRICK.top - FORMATION.line) / BRICK.height);
@@ -115,27 +115,61 @@ export function isBossDef(value: unknown): value is BossDef {
   return vault === undefined || (isRecord(vault) && isPair(vault.rows) && isPair(vault.cols));
 }
 
+const EMITTERS = ['turret', 'spawner', 'phantom'] as const;
+const FIRE_PATTERNS: readonly string[] = ['straight', 'aimed', 'fan'];
+
+/** Whether parsed JSON has an emitters block's shape; `checkRoom` then judges its values. */
+export function isEmitterTimings(value: unknown): value is EmitterTimings {
+  return isRecord(value) && Object.values(value).every((v) => typeof v === 'number' || typeof v === 'string');
+}
+
+/** One set of emitter timings (`label` names it): intervals past the wind-up, a known fire pattern, and emitters to use them. */
+function checkTimings(label: string, timings: EmitterTimings, present: ReadonlySet<string | undefined>): Problem[] {
+  const problems: Problem[] = [];
+  for (const kind of EMITTERS) {
+    const interval = timings[kind];
+    if (interval !== undefined && !(interval > BOSS.windup)) problems.push(error(`${label}: ${kind} must be longer than the ${BOSS.windup} s wind-up.`));
+    if (interval !== undefined && !present.has(kind)) problems.push(warning(`${label} uses a ${kind}, but the room has none.`));
+  }
+  if (timings.fire !== undefined && !FIRE_PATTERNS.includes(timings.fire)) problems.push(error(`${label}: fire must be one of ${FIRE_PATTERNS.join(', ')}.`));
+  return problems;
+}
+
+/** A challenge room's emitters act by its emitters block; one without it has none that act. */
+function checkEmitters(room: StageTemplate, present: ReadonlySet<string | undefined>): Problem[] {
+  const placed = EMITTERS.filter((kind) => present.has(kind));
+  const { emitters } = room;
+  if (!emitters) return placed.length > 0 ? [warning(`The room has ${placed.join(', ')} but no emitters block, so they never act.`)] : [];
+  const problems = checkTimings('Emitters', emitters, present);
+  for (const kind of placed) {
+    if (emitters[kind] === undefined) problems.push(warning(`The emitters block has no time for the ${kind}, so it never acts.`));
+  }
+  return problems;
+}
+
 function checkBoss(room: StageTemplate): Problem[] {
   const present = new Set(cells(room).map((c) => BRICK_CODES[c.ch]?.kind));
   if (room.room !== 'boss') {
-    const bossOnly = (['core', 'turret', 'spawner', 'phantom'] as const).filter((kind) => present.has(kind));
-    return bossOnly.length > 0 ? [error(`Only boss rooms can have these: ${bossOnly.join(', ')}.`)] : [];
+    const problems: Problem[] = [];
+    if (present.has('core')) problems.push(error('Only boss rooms can have a core.'));
+    if (room.room === 'challenge') return [...problems, ...checkEmitters(room, present)];
+    const emitters = EMITTERS.filter((kind) => present.has(kind));
+    if (emitters.length > 0) problems.push(error(`Only boss and challenge rooms can have these: ${emitters.join(', ')}.`));
+    if (room.emitters) problems.push(error('Only challenge rooms take an emitters block.'));
+    return problems;
   }
 
   const { boss } = room;
   if (!boss) return [error('A boss room needs a boss block.')];
   const problems = checkCore(room);
+  if (room.emitters) problems.push(error('A boss sets its emitters in its phases, not in an emitters block.'));
   if (!(boss.hp > 0)) problems.push(error('The boss needs hp above 0.'));
   const { phases, vault } = boss;
   if (phases.length === 0 || phases[0]?.at !== 1) problems.push(error('The first boss phase must have at: 1.'));
   phases.forEach((phase, i) => {
     const before = phases[i - 1];
     if (phase.at <= 0 || (before && phase.at >= before.at)) problems.push(error(`Boss phase ${i + 1}: at must be above 0 and below the phase before.`));
-    for (const kind of ['turret', 'spawner', 'phantom'] as const) {
-      const interval = phase[kind];
-      if (interval !== undefined && !(interval > BOSS.windup)) problems.push(error(`Boss phase ${i + 1}: ${kind} must be longer than the ${BOSS.windup} s wind-up.`));
-      if (interval !== undefined && !present.has(kind)) problems.push(warning(`Boss phase ${i + 1} uses a ${kind}, but the room has none.`));
-    }
+    problems.push(...checkTimings(`Boss phase ${i + 1}`, phase, present));
   });
   if (vault) {
     problems.push(...checkRange('Vault', 'rows', vault.rows, MAX_ROWS), ...checkRange('Vault', 'columns', vault.cols, BRICK.cols));

@@ -9,8 +9,9 @@ import { aim, bounceFlat, closer, MAX_BOUNCES, normalizeVelocity, SKIN, sweepRec
 import type { Brick, EmitterKind, HitSource, ShadowBall } from './types';
 
 /**
- * What happens only in boss rooms: the emitters (turrets, spawners, phantoms) and what they send
- * out, and the core's phases up to the kill. The phases themselves are kept by `BossFight`.
+ * What happens in boss rooms: the emitters (turrets, spawners, phantoms) and what they send out,
+ * which challenge rooms can have too, and the core's phases up to the kill. The phases themselves
+ * are kept by `BossFight`, the emitters' turns by `Emitters`.
  */
 export class BossRoom {
   constructor(private readonly game: Game) {}
@@ -31,7 +32,7 @@ export class BossRoom {
   }
 
   private fireTurret(br: Brick): void {
-    const pattern = this.game.fight?.phase.fire ?? 'straight';
+    const pattern = this.game.emitters?.timings.fire ?? 'straight';
     const x = br.x + br.w / 2;
     const y = br.y;
     const down = -Math.PI / 2;
