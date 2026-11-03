@@ -123,15 +123,33 @@ export class Pinball {
     if (!code) return;
     played.length = 0;
     const { award } = SECRET_CODES[code];
+    const game = this.game;
     let points = 0;
-    if (award.kind === 'points') {
-      points = award.points * this.game.multiplier;
-      this.game.score += points;
-    } else if (award.kind === 'multiplier') {
-      for (let i = 0; i < award.steps; i++) this.game.raiseMultiplier();
-    } else {
-      this.game.powers.chargeBalls(award.charges);
+    let gained = 0;
+    switch (award.kind) {
+      case 'points':
+      case 'jackpot':
+        points = award.points;
+        break;
+      case 'multiplier':
+        for (let i = 0; i < award.steps; i++) game.raiseMultiplier();
+        break;
+      case 'charge':
+        game.powers.chargeBalls(award.charges);
+        break;
+      case 'life':
+        gained = Math.min(POWER.maxLives, game.lives + 1) - game.lives;
+        game.lives += gained;
+        if (!gained) points = award.fallback;
+        break;
+      case 'credits':
+        if (game.mode === 'challenge') points = award.fallback;
+        else game.credits += gained = award.credits;
+        break;
     }
-    this.game.events.emit('secretCode', { code, points, multiplier: this.game.multiplier });
+    points *= game.multiplier;
+    game.score += points;
+    if (award.kind === 'jackpot') game.multiplierStep = PINBALL.multipliers.length - 1;
+    game.events.emit('secretCode', { code, points, gained, multiplier: game.multiplier });
   }
 }

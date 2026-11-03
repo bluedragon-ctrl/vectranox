@@ -1,6 +1,6 @@
 import { AUDIO } from '../config/audio';
 import { FIELD } from '../config/game';
-import { POWER_LOOK } from '../config/tuning';
+import { POWER_LOOK, SECRET_CODES } from '../config/tuning';
 import type { Game } from '../game/Game';
 import { RARE_POWERS } from '../game/powers';
 import type { HitSource } from '../game/types';
@@ -175,12 +175,18 @@ export class GameSounds {
       ev.on('targetBank', () => {
         this.play('bank', (s) => s.notes([0, 4, 7, 12, 16].map((n) => note(n, C5)), 0.05, { type: 'square', cutoff: 3200, dur: 0.12, gain: 0.07 }));
       }),
-      ev.on('secretCode', () => {
-        // A rising major-seventh run, longer and brighter than the bank, landing on a held chord and a shimmer.
+      ev.on('secretCode', ({ code }) => {
+        const jackpot = SECRET_CODES[code].award.kind === 'jackpot';
+        // A rising major-seventh run, longer and brighter than the bank, landing on a held chord and a shimmer;
+        // the jackpot adds a second run an octave up and a low boom.
         this.play('secret', (s) => {
           s.notes([0, 4, 7, 11, 12, 16, 19, 23, 24].map((n) => note(n, C5)), 0.045, { type: 'triangle', cutoff: 5000, dur: 0.16, gain: 0.09 });
           s.notes([note(12, C5), note(16, C5), note(19, C5), note(23, C5)], 0, { type: 'square', cutoff: 3600, at: 0.4, dur: 0.9, gain: 0.05 });
           s.noise({ filter: 'highpass', freq: 6000, at: 0.4, dur: 0.8, gain: 0.05 });
+          if (!jackpot) return;
+          s.notes([12, 16, 19, 23, 24, 28, 31, 35, 36].map((n) => note(n, C5)), 0.045, { type: 'triangle', cutoff: 6000, at: 0.9, dur: 0.16, gain: 0.07 });
+          s.notes([note(0, C5), note(4, C5), note(7, C5), note(12, C5)], 0, { type: 'square', cutoff: 3600, at: 1.35, dur: 1.4, gain: 0.05 });
+          s.tone({ freq: 110, to: 40, at: 0.4, dur: 0.8, gain: 0.3 });
         });
       }),
       ev.on('portalWarp', ({ x }) => {

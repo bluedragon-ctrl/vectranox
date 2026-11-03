@@ -290,6 +290,22 @@ body {
   animation: secret-rainbow 0.9s linear infinite;
 }
 
+/* The jackpot: gold, bigger and held longer. */
+.secret-banner.jackpot {
+  animation-duration: 4s;
+}
+
+.secret-banner.jackpot b {
+  font-size: clamp(42px, 5.4vw, 84px);
+  background-image: linear-gradient(90deg, #fff3b0, var(--yellow), #ff9f1c, var(--yellow), #fff3b0);
+  filter: drop-shadow(0 0 14px rgba(255, 210, 63, 0.75));
+}
+
+.secret-banner.jackpot i {
+  color: var(--yellow);
+  text-shadow: 0 0 10px rgba(255, 210, 63, 0.8);
+}
+
 #popups.paused .secret-banner,
 #popups.paused .secret-banner b {
   animation-play-state: paused;

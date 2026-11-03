@@ -12,7 +12,7 @@ type ToClient = (x: number, y: number) => { x: number; y: number };
  * the ball and paddle; it never goes inside the field. Each bonus brick replaces it with the chain count
  * and that brick's bonus; a finished chain shows its total a little longer. Points shown include the
  * score multiplier, and while it is above ×1 the badge says so. A secret code instead gets a big
- * banner across the middle of the field, beside whatever badge is up. Pure CSS animation; `setPaused` holds it.
+ * banner across the middle of the field, beside whatever badge is up; the jackpot's is gold and longer. Pure CSS animation; `setPaused` holds it.
  */
 export class ChainPopups {
   private unsubscribe: (() => void)[] = [];
@@ -40,15 +40,23 @@ export class ChainPopups {
       ev.on('targetBank', ({ multiplier, bonus }) => {
         this.show('summary bank', 1, `TARGET BANK +${bonus}`, `×${multiplier}`, 'MULTIPLIER');
       }),
-      ev.on('secretCode', ({ code, points, multiplier }) => {
+      ev.on('secretCode', ({ code, points, gained, multiplier }) => {
         const { label, award } = SECRET_CODES[code];
+        const multi = multiplier > 1 ? ` · MULTI ×${multiplier}` : '';
+        // A life or credits award that fell back to points shows the points.
         const value =
-          award.kind === 'points'
-            ? `+${points}${multiplier > 1 ? ` · MULTI ×${multiplier}` : ''}`
-            : award.kind === 'multiplier'
-              ? `MULTIPLIER ×${multiplier}`
-              : `DETONATOR ×${award.charges}`;
-        this.showSecret(label, value);
+          award.kind === 'multiplier'
+            ? `MULTIPLIER ×${multiplier}`
+            : award.kind === 'charge'
+              ? `DETONATOR ×${award.charges}`
+              : award.kind === 'jackpot'
+                ? `JACKPOT +${points} · MULTI ×${multiplier}`
+                : gained > 0
+                  ? award.kind === 'life'
+                    ? '+1 LIFE'
+                    : `+${gained} CREDITS`
+                  : `+${points}${multi}`;
+        this.showSecret(label, value, award.kind === 'jackpot');
       }),
     ];
   }
@@ -63,10 +71,10 @@ export class ChainPopups {
   }
 
   /** The secret code banner, centred across the field above the middle, clear of the room overlay; a new one replaces it. */
-  private showSecret(label: string, value: string): void {
+  private showSecret(label: string, value: string, jackpot: boolean): void {
     this.root.querySelector('.secret-banner')?.remove();
     const el = document.createElement('div');
-    el.className = 'secret-banner';
+    el.className = jackpot ? 'secret-banner jackpot' : 'secret-banner';
     for (const [tag, text] of [['span', 'SECRET UNLOCKED'], ['b', label], ['i', value]] as const) {
       el.appendChild(document.createElement(tag)).textContent = text;
     }

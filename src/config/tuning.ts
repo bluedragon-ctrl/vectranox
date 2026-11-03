@@ -227,10 +227,21 @@ export const TARGET_COLORS = ['green', 'red', 'blue', 'yellow', 'magenta', 'cyan
 export type TargetColor = (typeof TARGET_COLORS)[number];
 
 /**
- * What a secret code gives: points (scaled by the score multiplier), `steps` along the multiplier,
- * or detonator charges on every ball in play.
+ * What a secret code gives:
+ * - `points`: points, scaled by the score multiplier.
+ * - `multiplier`: `steps` along the multiplier.
+ * - `charge`: detonator charges on every ball in play.
+ * - `life`: an extra life; with lives already full, `fallback` points instead (scaled).
+ * - `credits`: credits for the pick between rooms; in a challenge, which has none, `fallback` points instead (scaled).
+ * - `jackpot`: `points` (scaled by the multiplier as it was), then the multiplier straight to the top.
  */
-export type SecretAward = { kind: 'points'; points: number } | { kind: 'multiplier'; steps: number } | { kind: 'charge'; charges: number };
+export type SecretAward =
+  | { kind: 'points'; points: number }
+  | { kind: 'multiplier'; steps: number }
+  | { kind: 'charge'; charges: number }
+  | { kind: 'life'; fallback: number }
+  | { kind: 'credits'; credits: number; fallback: number }
+  | { kind: 'jackpot'; points: number };
 
 /**
  * Secret codes: hitting targets so that their colours, in order, end with `sequence` pays `award`.
@@ -239,11 +250,20 @@ export type SecretAward = { kind: 'points'; points: number } | { kind: 'multipli
  * played again in the same room. A room without a colour a code needs can't play it. Nothing in
  * the game lists them: they show only when one fires. They are hard to play on purpose, so they
  * pay far more than a target bank and the whole field celebrates one.
+ * No code may end partway through another (as green, red, blue, yellow would inside a forward
+ * rainbow): it would fire first and clear the colours, so the longer one could never be played.
  */
 export const SECRET_CODES = {
   spectrum: { label: 'SPECTRUM', sequence: ['red', 'green', 'blue'], award: { kind: 'points', points: 10000 } },
   reverse: { label: 'REVERSE', sequence: ['blue', 'green', 'red'], award: { kind: 'multiplier', steps: 2 } },
   greenlight: { label: 'GREEN LIGHT', sequence: ['green', 'green', 'green'], award: { kind: 'charge', charges: 3 } },
+  rollcall: { label: 'ROLL CALL', sequence: ['green', 'red', 'blue', 'yellow'], award: { kind: 'life', fallback: 5000 } },
+  goldrush: { label: 'GOLD RUSH', sequence: ['yellow', 'yellow', 'yellow'], award: { kind: 'credits', credits: 2, fallback: 5000 } },
+  countdown: {
+    label: 'COUNTDOWN',
+    sequence: ['cyan', 'magenta', 'yellow', 'blue', 'red', 'green'],
+    award: { kind: 'jackpot', points: 50000 },
+  },
 } as const satisfies Record<string, { label: string; sequence: readonly TargetColor[]; award: SecretAward }>;
 export type SecretCode = keyof typeof SECRET_CODES;
 

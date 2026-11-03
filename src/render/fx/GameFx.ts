@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { BRICK, FIELD } from '../../config/game';
+import { SECRET_CODES } from '../../config/tuning';
 import type { Game } from '../../game/Game';
 import type { HitSource } from '../../game/types';
 import { BRICK_GAP, brickTint, COLORS, EXPLOSION_COLOR, POWER_COLORS, TARGET_COLOR, TARGET_LAMP_COLORS } from '../palette';
@@ -195,14 +196,16 @@ export class GameFx {
         this.shake.add(0.2);
         this.pulse(TARGET_COLOR, 0.05, 0.4);
       }),
-      // Every lamp bursts into sparks of its own colour, and the field flashes harder than for a bank.
-      ev.on('secretCode', () => {
+      // Every lamp bursts into sparks of its own colour, and the field flashes harder than for a bank;
+      // the jackpot flashes gold and harder still.
+      ev.on('secretCode', ({ code }) => {
+        const jackpot = SECRET_CODES[code].award.kind === 'jackpot';
         this.secretAge = 0;
         for (const t of game.targets) {
           this.particles.glints(t.x, t.y, { count: 14, color: TARGET_LAMP_COLORS[t.color], speed: [140, 380], life: [0.35, 0.7], size: [3, 6], drag: 3 });
         }
-        this.shake.add(0.5);
-        this.pulse(SECRET_FLASH, 0.22, 0.9);
+        this.shake.add(jackpot ? 0.8 : 0.5);
+        this.pulse(jackpot ? COLORS.yellow : SECRET_FLASH, jackpot ? 0.35 : 0.22, jackpot ? 1.2 : 0.9);
       }),
       ev.on('stageEvent', ({ kind }) => {
         if (kind !== 'pulse') return;
