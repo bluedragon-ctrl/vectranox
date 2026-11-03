@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { FIELD, PALETTE, SIM } from '../config/game';
 import { backdropOf } from '../config/run';
-import { BOSS, FOCUS, FORMATION, PINBALL, POWER, POWER_LOOK } from '../config/tuning';
+import { BOSS, FOCUS, FORMATION, PINBALL, POWER, POWER_LOOK, TARGET_COLORS } from '../config/tuning';
 import { lerp } from '../core/math';
 import type { VisualSettings } from '../core/settings';
 import type { Game } from '../game/Game';
@@ -53,6 +53,12 @@ const AREA_FLASH = 0.35;
 const HEAL_FLASH = { ticks: 30, strength: 0.25 } as const;
 /** A completed target bank blinks this many times over `time` seconds, at this white flash; reduce-FX keeps only the hit flash. */
 const BANK_BLINK = { time: 1, blinks: 3, strength: 0.35 } as const;
+/**
+ * A secret code lights every lamp for `time` seconds, each running through the lamp colours
+ * `cycles` times a second, glowing at `glow` fading to `fade`; any more and the colours wash out
+ * to white. Reduce-FX lights them steady, no cycling.
+ */
+const SECRET_SHOW = { time: 2.4, cycles: 8, glow: 0.45, fade: 0.15 } as const;
 /**
  * A completed bank's circuit: a beam races round the pins in `race` seconds and the closed loop
  * holds until `time`, fading over the last `fade`. Reduce-FX shows the whole loop, dimmed, with no race.
@@ -469,9 +475,14 @@ export class Renderer {
     this.targets.begin();
     const age = this.fx.bankAge;
     const blink = !this.settings.reduceFx && age < BANK_BLINK.time && ((age * BANK_BLINK.blinks) / BANK_BLINK.time) % 1 < 0.5;
+    const secret = this.fx.secretAge;
+    const show = secret < SECRET_SHOW.time;
+    const cycle = this.settings.reduceFx ? 0 : Math.floor(secret * SECRET_SHOW.cycles);
+    const glow = show ? lerp(SECRET_SHOW.glow, SECRET_SHOW.fade, secret / SECRET_SHOW.time) * this.fx.brickFlash : 0;
     for (const t of game.targets) {
       const flash = fadeOut(game.tick - t.hitTick, FLASH_TICKS) * this.fx.brickFlash;
-      this.targets.push(t.x, t.y, t.r * 2, t.r * 2, TARGET_LAMP_COLORS[t.color], 1, t.lit || blink ? 1 : 0, Math.max(flash * flash, blink ? BANK_BLINK.strength : 0));
+      const color = show ? TARGET_LAMP_COLORS[TARGET_COLORS[(TARGET_COLORS.indexOf(t.color) + cycle) % TARGET_COLORS.length]!] : TARGET_LAMP_COLORS[t.color];
+      this.targets.push(t.x, t.y, t.r * 2, t.r * 2, color, 1, t.lit || blink || show ? 1 : 0, Math.max(flash * flash, blink ? BANK_BLINK.strength : 0, glow));
     }
     this.targets.commit();
   }

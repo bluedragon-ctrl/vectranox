@@ -11,7 +11,8 @@ type ToClient = (x: number, y: number) => { x: number; y: number };
  * Chain bonus, target bank and secret code feedback: one badge just outside the playfield's bottom-right corner, clear of
  * the ball and paddle; it never goes inside the field. Each bonus brick replaces it with the chain count
  * and that brick's bonus; a finished chain shows its total a little longer. Points shown include the
- * score multiplier, and while it is above ×1 the badge says so. Pure CSS animation; `setPaused` holds it.
+ * score multiplier, and while it is above ×1 the badge says so. A secret code instead gets a big
+ * banner across the middle of the field, beside whatever badge is up; the jackpot's is gold and longer. Pure CSS animation; `setPaused` holds it.
  */
 export class ChainPopups {
   private unsubscribe: (() => void)[] = [];
@@ -39,11 +40,23 @@ export class ChainPopups {
       ev.on('targetBank', ({ multiplier, bonus }) => {
         this.show('summary bank', 1, `TARGET BANK +${bonus}`, `×${multiplier}`, 'MULTIPLIER');
       }),
-      ev.on('secretCode', ({ code, points, multiplier }) => {
+      ev.on('secretCode', ({ code, points, gained, multiplier }) => {
         const { label, award } = SECRET_CODES[code];
-        const value = award.kind === 'points' ? `+${points}` : award.kind === 'multiplier' ? `×${multiplier}` : 'CHARGED';
-        const tag = award.kind === 'points' ? this.multiTag(multiplier) : award.kind === 'multiplier' ? 'MULTIPLIER' : 'DETONATOR';
-        this.show('summary secret', 1, `SECRET · ${label}`, value, tag);
+        const multi = multiplier > 1 ? ` · MULTI ×${multiplier}` : '';
+        // A life or credits award that fell back to points shows the points.
+        const value =
+          award.kind === 'multiplier'
+            ? `MULTIPLIER ×${multiplier}`
+            : award.kind === 'charge'
+              ? `DETONATOR ×${award.charges}`
+              : award.kind === 'jackpot'
+                ? `JACKPOT +${points} · MULTI ×${multiplier}`
+                : gained > 0
+                  ? award.kind === 'life'
+                    ? '+1 LIFE'
+                    : `+${gained} CREDITS`
+                  : `+${points}${multi}`;
+        this.showSecret(label, value, award.kind === 'jackpot');
       }),
     ];
   }
@@ -55,6 +68,23 @@ export class ChainPopups {
   /** Says the points were multiplied, when they were. */
   private multiTag(multiplier: number): string | undefined {
     return multiplier > 1 ? `MULTI ×${multiplier}` : undefined;
+  }
+
+  /** The secret code banner, centred across the field above the middle, clear of the room overlay; a new one replaces it. */
+  private showSecret(label: string, value: string, jackpot: boolean): void {
+    this.root.querySelector('.secret-banner')?.remove();
+    const el = document.createElement('div');
+    el.className = jackpot ? 'secret-banner jackpot' : 'secret-banner';
+    for (const [tag, text] of [['span', 'SECRET UNLOCKED'], ['b', label], ['i', value]] as const) {
+      el.appendChild(document.createElement(tag)).textContent = text;
+    }
+    el.addEventListener('animationend', (e) => {
+      if (e.target === el) el.remove();
+    });
+    const pos = this.toClient(FIELD.width / 2, FIELD.height * 0.68);
+    el.style.left = `${pos.x}px`;
+    el.style.top = `${pos.y}px`;
+    this.root.appendChild(el);
   }
 
   private show(kind: string, tier: number, label: string, value: string, tagText?: string): void {
@@ -69,7 +99,8 @@ export class ChainPopups {
     const big = el.appendChild(document.createElement('b'));
     big.textContent = value;
     el.addEventListener('animationend', () => el.remove());
-    this.root.replaceChildren(el);
+    this.root.querySelector('.popup')?.remove();
+    this.root.appendChild(el);
     // Placed per popup, so it follows window resizes. A narrow window leaves no room past the
     // wall; then it docks over the side panel instead, level with the field's bottom.
     const pos = this.toClient(FIELD.width, 0);

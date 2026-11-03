@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { BRICK, FIELD } from '../../config/game';
+import { SECRET_CODES } from '../../config/tuning';
 import type { Game } from '../../game/Game';
 import type { HitSource } from '../../game/types';
-import { BRICK_GAP, brickTint, COLORS, EXPLOSION_COLOR, POWER_COLORS, TARGET_COLOR } from '../palette';
+import { BRICK_GAP, brickTint, COLORS, EXPLOSION_COLOR, POWER_COLORS, TARGET_COLOR, TARGET_LAMP_COLORS } from '../palette';
 import { fractureRect } from './fracture';
 import { Particles } from './Particles';
 import { Shake } from './Shake';
@@ -27,7 +28,7 @@ interface WallHit {
 
 /**
  * Turns simulation events into cosmetic effects: shake, flashes and pulses. Particles are
- * reserved for bricks breaking.
+ * reserved for bricks breaking and secret codes.
  * Reads game state only to place effects (brick positions); never writes to it.
  */
 export class GameFx {
@@ -46,6 +47,8 @@ export class GameFx {
   focusFlash = 0;
   /** Seconds since a target bank was last completed. */
   bankAge = Infinity;
+  /** Seconds since a secret code was last played. */
+  secretAge = Infinity;
   readonly barrierHit = { x: 0, strength: 0 };
   /** Explosions going off: a ring per centre, growing to the radius and fading, on their own clock since they chain. */
   explosions: { x: number; y: number; radius: number; strength: number; color: THREE.Color }[] = [];
@@ -79,6 +82,7 @@ export class GameFx {
     this.laserFlash = Math.max(0, this.laserFlash - dt * 6);
     this.focusFlash = Math.max(0, this.focusFlash - dt * 3);
     this.bankAge += dt;
+    this.secretAge += dt;
     this.barrierHit.strength = Math.max(0, this.barrierHit.strength - dt * 2.5);
     for (const e of this.explosions) e.strength -= dt * 4;
     this.explosions = this.explosions.filter((e) => e.strength > 0);
@@ -94,6 +98,7 @@ export class GameFx {
     this.areaHits.clear();
     this.explosions = [];
     this.bankAge = Infinity;
+    this.secretAge = Infinity;
     const ev = game.events;
     this.unsubscribe = [
       ev.on('wallHit', ({ side, x, y }) => {
@@ -191,9 +196,16 @@ export class GameFx {
         this.shake.add(0.2);
         this.pulse(TARGET_COLOR, 0.05, 0.4);
       }),
-      ev.on('secretCode', () => {
-        this.shake.add(0.25);
-        this.pulse(SECRET_FLASH, 0.08, 0.5);
+      // Every lamp bursts into sparks of its own colour, and the field flashes harder than for a bank;
+      // the jackpot flashes gold and harder still.
+      ev.on('secretCode', ({ code }) => {
+        const jackpot = SECRET_CODES[code].award.kind === 'jackpot';
+        this.secretAge = 0;
+        for (const t of game.targets) {
+          this.particles.glints(t.x, t.y, { count: 14, color: TARGET_LAMP_COLORS[t.color], speed: [140, 380], life: [0.35, 0.7], size: [3, 6], drag: 3 });
+        }
+        this.shake.add(jackpot ? 0.8 : 0.5);
+        this.pulse(jackpot ? COLORS.yellow : SECRET_FLASH, jackpot ? 0.35 : 0.22, jackpot ? 1.2 : 0.9);
       }),
       ev.on('stageEvent', ({ kind }) => {
         if (kind !== 'pulse') return;
