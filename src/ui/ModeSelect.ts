@@ -1,24 +1,35 @@
-import type { GameMode } from '../config/run';
+import { RUN, type GameMode } from '../config/run';
 
-const LABELS: Readonly<Record<GameMode, string>> = {
-  run: 'RUN',
-  challenge: 'CHALLENGE',
+const CARDS: Readonly<Record<GameMode, { label: string; detail: string }>> = {
+  run: { label: 'RUN', detail: `${RUN.rooms} ROOMS\nMODS · BOSSES` },
+  challenge: { label: 'CHALLENGE', detail: 'ONE ROOM\nBEAT THE CLOCK · NO MODS' },
 };
 
-/** The title and end screens' choice between a run and a challenge. Only touches the DOM on change. */
+const HINT = '← → MODE  ·  ENTER START';
+
+/**
+ * The title and end screens' menu: a card for a run and one for a challenge, the picked one lit,
+ * and a big START button under them. Only touches the DOM on change.
+ */
 export class ModeSelect {
-  private readonly buttons: Record<GameMode, HTMLButtonElement>;
+  private readonly cards: Record<GameMode, HTMLButtonElement>;
   private shown: boolean | null = null;
 
   constructor(
     private root: HTMLElement,
     mode: GameMode,
     onPick: (mode: GameMode) => void,
+    onStart: () => void,
   ) {
     const make = (m: GameMode): HTMLButtonElement => {
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.textContent = LABELS[m];
+      btn.className = 'mode-card';
+      const label = document.createElement('b');
+      label.textContent = CARDS[m].label;
+      const detail = document.createElement('span');
+      detail.textContent = CARDS[m].detail;
+      btn.append(label, detail);
       btn.addEventListener('click', () => {
         // Drop focus so Space/Enter keep starting the game instead of clicking again.
         btn.blur();
@@ -26,13 +37,34 @@ export class ModeSelect {
       });
       return btn;
     };
-    this.buttons = { run: make('run'), challenge: make('challenge') };
-    root.replaceChildren(this.buttons.run, this.buttons.challenge);
+    this.cards = { run: make('run'), challenge: make('challenge') };
+
+    const modes = document.createElement('div');
+    modes.className = 'modes';
+    modes.append(this.cards.run, this.cards.challenge);
+
+    const start = document.createElement('button');
+    start.type = 'button';
+    start.className = 'start';
+    start.textContent = 'START';
+    start.addEventListener('click', () => {
+      start.blur();
+      onStart();
+    });
+
+    const hint = document.createElement('p');
+    hint.className = 'hint';
+    hint.textContent = HINT;
+
+    root.replaceChildren(modes, start, hint);
     this.select(mode);
   }
 
   select(mode: GameMode): void {
-    for (const [m, btn] of Object.entries(this.buttons)) btn.classList.toggle('on', m === mode);
+    for (const [m, btn] of Object.entries(this.cards)) {
+      btn.classList.toggle('on', m === mode);
+      btn.setAttribute('aria-pressed', String(m === mode));
+    }
   }
 
   show(visible: boolean): void {

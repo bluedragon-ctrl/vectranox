@@ -431,12 +431,13 @@ body {
   display: grid;
 }
 
-/* Run or challenge, on the title and end screens. */
+/* Run or challenge, then START, on the title and end screens. */
 #mode-select {
   display: flex;
-  justify-content: center;
-  gap: 12px;
-  margin-top: 12px;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  margin-top: 16px;
   pointer-events: auto;
 }
 
@@ -444,28 +445,107 @@ body {
   display: none;
 }
 
-#mode-select button {
-  padding: 6px 14px;
-  font-family: var(--display);
-  font-weight: 500;
-  font-size: 12px;
-  letter-spacing: 0.2em;
-  color: var(--text-dim);
-  background: transparent;
-  border: 1px solid var(--panel-border);
-  cursor: pointer;
+#mode-select .modes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  width: 100%;
+  max-width: 460px;
 }
 
-#mode-select button:hover,
-#mode-select button:focus-visible {
+#mode-select .mode-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 10px;
+  font-family: var(--mono);
+  color: var(--text-dim);
+  background: rgba(14, 4, 36, 0.6);
+  border: 1px solid var(--panel-border);
+  cursor: pointer;
+  transition:
+    color 0.12s,
+    border-color 0.12s,
+    box-shadow 0.12s;
+}
+
+#mode-select .mode-card b {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 17px;
+  letter-spacing: 0.16em;
+}
+
+#mode-select .mode-card span {
+  font-size: 12px;
+  line-height: 1.5;
+  letter-spacing: 0.06em;
+  white-space: pre-line;
+}
+
+#mode-select .mode-card:hover,
+#mode-select .mode-card:focus-visible {
   color: var(--text);
+  border-color: var(--purple);
   outline: none;
 }
 
-#mode-select button.on {
+#mode-select .mode-card.on {
   color: var(--cyan);
   border-color: var(--cyan);
-  box-shadow: 0 0 10px rgba(45, 226, 255, 0.35);
+  background: rgba(45, 226, 255, 0.08);
+  box-shadow:
+    0 0 12px rgba(45, 226, 255, 0.35),
+    inset 0 0 12px rgba(45, 226, 255, 0.12);
+}
+
+#mode-select .mode-card.on b {
+  text-shadow: 0 0 8px rgba(45, 226, 255, 0.7);
+}
+
+#mode-select .start {
+  width: 100%;
+  max-width: 460px;
+  padding: 14px 20px;
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: clamp(20px, 2.2vw, 28px);
+  letter-spacing: 0.3em;
+  text-indent: 0.3em;
+  color: var(--magenta);
+  background: rgba(255, 42, 157, 0.08);
+  border: 2px solid var(--magenta);
+  box-shadow:
+    0 0 14px rgba(255, 42, 157, 0.45),
+    inset 0 0 14px rgba(255, 42, 157, 0.15);
+  text-shadow: 0 0 8px rgba(255, 42, 157, 0.8);
+  cursor: pointer;
+  animation: start-pulse 1.6s ease-in-out infinite;
+}
+
+#mode-select .start:hover,
+#mode-select .start:focus-visible {
+  color: var(--bg);
+  background: var(--magenta);
+  text-shadow: none;
+  outline: none;
+  animation: none;
+}
+
+@keyframes start-pulse {
+  50% {
+    box-shadow:
+      0 0 24px rgba(255, 42, 157, 0.75),
+      inset 0 0 18px rgba(255, 42, 157, 0.25);
+  }
+}
+
+#overlay #mode-select .hint {
+  margin-top: 0;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
 }
 
 /* The field on the end screen for a run that made the table. */
@@ -627,6 +707,10 @@ body {
   }
 
   .secret-banner b {
+    animation: none;
+  }
+
+  #mode-select .start {
     animation: none;
   }
 }
