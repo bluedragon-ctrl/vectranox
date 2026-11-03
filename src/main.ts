@@ -37,7 +37,6 @@ type UiState = 'title' | 'playing' | 'paused' | 'between' | 'naming' | 'ended';
 /** Seconds the final banner stays up in-game before the end screen accepts input. */
 const END_DELAY = 1.5;
 const START_HINT = 'CLICK / ENTER TO START';
-const MODE_HINT = 'C  RUN / CHALLENGE';
 const CONTROLS_HINT = 'MOVE  ← → / A D / MOUSE\nLAUNCH · FIRE  SPACE / CLICK\nHOLD TO SLOW  X / RIGHT CLICK\nPAUSE  P / ESC\nMUSIC  M · SFX  F';
 
 function setText(node: HTMLElement, text: string): void {
@@ -360,9 +359,18 @@ window.addEventListener(
       }
       return;
     }
-    if (e.code === 'KeyC' && choosingMode()) {
-      setMode(mode === 'run' ? 'challenge' : 'run');
-      return;
+    if (choosingMode()) {
+      // ← → (or A D) pick the card on that side; C flips between them.
+      const pick =
+        e.code === 'ArrowLeft' || e.code === 'KeyA' ? 'run'
+        : e.code === 'ArrowRight' || e.code === 'KeyD' ? 'challenge'
+        : e.code === 'KeyC' ? (mode === 'run' ? 'challenge' : 'run')
+        : null;
+      if (pick) {
+        e.preventDefault();
+        setMode(pick);
+        return;
+      }
     }
     if (e.code === 'Enter' || e.code === 'NumpadEnter' || e.code === 'Space' || (ui === 'paused' && e.code === 'KeyP')) {
       e.preventDefault();
@@ -376,13 +384,13 @@ window.addEventListener(
 function overlayContent(): OverlayContent | null {
   switch (ui) {
     case 'title':
-      return { title: 'READY', sub: `${modeLine(game)}\n${START_HINT}\n${MODE_HINT}`, menu: true };
+      return { title: 'SELECT MODE', menu: true };
     case 'paused':
       return { title: 'PAUSED', sub: `${START_HINT}\n\n${CONTROLS_HINT}`, menu: true };
     case 'naming':
       return { title: endTitle(), sub: `SCORE ${formatScore(game.score)}\n${tables[game.mode] ? `NEW HIGH SCORE  #${endRank + 1}` : 'NAME YOUR SCORE'}`, menu: true };
     case 'ended':
-      return { title: endTitle(), sub: `SCORE ${formatScore(game.score)}${worldResult && `\n${worldResult}`}\n\n${START_HINT}\n${MODE_HINT}`, menu: true };
+      return { title: endTitle(), sub: `SCORE ${formatScore(game.score)}${worldResult && `\n${worldResult}`}`, menu: true };
     case 'between':
     case 'playing':
       switch (game.state) {
@@ -409,11 +417,6 @@ function overlayContent(): OverlayContent | null {
 function endTitle(): string {
   if (game.state === 'complete') return game.mode === 'challenge' ? 'CHALLENGE CLEAR' : 'RUN COMPLETE';
   return game.timedOut ? 'TIME UP' : 'GAME OVER';
-}
-
-/** What a new game of the mode picked is. */
-function modeLine(g: Game): string {
-  return g.mode === 'challenge' ? `CHALLENGE · ONE ROOM · ${formatTime(g.stage.timeLimit)} · NO MODS` : `RUN · ${RUN.rooms} ROOMS`;
 }
 
 /** What the room just cleared paid: an elite or boss bonus, the time bonus, the flawless multiplier, then its credits. */
@@ -450,7 +453,7 @@ function formatChain(g: Game): string {
   return chain >= 2 ? `×${chain} +${g.chainBonus(chain) * g.multiplier}` : '—';
 }
 
-const modeSelect = new ModeSelect(byId('mode-select'), mode, setMode);
+const modeSelect = new ModeSelect(byId('mode-select'), mode, setMode, () => requestStart('mouse'));
 scoreBoard.show(mode, tables[mode]);
 void refreshScores(mode);
 
