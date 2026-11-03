@@ -128,7 +128,7 @@ export class Pinball {
       points = award.points * this.game.multiplier;
       this.game.score += points;
     } else if (award.kind === 'multiplier') {
-      this.game.raiseMultiplier();
+      for (let i = 0; i < award.steps; i++) this.game.raiseMultiplier();
     } else {
       this.game.powers.chargeBalls(award.charges);
     }

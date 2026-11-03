@@ -247,16 +247,80 @@ body {
   --c: var(--mint);
 }
 
-/* Secret code played: white, its text running through the lamp colours. */
-.popup.secret {
-  --c: #f2e9ff;
+/* Secret code played: a big banner across the field, its name running through the lamp colours. */
+.secret-banner {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 32px 16px;
+  line-height: 1;
+  white-space: nowrap;
+  background: radial-gradient(ellipse at center, rgba(7, 2, 26, 0.88) 40%, rgba(7, 2, 26, 0) 75%);
+  transform: translate(-50%, -50%);
+  animation: secret-banner 2.8s ease-out forwards;
 }
 
-.popup.secret b {
-  background: linear-gradient(90deg, var(--mint), #ff3b30, #3d8bff, var(--yellow), var(--magenta), var(--cyan));
+.secret-banner span,
+.secret-banner i {
+  font-family: var(--display);
+  font-style: normal;
+  font-size: clamp(12px, 1.1vw, 17px);
+  letter-spacing: 0.32em;
+  color: #f2e9ff;
+  text-shadow: 0 0 8px rgba(242, 233, 255, 0.7);
+}
+
+.secret-banner i {
+  letter-spacing: 0.14em;
+  font-size: clamp(14px, 1.4vw, 22px);
+}
+
+.secret-banner b {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: clamp(34px, 4.4vw, 68px);
+  letter-spacing: 0.08em;
+  background: linear-gradient(90deg, var(--mint), #ff3b30, #3d8bff, var(--yellow), var(--magenta), var(--cyan), var(--mint)) 0 0 / 200% 100%;
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+  filter: drop-shadow(0 0 10px rgba(242, 233, 255, 0.55));
+  animation: secret-rainbow 0.9s linear infinite;
+}
+
+#popups.paused .secret-banner,
+#popups.paused .secret-banner b {
+  animation-play-state: paused;
+}
+
+@keyframes secret-banner {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.8);
+  }
+  7% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(0.94);
+  }
+  12% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+  78% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, -70%) scale(1.04);
+  }
+}
+
+@keyframes secret-rainbow {
+  to {
+    background-position: -200% 0;
+  }
 }
 
 @keyframes popup-bonus {
@@ -543,6 +607,10 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   #hud-time.gain {
+    animation: none;
+  }
+
+  .secret-banner b {
     animation: none;
   }
 }
